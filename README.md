@@ -6,8 +6,8 @@ error (spatial), pattern classification, stream segments, tapping style, UR —
 plus charts and a deterministic report. No API keys needed for analysis.
 
 > **Status: 0.1.0 (early).** The analysis core is validated against real replays
-> (`detected` counts match the game's recorded counts). The AI coach and osu!
-> profile integration are planned (Phase C, BYO keys).
+> (`detected` counts match the game's recorded counts). `coach` (AI critique) and
+> `profile` (osu! integration) are implemented as bring-your-own-key extras.
 
 ## Install
 
@@ -31,6 +31,14 @@ osu-critique batch --source all --charts
 
 # deterministic critique from a metrics JSON (no LLM, no keys)
 osu-critique report out/<tag>_metrics.json
+
+# AI critique (bring your own LLM key — single API call, no harness)
+export OSU_LLM_KEY=sk-...
+osu-critique coach out/<tag>_metrics.json [--baseline out/<other>_metrics.json] [--profile ran27]
+
+# osu! profile stats (bring your own API v2 credentials, or HTML fallback)
+export OSU_CLIENT_ID=... OSU_CLIENT_SECRET=...
+osu-critique profile <username>
 ```
 
 Output: `out/<tag>_metrics.json` (+ `out/<tag>_charts.png` with `--charts`).
@@ -46,6 +54,10 @@ Output: `out/<tag>_metrics.json` (+ `out/<tag>_charts.png` with `--charts`).
 | `OSU_LAZER_FILES` | `<lazer data>/files` |
 | `OSU_ONLINE_DB` | `<lazer data>/online.db` |
 | `OSU_OUTDIR` | `out` |
+| `OSU_LLM_KEY` | API key for `coach` (OpenAI-compatible endpoint) |
+| `OSU_LLM_BASE_URL` | default `https://api.openai.com/v1` |
+| `OSU_LLM_MODEL` | default `gpt-4o-mini` |
+| `OSU_CLIENT_ID` / `OSU_CLIENT_SECRET` | osu! API v2 credentials for `profile` (optional; HTML fallback works without them) |
 
 ## How it works (briefly)
 
@@ -77,9 +89,18 @@ in the JSON).
 
 ## Roadmap
 
-- **Phase C**: BYO-key extras — `coach` (LLM critique, single API call) and
-  `profile` (osu! API v2), vendored/pinned `slider`, CI tests.
+- **Phase C (done)**: BYO-key extras — `coach` (LLM critique, single API call) and
+  `profile` (osu! API v2 + HTML fallback), pinned `slider==0.8.4`, golden fixtures,
+  GitHub Actions CI.
 - **Phase D**: release polish — packaging, docs, example output.
+
+## Privacy / terms
+
+- `tests/fixtures/` contains the author's own replays (username visible). Remove
+  the directory if you don't want them in your fork; tests then skip or use
+  `OSU_TEST_*` env vars.
+- The `profile` HTML-scrape fallback is unofficial; prefer the official API v2
+  and respect the osu! Terms of Service.
 
 ## License
 

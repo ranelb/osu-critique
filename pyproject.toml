@@ -18,7 +18,7 @@ classifiers = [
 ]
 dependencies = [
     "numpy>=1.24",
-    "slider>=6.4.1",
+    "slider==0.8.4",  # pinned: validated against this exact release
 ]
 
 [project.optional-dependencies]

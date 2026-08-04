@@ -5,8 +5,8 @@ Subcommands:
   pair    [--source danser|lazer|all]    resolve replay->map pairs (no analysis)
   batch   [--source danser|lazer|all]    pair + analyze everything + aggregate
   report  <metrics.json> [--baseline]    deterministic critique (no LLM, no keys)
-  coach   (planned, Phase C: BYO LLM key)
-  profile (planned, Phase C: BYO osu! API credentials)
+  coach   <metrics.json> [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
+  profile <username>                     fetch osu! profile (BYO osu API creds)
 """
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from .report import analyze, console_summary
 
 
 # ------------------------------------------------------------- commands ----
+
 
 def cmd_analyze(args):
     metrics = analyze(args.replay, args.map, tag=args.tag or "run",
@@ -70,6 +71,44 @@ def cmd_report(args):
         with open(args.baseline) as f:
             baseline = json.load(f)
     print(render_report(metrics, baseline))
+    return 0
+
+
+def cmd_coach(args):
+    from .coach import coach as run_coach
+    profile = None
+    if args.profile:
+        from .profile import fetch_profile
+        profile = fetch_profile(args.profile)
+        print(f"profile: {profile.get('username')} "
+              f"#{profile.get('global_rank')} · {profile.get('pp')}pp · "
+              f"{profile.get('play_time_hours')}h", file=sys.stderr)
+    try:
+        critique = run_coach(args.metrics_json, args.baseline, profile)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    print(critique)
+    return 0
+
+
+def cmd_profile(args):
+    from .profile import fetch_profile
+    try:
+        p = fetch_profile(args.username)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    print(f"== {p['username']} ({p.get('country')}) ==")
+    print(f"rank #{p['global_rank']}  |  {p['pp']}pp  |  acc {p['accuracy_pct']}%")
+    print(f"plays {p['play_count']}  |  playtime ~{p['play_time_hours']}h  |  level {p['level']}")
+    g = p["grades"]
+    print(f"grades: SS {g['ss']}  S {g['s']}  A {g['a']}")
+    c = p["counts"]
+    print(f"hits: {c['300']}x300 / {c['100']}x100 / {c['50']}x50 / {c['miss']}x miss")
+    if p.get("rank_highest"):
+        rh = p["rank_highest"]
+        print(f"peak rank #{rh.get('rank')} ({rh.get('updated_at', '')[:10]})")
     return 0
 
 
@@ -214,6 +253,16 @@ def main(argv=None):
     p.add_argument("metrics_json")
     p.add_argument("--baseline", default=None, help="optional baseline metrics JSON")
     p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("coach", help="AI critique via LLM API (BYO OSU_LLM_KEY)")
+    p.add_argument("metrics_json")
+    p.add_argument("--baseline", default=None, help="optional baseline metrics JSON")
+    p.add_argument("--profile", default=None, help="optional osu! username for context")
+    p.set_defaults(func=cmd_coach)
+
+    p = sub.add_parser("profile", help="fetch an osu! profile (API v2 or HTML fallback)")
+    p.add_argument("username")
+    p.set_defaults(func=cmd_profile)
 
     args = parser.parse_args(argv)
     return args.func(args)
