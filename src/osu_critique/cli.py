@@ -2,8 +2,8 @@
 
 Subcommands:
   analyze <replay.osr> <map.osu> [tag]   analyze a single replay (zero keys)
-  pair    [--source danser|lazer|all]    resolve replay->map pairs (no analysis)
-  batch   [--source danser|lazer|all]    pair + analyze everything + aggregate
+  pair              resolve lazer replay->map pairs (no analysis)
+  batch             pair + analyze every exported replay + aggregate
   report  <metrics.json> [--baseline]    deterministic critique (no LLM, no keys)
   coach   <metrics.json> [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
   profile <username>                     fetch osu! profile (BYO osu API creds)
@@ -32,23 +32,13 @@ def cmd_analyze(args):
 
 
 def cmd_pair(args):
-    if args.source in ("danser", "all"):
-        print("== danser ==")
-        for rp, mp in pairing.pair_danser():
-            print(f"  {rp}  ->  {mp}")
-    if args.source in ("lazer", "all"):
-        print("== lazer ==")
-        for rp, mp in pairing.pair_lazer():
-            print(f"  {rp}  ->  {mp}")
+    for rp, mp in pairing.pair_lazer():
+        print(f"  {rp}  ->  {mp}")
     return 0
 
 
 def cmd_batch(args):
-    pairs = []
-    if args.source in ("danser", "all"):
-        pairs += pairing.pair_danser()
-    if args.source in ("lazer", "all"):
-        pairs += pairing.pair_lazer()
+    pairs = pairing.pair_lazer()
     print(f"\npaired {len(pairs)} replay+map sets\n")
 
     rows = []
@@ -137,8 +127,7 @@ def cmd_setup(args):
         print(json.dumps(masked, indent=2) if cfg else "no config file yet")
         return 0
 
-    from .config import (CONFIG_PATH, DANSER_REPLAYS, DANSER_SONGS,
-                         DEFAULT_OUTDIR, LAZER_DATA, save_config)
+    from .config import (CONFIG_PATH, DEFAULT_OUTDIR, LAZER_DATA, save_config)
     print("osu-critique setup — first-time configuration")
     print("Every value is optional; press Enter to accept the [default] or skip.")
     print("Nothing is required for `analyze` / `pair` / `batch` / `report`.\n")
@@ -159,20 +148,17 @@ def cmd_setup(args):
         "y", "yes", "true", "1", "on") else "false"
 
     print("\n[Paths — where your replays/maps live]")
-    danser_replays = _ask("danser replays dir", str(DANSER_REPLAYS))
-    danser_songs = _ask("danser songs dir", str(DANSER_SONGS))
     lazer_data = _ask("osu!lazer data dir", str(LAZER_DATA))
     outdir = _ask("output dir", str(DEFAULT_OUTDIR))
 
     cfg = {"llm_key": llm_key, "llm_base_url": base_url, "llm_model": model,
            "osu_client_id": client_id, "osu_client_secret": client_secret,
            "allow_scrape": allow_scrape,
-           "danser_replays": danser_replays, "danser_songs": danser_songs,
            "lazer_data": lazer_data, "outdir": outdir}
     cfg = {k: v for k, v in cfg.items() if v is not None}
     path = save_config(cfg)
     print(f"\nsaved to {path} (mode 0600)")
-    print("try: osu-critique batch --source danser")
+    print("try: osu-critique batch")
     print("     osu-critique report out/<tag>_metrics.json")
     print("     osu-critique coach out/<tag>_metrics.json [--profile <username>]")
     return 0
@@ -305,12 +291,10 @@ def main(argv=None):
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_analyze)
 
-    p = sub.add_parser("pair", help="resolve replay->map pairs (no analysis)")
-    p.add_argument("--source", choices=["danser", "lazer", "all"], default="all")
+    p = sub.add_parser("pair", help="resolve lazer replay->map pairs (no analysis)")
     p.set_defaults(func=cmd_pair)
 
-    p = sub.add_parser("batch", help="pair + analyze every replay in the configured folders")
-    p.add_argument("--source", choices=["danser", "lazer", "all"], default="all")
+    p = sub.add_parser("batch", help="pair + analyze every exported lazer replay")
     p.add_argument("--charts", action="store_true")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_batch)

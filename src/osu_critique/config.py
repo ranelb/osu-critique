@@ -52,12 +52,6 @@ def _path(name: str, env: str, default: str) -> Path:
 
 # ---------------------------------------------------------------- paths -----
 
-# danser replay folder + beatmap library
-DANSER_REPLAYS = _path("danser_replays", "OSU_DANSER_REPLAYS",
-                       "~/Documents/Danser/Replays")
-DANSER_SONGS = _path("danser_songs", "OSU_DANSER_SONGS",
-                     "~/Documents/Danser/Songs")
-
 # osu!lazer data root (Flatpak layout on Linux)
 LAZER_DATA = _path("lazer_data", "OSU_LAZER_DATA",
                    "~/.var/app/sh.ppy.osu/data/osu")

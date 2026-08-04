@@ -128,7 +128,7 @@ def make_osu(title, circles, first_t=1000, interval=500):
 
 def play_actions(times, errors, scale=1.0, positions=None, trailing=None):
     """Press/release frames. scale maps map-time -> real-time (mods).
-    trailing: optional (t_ms, x, y) frame appended out of order (danser artifact)."""
+    trailing: optional (t_ms, x, y) frame appended out of order (out-of-order frame artifact)."""
     actions = []
     prev_t = 0.0
 
@@ -186,7 +186,7 @@ def generate():
     acts = play_actions(times[:20], clean_errors(20), positions=circles[:20])
     (FIX / "synth_mismatch.osr").write_bytes(make_osr("TestPlayer", md5, (17, 2, 1, 0), 123456, 20, False, 0, acts))
 
-    # out-of-order trailing frame (danser artifact): must not break detection
+    # out-of-order trailing frame (out-of-order frame artifact): must not break detection
     text, md5 = make_osu("synth_oooframes", circles)
     (FIX / "synth_oooframes.osu").write_text(text)
     acts = play_actions(times, clean_errors(20), positions=circles, trailing=(5100.0, 250.0, 192.0, 0))

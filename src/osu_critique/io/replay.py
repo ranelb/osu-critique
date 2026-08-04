@@ -14,7 +14,7 @@ def load_replay(replay_path):
 def build_frames(r):
     """list of (time_ms, x, y, keyA_down, keyB_down); keyA = K1|M1, keyB = K2|M2.
 
-    Sorted by time: some export tools (danser, lazer) append out-of-order
+    Sorted by time: some export tools append out-of-order
     trailing frames (e.g. a pen-reset frame with an earlier timestamp), which
     would break press detection and cursor interpolation if left unsorted.
     """

@@ -84,7 +84,7 @@ osu! API client id (https://osu.ppy.sh/oauth/clients): ********
 osu! API client secret: ********
 
 [Paths — where your replays/maps live]
-danser replays dir [/home/you/Documents/Danser/Replays]:
+osu!lazer data dir [/home/you/.var/app/sh.ppy.osu/data/osu]:
 ...
 ```
 
@@ -103,12 +103,11 @@ danser replays dir [/home/you/Documents/Danser/Replays]:
 # analyze a single replay against its map
 osu-critique analyze <replay.osr> <map.osu> [tag] [--charts]
 
-# resolve replay->map pairs without analyzing
-osu-critique pair --source danser     # map library matched by difficulty name + score
-osu-critique pair --source lazer      # exports matched to maps by exact beatmap MD5
+# resolve exported lazer replay->map pairs without analyzing
+osu-critique pair      # exports matched to maps by exact beatmap MD5
 
-# pair + analyze everything in the configured folders + aggregate table
-osu-critique batch --source all --charts
+# pair + analyze every exported replay + aggregate table
+osu-critique batch --charts
 
 # deterministic critique from a metrics JSON (no LLM, no keys)
 osu-critique report out/<tag>_metrics.json [--baseline out/<other>_metrics.json]
@@ -145,8 +144,6 @@ following can be set in the wizard (`osu-critique setup`) instead of as env vars
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OSU_DANSER_REPLAYS` | `~/Documents/Danser/Replays` | danser replay folder |
-| `OSU_DANSER_SONGS` | `~/Documents/Danser/Songs` | danser beatmap library |
 | `OSU_LAZER_DATA` | `~/.var/app/sh.ppy.osu/data/osu` | osu!lazer data root |
 | `OSU_LAZER_EXPORTS` | `<lazer data>/exports` | lazer replay exports |
 | `OSU_LAZER_FILES` | `<lazer data>/files` | lazer content-addressed map store |
