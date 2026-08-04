@@ -246,6 +246,7 @@ pytest -q                     # 11 tests, no network needed
 
 ## Privacy, attribution, and terms
 
+- Developed with heavy use of AI coding assistance.
 - Real replay fixtures are the author's own plays, **anonymized**
   (`TestPlayer`); beatmap extracts are credited to their mappers in
   `tests/fixtures/ATTRIBUTION.md`.
