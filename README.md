@@ -16,6 +16,28 @@ pip install -e .          # analysis core (numpy + slider)
 pip install -e ".[charts]"   # + matplotlib for PNG charts
 ```
 
+This creates the `osu-critique` command. The analysis core needs **no keys and no
+network** — everything runs locally.
+
+## First-time setup (optional, ~30 seconds)
+
+`osu-critique setup` walks you through an interactive wizard: LLM key for the
+AI coach, osu! API credentials for `profile`, and your replay/map paths. All
+values are optional — press Enter to accept defaults or skip.
+
+```
+$ osu-critique setup
+[LLM coach — powers `osu-critique coach`]
+LLM API key (OpenAI-compatible): ********
+...
+saved to ~/.config/osu-critique/config.json (mode 0600)
+```
+
+Config is stored at `~/.config/osu-critique/config.json` (mode 0600). Settings
+precedence: **environment variable > config file > default**, so you can always
+override with `OSU_LLM_KEY=... osu-critique coach ...` without re-running setup.
+`osu-critique setup --show` prints the effective config with secrets masked.
+
 ## Usage
 
 ```sh
@@ -58,6 +80,8 @@ Output: `out/<tag>_metrics.json` (+ `out/<tag>_charts.png` with `--charts`).
 | `OSU_LLM_BASE_URL` | default `https://api.openai.com/v1` |
 | `OSU_LLM_MODEL` | default `gpt-4o-mini` |
 | `OSU_CLIENT_ID` / `OSU_CLIENT_SECRET` | osu! API v2 credentials for `profile` (optional; HTML fallback works without them) |
+
+All of these can also be set via `osu-critique setup` instead of env vars.
 
 ## How it works (briefly)
 

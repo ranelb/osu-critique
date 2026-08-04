@@ -87,12 +87,13 @@ def build_user_message(metrics, baseline=None, profile=None):
 
 def coach(metrics_path, baseline_path=None, profile=None):
     """Run the LLM critique; returns the critique text."""
-    key = os.environ.get("OSU_LLM_KEY")
+    from .config import llm_base_url, llm_key, llm_model
+    key = llm_key()
     if not key:
         raise RuntimeError(
-            "OSU_LLM_KEY is not set. Run `osu-critique report <metrics.json>` "
-            "for a key-free deterministic critique, or set OSU_LLM_KEY to enable "
-            "the AI coach (also OSU_LLM_BASE_URL / OSU_LLM_MODEL to override).")
+            "no LLM key configured. Run `osu-critique setup` (interactive wizard) "
+            "or set OSU_LLM_KEY. For a key-free deterministic critique, run "
+            "`osu-critique report <metrics.json>` instead.")
     with open(metrics_path) as f:
         metrics = json.load(f)
     baseline = None
@@ -101,8 +102,6 @@ def coach(metrics_path, baseline_path=None, profile=None):
             baseline = json.load(f)
     user = build_user_message(metrics, baseline, profile)
     try:
-        return _call_chat(SYSTEM_PROMPT, user, key,
-                          os.environ.get("OSU_LLM_BASE_URL", DEFAULT_BASE),
-                          os.environ.get("OSU_LLM_MODEL", DEFAULT_MODEL))
+        return _call_chat(SYSTEM_PROMPT, user, key, llm_base_url(), llm_model())
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"LLM API error {e.code}: {e.read()[:300]!r}") from e

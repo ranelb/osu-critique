@@ -39,10 +39,15 @@ def _get_token(client_id, client_secret):
 
 def fetch_profile_api(username, client_id=None, client_secret=None):
     """Fetch a user's osu!standard stats via API v2."""
-    client_id = client_id or os.environ.get("OSU_CLIENT_ID")
-    client_secret = client_secret or os.environ.get("OSU_CLIENT_SECRET")
+    from .config import osu_client_id, osu_client_secret
+    client_id = client_id or osu_client_id()
+    client_secret = client_secret or osu_client_secret()
     if not client_id or not client_secret:
-        raise RuntimeError("OSU_CLIENT_ID / OSU_CLIENT_SECRET not set")
+        raise RuntimeError(
+            "no osu! API credentials. Run `osu-critique setup` or set "
+            "OSU_CLIENT_ID / OSU_CLIENT_SECRET (create at "
+            "https://osu.ppy.sh/oauth/clients). The HTML fallback still works "
+            "without credentials.")
     token = _get_token(client_id, client_secret)
     req = urllib.request.Request(
         API_USER_URL.format(username=urllib.parse.quote(username)),

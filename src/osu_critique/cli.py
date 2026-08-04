@@ -7,6 +7,7 @@ Subcommands:
   report  <metrics.json> [--baseline]    deterministic critique (no LLM, no keys)
   coach   <metrics.json> [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
   profile <username>                     fetch osu! profile (BYO osu API creds)
+  setup   [--show]                       first-time configuration wizard
 """
 from __future__ import annotations
 
@@ -109,6 +110,63 @@ def cmd_profile(args):
     if p.get("rank_highest"):
         rh = p["rank_highest"]
         print(f"peak rank #{rh.get('rank')} ({rh.get('updated_at', '')[:10]})")
+    return 0
+
+
+# --------------------------------------------------------------- setup ------
+
+def _ask(prompt, default=None, secret=False):
+    suffix = f" [{default}]" if default else ""
+    if secret and sys.stdin.isatty():
+        import getpass
+        value = getpass.getpass(f"{prompt}{suffix}: ")
+    else:
+        value = input(f"{prompt}{suffix}: ").strip()
+    if value == "":
+        return default
+    return value
+
+
+def cmd_setup(args):
+    if args.show:
+        from .config import load_config
+        cfg = load_config()
+        masked = {k: ("***" if "key" in k or "secret" in k else v)
+                  for k, v in cfg.items()}
+        print(json.dumps(masked, indent=2) if cfg else "no config file yet")
+        return 0
+
+    from .config import (CONFIG_PATH, DANSER_REPLAYS, DANSER_SONGS,
+                         DEFAULT_OUTDIR, LAZER_DATA, save_config)
+    print("osu-critique setup — first-time configuration")
+    print("Every value is optional; press Enter to accept the [default] or skip.")
+    print("Nothing is required for `analyze` / `pair` / `batch` / `report`.\n")
+
+    print("[LLM coach — powers `osu-critique coach`]")
+    llm_key = _ask("LLM API key (OpenAI-compatible)", secret=True)
+    base_url = _ask("LLM base URL", "https://api.openai.com/v1")
+    model = _ask("LLM model", "gpt-4o-mini")
+
+    print("\n[osu! profile — powers `osu-critique profile` via API v2]")
+    client_id = _ask("osu! API client id (https://osu.ppy.sh/oauth/clients)", secret=True)
+    client_secret = _ask("osu! API client secret", secret=True)
+
+    print("\n[Paths — where your replays/maps live]")
+    danser_replays = _ask("danser replays dir", str(DANSER_REPLAYS))
+    danser_songs = _ask("danser songs dir", str(DANSER_SONGS))
+    lazer_data = _ask("osu!lazer data dir", str(LAZER_DATA))
+    outdir = _ask("output dir", str(DEFAULT_OUTDIR))
+
+    cfg = {"llm_key": llm_key, "llm_base_url": base_url, "llm_model": model,
+           "osu_client_id": client_id, "osu_client_secret": client_secret,
+           "danser_replays": danser_replays, "danser_songs": danser_songs,
+           "lazer_data": lazer_data, "outdir": outdir}
+    cfg = {k: v for k, v in cfg.items() if v is not None}
+    path = save_config(cfg)
+    print(f"\nsaved to {path} (mode 0600)")
+    print("try: osu-critique batch --source danser")
+    print("     osu-critique report out/<tag>_metrics.json")
+    print("     osu-critique coach out/<tag>_metrics.json [--profile <username>]")
     return 0
 
 
@@ -263,6 +321,10 @@ def main(argv=None):
     p = sub.add_parser("profile", help="fetch an osu! profile (API v2 or HTML fallback)")
     p.add_argument("username")
     p.set_defaults(func=cmd_profile)
+
+    p = sub.add_parser("setup", help="first-time configuration wizard (paths + optional keys)")
+    p.add_argument("--show", action="store_true", help="show the effective config (masked)")
+    p.set_defaults(func=cmd_setup)
 
     args = parser.parse_args(argv)
     return args.func(args)
