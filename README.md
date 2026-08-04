@@ -53,6 +53,17 @@ This installs the `osu-critique` command. Verify:
 osu-critique --version   # → osu-critique 0.1.0
 ```
 
+### Install from a release (no git needed)
+
+Every release ships a wheel (`osu_critique-0.1.0-py3-none-any.whl`) that works
+on any OS — Python is required, git is not:
+
+```sh
+python3 -m venv .venv && source .venv/bin/activate
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.1.0/osu_critique-0.1.0-py3-none-any.whl
+pip install matplotlib   # optional, for --charts
+```
+
 ## First-time setup (optional, ~30 seconds)
 
 ```sh
