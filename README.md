@@ -137,7 +137,6 @@ osu! API client secret: ********
 osu!lazer data dir [/home/you/.var/app/sh.ppy.osu/data/osu]:
 output dir [out]:
 ```
-```
 
 - Every value is optional — press Enter to accept defaults or skip.
 - Secrets are masked while typing and stored at
