@@ -11,6 +11,7 @@ import html
 import json
 import os
 import re
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -127,12 +128,30 @@ def summarize(stats):
     }
 
 
-def fetch_profile(username):
-    """API v2 first, HTML scrape as fallback."""
+def fetch_profile(username, allow_scrape=None):
+    """Official API v2 first; the unofficial HTML scrape runs only when
+    explicitly allowed (``--scrape`` flag or ``allow_scrape`` config option).
+
+    ``allow_scrape=None`` means "use the config option"; ``True``/``False``
+    override it for a single invocation.
+    """
+    from .config import allow_scrape as _cfg_allow_scrape
+    if allow_scrape is None:
+        allow_scrape = _cfg_allow_scrape()
     try:
         return summarize(fetch_profile_api(username))
     except RuntimeError:
-        # no credentials configured -> fall back to the public scrape
+        # no credentials configured
+        if not allow_scrape:
+            raise RuntimeError(
+                "no osu! API credentials configured. Either:\n"
+                "  1. create free API v2 credentials at https://osu.ppy.sh/oauth/clients, "
+                "then run `osu-critique setup` (or set OSU_CLIENT_ID / OSU_CLIENT_SECRET);\n"
+                "  2. or explicitly allow the unofficial HTML fallback with "
+                "`osu-critique profile <user> --scrape` "
+                "(or set allow_scrape: true in the config via `osu-critique setup`).")
+        print("note: using the unofficial HTML scrape fallback "
+              "(prefer the official API v2)", file=sys.stderr)
         try:
             return summarize(fetch_profile_scrape(username))
         except Exception as e:

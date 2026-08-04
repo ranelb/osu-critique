@@ -91,3 +91,9 @@ def osu_client_id() -> str | None:
 
 def osu_client_secret() -> str | None:
     return get("osu_client_secret", "OSU_CLIENT_SECRET") or None
+
+
+def allow_scrape() -> bool:
+    """Whether the unofficial HTML profile fallback is permitted (opt-in)."""
+    v = str(get("allow_scrape", "OSU_ALLOW_SCRAPE", "false")).lower()
+    return v in ("1", "true", "yes", "on")

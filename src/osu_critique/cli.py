@@ -97,7 +97,7 @@ def cmd_coach(args):
 def cmd_profile(args):
     from .profile import fetch_profile
     try:
-        p = fetch_profile(args.username)
+        p = fetch_profile(args.username, allow_scrape=args.scrape or None)
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -153,6 +153,10 @@ def cmd_setup(args):
     print("\n[osu! profile — powers `osu-critique profile` via API v2]")
     client_id = _ask("osu! API client id (https://osu.ppy.sh/oauth/clients)", secret=True)
     client_secret = _ask("osu! API client secret", secret=True)
+    allow_scrape = _ask("allow unofficial HTML scrape fallback when no API "
+                        "credentials are set? (y/N)", "false")
+    allow_scrape = "true" if str(allow_scrape).strip().lower() in (
+        "y", "yes", "true", "1", "on") else "false"
 
     print("\n[Paths — where your replays/maps live]")
     danser_replays = _ask("danser replays dir", str(DANSER_REPLAYS))
@@ -162,6 +166,7 @@ def cmd_setup(args):
 
     cfg = {"llm_key": llm_key, "llm_base_url": base_url, "llm_model": model,
            "osu_client_id": client_id, "osu_client_secret": client_secret,
+           "allow_scrape": allow_scrape,
            "danser_replays": danser_replays, "danser_songs": danser_songs,
            "lazer_data": lazer_data, "outdir": outdir}
     cfg = {k: v for k, v in cfg.items() if v is not None}
@@ -324,8 +329,11 @@ def main(argv=None):
                         "e.g. gpt-4o-mini, claude-sonnet-4-5, deepseek-chat")
     p.set_defaults(func=cmd_coach)
 
-    p = sub.add_parser("profile", help="fetch an osu! profile (API v2 or HTML fallback)")
+    p = sub.add_parser("profile", help="fetch an osu! profile (API v2, or HTML fallback with --scrape)")
     p.add_argument("username")
+    p.add_argument("--scrape", action="store_true",
+                   help="allow the unofficial HTML fallback (requires no API credentials; "
+                        "prefer the official API v2)")
     p.set_defaults(func=cmd_profile)
 
     p = sub.add_parser("setup", help="first-time configuration wizard (paths + optional keys)")

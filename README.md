@@ -119,8 +119,11 @@ osu-critique coach out/<tag>_metrics.json \
     [--profile <username>] \
     [--model <any-model-name>]
 
-# osu! profile stats (API v2 if credentials set, else public HTML fallback)
+# osu! profile stats (API v2 if credentials set, else HTML fallback)
 osu-critique profile <username>
+# profile via the official API requires credentials (setup wizard or env vars);
+# the unofficial HTML fallback only runs with the explicit --scrape opt-in:
+osu-critique profile <username> --scrape
 ```
 
 Output: `out/<tag>_metrics.json`, plus `out/<tag>_charts.png` with `--charts`
@@ -153,6 +156,7 @@ following can be set in the wizard (`osu-critique setup`) instead of as env vars
 | `OSU_LLM_BASE_URL` | `https://api.openai.com/v1` | LLM endpoint (works with OpenRouter, local servers, …) |
 | `OSU_LLM_MODEL` | `gpt-4o-mini` | default coach model (override per run with `--model`) |
 | `OSU_CLIENT_ID` / `OSU_CLIENT_SECRET` | — | osu! API v2 credentials for `profile` (optional) |
+| `OSU_ALLOW_SCRAPE` | `false` | allow the unofficial HTML `profile` fallback when no API credentials are set (also config `allow_scrape`) |
 | `OSU_CONFIG_DIR` | `~/.config/osu-critique` | where the config file lives |
 
 ## How it works
@@ -222,8 +226,9 @@ pytest -q                     # 11 tests, no network needed
 - Real replay fixtures are the author's own plays, **anonymized**
   (`TestPlayer`); beatmap extracts are credited to their mappers in
   `tests/fixtures/ATTRIBUTION.md`.
-- The `profile` HTML-scrape fallback is unofficial; prefer the official API v2
-  and respect the [osu! Terms of Service](https://osu.ppy.sh/legal/terms).
+- The `profile` HTML-scrape fallback is **unofficial and opt-in only**
+  (`--scrape` flag or `allow_scrape` config option); the default path is the
+  official API v2, and the osu! Terms of Service should be respected.
 
 ## License
 
