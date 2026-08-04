@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import urllib.error
 import urllib.request
 
@@ -111,11 +112,12 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
             baseline = json.load(f)
     user = build_user_message(metrics, baseline, profile)
     system = load_system_prompt(prompt_file)
+    base, mdl = llm_base_url(), model or llm_model()
+    print(f"note: coach using {mdl} @ {base}", file=sys.stderr)
     try:
-        return _call_chat(system, user, key, llm_base_url(),
-                          model or llm_model())
+        return _call_chat(system, user, key, base, mdl)
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"LLM API error {e.code}: {e.read()[:300]!r}") from e
     except urllib.error.URLError as e:
-        raise RuntimeError(f"could not reach {llm_base_url()} "
+        raise RuntimeError(f"could not reach {base} "
                            f"(offline or wrong base URL?): {e.reason}") from e
