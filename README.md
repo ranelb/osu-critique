@@ -26,6 +26,28 @@ Flatpak/AppImage, macOS), **osu!stable** (Windows), or the project's own
 `replays/` + `maps/` folders — no path configuration required. Every source is
 paired by **exact beatmap MD5** (the same rule osu! itself uses).
 
+### Getting a critique — three ways
+
+The same metrics JSON can be turned into a critique at three levels:
+
+| Way | Command | Needs? | What you get |
+|---|---|---|---|
+| **Deterministic** | `report <metrics.json>` | nothing | rule-based critique from thresholds — no AI, no keys, fully offline |
+| **One-command AI** | `coach <metrics.json>` | LLM API key | full natural-language critique via a single API call |
+| **Bring-your-own AI** | `prompt <metrics.json>` | nothing | the framework prompt + your data, ready to paste into any AI you choose (then `coach --prompt` to reuse a custom framework) |
+
+`coach` and `prompt` accept the same optional `--baseline` (an earlier metrics
+JSON, for improvement/regression detection) and `--profile <username>` (osu!
+player stats for context).
+
+### Supported LLM
+
+The AI coach has been tested with **one model only: DeepSeek V4 Flash**
+(`deepseek-v4-flash`, base URL `https://api.deepseek.com`). It is the default
+and the recommended/supported configuration. Other OpenAI-compatible models
+and endpoints may work (the client is generic), but they are untested —
+expect the critique quality to vary with the model.
+
 Per-play metrics include:
 
 - **Timing**: mean hit error (early/late bias), std → UR, distribution percentiles
@@ -84,9 +106,9 @@ An interactive wizard collects your optional keys and replay/map paths:
 ```
 [LLM coach — powers `osu-critique coach`]
 LLM API key (OpenAI-compatible): ********
-LLM base URL [https://api.openai.com/v1]:
+LLM base URL [https://api.deepseek.com]:
 LLM model — enter a custom name if you know yours
-  (e.g. gpt-4o-mini, claude-sonnet-4-5, deepseek-chat) [gpt-4o-mini]:
+  (recommended: deepseek-v4-flash) [deepseek-v4-flash]:
 
 [osu! profile — powers `osu-critique profile` via API v2]
 osu! API client id (https://osu.ppy.sh/oauth/clients): ********
@@ -190,8 +212,8 @@ it always wins over detection.
 | `OSU_CACHE_DIR` | `~/.cache/osu-critique` | extracted `.osz` contents |
 | `OSU_OUTDIR` | `out` | metrics/charts output dir |
 | `OSU_LLM_KEY` | — | LLM API key for `coach` (OpenAI-compatible) |
-| `OSU_LLM_BASE_URL` | `https://api.openai.com/v1` | LLM endpoint (works with OpenRouter, local servers, …) |
-| `OSU_LLM_MODEL` | `gpt-4o-mini` | default coach model (override per run with `--model`) |
+| `OSU_LLM_BASE_URL` | `https://api.deepseek.com` | LLM endpoint (OpenAI-compatible; works with OpenRouter, local servers, …) |
+| `OSU_LLM_MODEL` | `deepseek-v4-flash` | default coach model — the tested/recommended model (override per run with `--model`) |
 | `OSU_CLIENT_ID` / `OSU_CLIENT_SECRET` | — | osu! API v2 credentials for `profile` (optional) |
 | `OSU_ALLOW_SCRAPE` | `false` | allow the unofficial HTML `profile` fallback when no API credentials are set (also config `allow_scrape`) |
 | `OSU_CONFIG_DIR` | `~/.config/osu-critique` | where the config file lives |

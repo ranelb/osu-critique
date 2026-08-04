@@ -157,11 +157,12 @@ def llm_key() -> str | None:
 
 
 def llm_base_url() -> str:
-    return str(get("llm_base_url", "OSU_LLM_BASE_URL", "https://api.openai.com/v1"))
+    return str(get("llm_base_url", "OSU_LLM_BASE_URL",
+                   "https://api.deepseek.com"))
 
 
 def llm_model() -> str:
-    return str(get("llm_model", "OSU_LLM_MODEL", "gpt-4o-mini"))
+    return str(get("llm_model", "OSU_LLM_MODEL", "deepseek-v4-flash"))
 
 
 def osu_client_id() -> str | None:

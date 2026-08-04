@@ -6,8 +6,8 @@ endpoints only (works with OpenAI, OpenRouter, local servers, etc.).
 
 Environment:
     OSU_LLM_KEY        API key (required)
-    OSU_LLM_BASE_URL   default https://api.openai.com/v1
-    OSU_LLM_MODEL      default gpt-4o-mini
+    OSU_LLM_BASE_URL   default https://api.deepseek.com
+    OSU_LLM_MODEL      default deepseek-v4-flash
 """
 from __future__ import annotations
 
@@ -15,9 +15,6 @@ import json
 import os
 import urllib.error
 import urllib.request
-
-DEFAULT_BASE = "https://api.openai.com/v1"
-DEFAULT_MODEL = "gpt-4o-mini"
 
 SYSTEM_PROMPT = """You are an osu! gameplay analyst. The user gives you a metrics JSON
 produced by a replay analysis pipeline (per-object hit/aim error derived from an

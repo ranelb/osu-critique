@@ -182,10 +182,10 @@ def cmd_setup(args):
 
     print("[LLM coach — powers `osu-critique coach`]")
     llm_key = _ask("LLM API key (OpenAI-compatible)", secret=True)
-    base_url = _ask("LLM base URL", "https://api.openai.com/v1")
+    base_url = _ask("LLM base URL", "https://api.deepseek.com")
     model = _ask("LLM model — enter a custom name if you know yours "
-                 "(e.g. gpt-4o-mini, claude-sonnet-4-5, deepseek-chat)",
-                 "gpt-4o-mini")
+                 "(recommended: deepseek-v4-flash)",
+                 "deepseek-v4-flash")
 
     print("\n[osu! profile — powers `osu-critique profile` via API v2]")
     client_id = _ask("osu! API client id (https://osu.ppy.sh/oauth/clients)", secret=True)
@@ -362,8 +362,8 @@ def main(argv=None):
     p.add_argument("--baseline", default=None, help="optional baseline metrics JSON")
     p.add_argument("--profile", default=None, help="optional osu! username for context")
     p.add_argument("--model", default=None,
-                   help="LLM model name to use (overrides config/env), "
-                        "e.g. gpt-4o-mini, claude-sonnet-4-5, deepseek-chat")
+                   help="LLM model name to use (overrides config/env); "
+                        "default deepseek-v4-flash (the tested/recommended model)")
     p.add_argument("--prompt", default=None,
                    help="custom critique-framework prompt file (overrides built-in)")
     p.set_defaults(func=cmd_coach)
