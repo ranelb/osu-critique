@@ -2,8 +2,9 @@
 
 Subcommands:
   analyze <replay.osr> <map.osu> [tag]   analyze a single replay (zero keys)
-  pair              resolve lazer replay->map pairs (no analysis)
-  batch             pair + analyze every exported replay + aggregate
+  pair              resolve replay->map pairs (no analysis)
+  batch             pair + analyze every available replay + aggregate
+  paths             show resolved (auto-detected) paths
   report  <metrics.json> [--baseline]    deterministic critique (no LLM, no keys)
   coach   <metrics.json> [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
   profile <username>                     fetch osu! profile (BYO osu API creds)
@@ -13,10 +14,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 
 from . import __version__
-from .config import DEFAULT_OUTDIR
+from .config import outdir
 from .io import pairing
 from .report import analyze, console_summary
 
@@ -32,17 +34,17 @@ def cmd_analyze(args):
 
 
 def cmd_pair(args):
-    for rp, mp in pairing.pair_lazer():
-        print(f"  {rp}  ->  {mp}")
+    for source, rp, mp in pairing.pair_all():
+        print(f"  [{source:7s}] {rp}  ->  {mp}")
     return 0
 
 
 def cmd_batch(args):
-    pairs = pairing.pair_lazer()
+    pairs = pairing.pair_all()
     print(f"\npaired {len(pairs)} replay+map sets\n")
 
     rows = []
-    for rp, mp in pairs:
+    for source, rp, mp in pairs:
         tag = _tag_from_replay(rp)
         metrics = analyze(rp, mp, tag=tag, do_charts=args.charts,
                           outdir=args.outdir, console=False)
@@ -104,6 +106,28 @@ def cmd_profile(args):
     return 0
 
 
+def cmd_paths(args):
+    """Show every resolved path and whether it exists (debugging aid)."""
+    from .config import (cache_dir, lazer_data, lazer_exports, lazer_files,
+                         maps_dir, outdir, replays_dir, stable_replays,
+                         stable_root, stable_songs)
+    paths = [
+        ("lazer data", lazer_data()), ("lazer exports", lazer_exports()),
+        ("lazer files store", lazer_files()),
+        ("stable root", stable_root()), ("stable replays", stable_replays()),
+        ("stable songs", stable_songs()),
+        ("project replays", replays_dir()), ("project maps", maps_dir()),
+        ("cache", cache_dir()), ("outdir", outdir()),
+    ]
+    for label, p in paths:
+        if p is None:
+            print(f"  — {label:<16} n/a (Windows only)")
+            continue
+        mark = "✓" if p.exists() else "—"
+        print(f"  {mark} {label:<16} {p}")
+    return 0
+
+
 # --------------------------------------------------------------- setup ------
 
 def _ask(prompt, default=None, secret=False):
@@ -127,7 +151,7 @@ def cmd_setup(args):
         print(json.dumps(masked, indent=2) if cfg else "no config file yet")
         return 0
 
-    from .config import (CONFIG_PATH, DEFAULT_OUTDIR, LAZER_DATA, save_config)
+    from .config import (CONFIG_PATH, outdir, save_config, lazer_data, stable_root)
     print("osu-critique setup — first-time configuration")
     print("Every value is optional; press Enter to accept the [default] or skip.")
     print("Nothing is required for `analyze` / `pair` / `batch` / `report`.\n")
@@ -147,14 +171,19 @@ def cmd_setup(args):
     allow_scrape = "true" if str(allow_scrape).strip().lower() in (
         "y", "yes", "true", "1", "on") else "false"
 
-    print("\n[Paths — where your replays/maps live]")
-    lazer_data = _ask("osu!lazer data dir", str(LAZER_DATA))
-    outdir = _ask("output dir", str(DEFAULT_OUTDIR))
+    print("\n[Paths — where your replays/maps live (auto-detected if empty)]")
+    lazer_data_dir = _ask("osu!lazer data dir", str(lazer_data()))
+    cfg_extra = {}
+    if os.name == "nt":
+        stable_root_dir = _ask("osu!stable install dir", str(stable_root()))
+        cfg_extra["stable_root"] = stable_root_dir
+    outdir_ask = _ask("output dir", str(outdir()))
 
     cfg = {"llm_key": llm_key, "llm_base_url": base_url, "llm_model": model,
            "osu_client_id": client_id, "osu_client_secret": client_secret,
            "allow_scrape": allow_scrape,
-           "lazer_data": lazer_data, "outdir": outdir}
+           "lazer_data": lazer_data_dir, **cfg_extra,
+           "outdir": outdir_ask}
     cfg = {k: v for k, v in cfg.items() if v is not None}
     path = save_config(cfg)
     print(f"\nsaved to {path} (mode 0600)")
@@ -323,6 +352,9 @@ def main(argv=None):
     p = sub.add_parser("setup", help="first-time configuration wizard (paths + optional keys)")
     p.add_argument("--show", action="store_true", help="show the effective config (masked)")
     p.set_defaults(func=cmd_setup)
+
+    p = sub.add_parser("paths", help="show resolved replay/map/output paths (auto-detected)")
+    p.set_defaults(func=cmd_paths)
 
     args = parser.parse_args(argv)
     return args.func(args)

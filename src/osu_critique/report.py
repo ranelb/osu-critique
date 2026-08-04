@@ -24,7 +24,7 @@ from .metrics.patterns import add_pattern_labels, pattern_stats
 from .metrics.sections import quarter_stats, region_stats
 from .metrics.streams import stream_stats
 from .metrics.tapping import key_usage, tapping_stats
-from .config import DEFAULT_OUTDIR
+from .config import outdir as _default_outdir
 
 
 def analyze(replay_path, map_path, tag="run", do_charts=False,
@@ -33,7 +33,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
 
     Writes ``{outdir}/{tag}_metrics.json`` and, if ``do_charts``, a PNG chart.
     """
-    outdir = outdir or DEFAULT_OUTDIR
+    outdir = outdir or _default_outdir()
 
     r = load_replay(replay_path)
     bm = load_beatmap(map_path)

@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.1.0.** The analysis core is validated against real replays —
+> **Status: 0.1.1.** The analysis core is validated against real replays —
 > `counts_detected` matches the game's `counts_recorded` on the golden test set
 > (see [Validation](#validation-and-trust)). 11 tests, CI on Python 3.11/3.12.
 
@@ -20,6 +20,11 @@ optional extras (AI coach, osu! profile) are bring-your-own-key.
 | **Report** | `report` | no | deterministic, rule-based critique |
 | **Coach** | `coach` | LLM key (BYO) | full natural-language critique |
 | **Profile** | `profile` | osu! API creds (BYO, optional) | player stats for context |
+
+Replays and maps are found automatically from **osu!lazer** (Windows, Linux
+Flatpak/AppImage, macOS), **osu!stable** (Windows), or the project's own
+`replays/` + `maps/` folders — no path configuration required. Every source is
+paired by **exact beatmap MD5** (the same rule osu! itself uses).
 
 Per-play metrics include:
 
@@ -50,17 +55,21 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.1.0
+osu-critique --version   # → osu-critique 0.1.1
 ```
+
+The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
+`.osu`/`.osz` maps there and `osu-critique pair` will pick them up (`.osz`
+archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.1.0-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.1.1-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.1.0/osu_critique-0.1.0-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.1.1/osu_critique-0.1.1-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 
@@ -83,9 +92,10 @@ LLM model — enter a custom name if you know yours
 osu! API client id (https://osu.ppy.sh/oauth/clients): ********
 osu! API client secret: ********
 
-[Paths — where your replays/maps live]
+[Paths — where your replays/maps live (auto-detected if empty)]
 osu!lazer data dir [/home/you/.var/app/sh.ppy.osu/data/osu]:
-...
+output dir [out]:
+```
 ```
 
 - Every value is optional — press Enter to accept defaults or skip.
@@ -103,11 +113,14 @@ osu!lazer data dir [/home/you/.var/app/sh.ppy.osu/data/osu]:
 # analyze a single replay against its map
 osu-critique analyze <replay.osr> <map.osu> [tag] [--charts]
 
-# resolve exported lazer replay->map pairs without analyzing
-osu-critique pair      # exports matched to maps by exact beatmap MD5
+# resolve replay->map pairs without analyzing (auto-detects all sources)
+osu-critique pair
 
-# pair + analyze every exported replay + aggregate table
+# pair + analyze every available replay + aggregate table
 osu-critique batch --charts
+
+# show every resolved path (auto-detection diagnostics)
+osu-critique paths
 
 # deterministic critique from a metrics JSON (no LLM, no keys)
 osu-critique report out/<tag>_metrics.json [--baseline out/<other>_metrics.json]
@@ -139,15 +152,36 @@ osu-critique coach out/myrun_metrics.json --profile yourusername
 
 ## Configuration
 
-Settings resolve as **environment variable > config file > default**. All of the
-following can be set in the wizard (`osu-critique setup`) instead of as env vars.
+Settings resolve as **environment variable > config file > auto-detection >
+default**. All of the following can be set in the wizard (`osu-critique setup`)
+instead of as env vars. `osu-critique paths` prints everything the tool
+resolved (with existence markers).
+
+### Paths and platform support
+
+Paths are never hardcoded to a single location: known installs are probed and
+the first one that exists wins, per platform:
+
+| Install | Locations probed (first existing wins) |
+|---|---|
+| osu!lazer, Windows | `%APPDATA%/osu` |
+| osu!lazer, Linux Flatpak | `~/.var/app/sh.ppy.osu/data/osu` |
+| osu!lazer, Linux AppImage / macOS | `~/.local/share/osu` (macOS: `~/Library/Application Support/osu`) |
+| osu!stable (Windows only) | `%LOCALAPPDATA%/osu!` |
+| Project folders | `./replays` + `./maps` (any OS — drop `.osr`/`.osu`/`.osz` there) |
+
+If you need a non-standard location, set the matching env var (or `setup`):
+it always wins over detection.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OSU_LAZER_DATA` | `~/.var/app/sh.ppy.osu/data/osu` | osu!lazer data root |
+| `OSU_LAZER_DATA` | auto-detected | osu!lazer data root |
 | `OSU_LAZER_EXPORTS` | `<lazer data>/exports` | lazer replay exports |
 | `OSU_LAZER_FILES` | `<lazer data>/files` | lazer content-addressed map store |
 | `OSU_ONLINE_DB` | `<lazer data>/online.db` | lazer beatmap SQLite db |
+| `OSU_STABLE_ROOT` | auto-detected (Windows) | osu!stable install root |
+| `OSU_REPLAYS_DIR` / `OSU_MAPS_DIR` | `replays` / `maps` | project folders |
+| `OSU_CACHE_DIR` | `~/.cache/osu-critique` | extracted `.osz` contents |
 | `OSU_OUTDIR` | `out` | metrics/charts output dir |
 | `OSU_LLM_KEY` | — | LLM API key for `coach` (OpenAI-compatible) |
 | `OSU_LLM_BASE_URL` | `https://api.openai.com/v1` | LLM endpoint (works with OpenRouter, local servers, …) |

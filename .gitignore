@@ -18,3 +18,9 @@ tmp_maps/
 .idea/
 .vscode/
 .pytest_cache/
+
+# project folders: keep placeholders, ignore user content
+maps/*
+!maps/.gitkeep
+replays/*
+!replays/.gitkeep
