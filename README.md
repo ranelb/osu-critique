@@ -12,6 +12,25 @@ optional extras (AI coach, osu! profile) are bring-your-own-key.
 > `counts_detected` matches the game's `counts_recorded` on the golden test set
 > (see [Validation](#validation-and-trust)). 11 tests, CI on Python 3.11/3.12.
 
+## Table of Contents
+
+- [Features](#features)
+  - [Getting a critique — three ways](#getting-a-critique--three-ways)
+  - [Supported LLM](#supported-llm)
+- [Install](#install)
+  - [Install from a release (no git needed)](#install-from-a-release-no-git-needed)
+- [First-time setup (optional, ~30 seconds)](#first-time-setup-optional-30-seconds)
+- [Usage](#usage)
+  - [Quick example](#quick-example)
+- [Configuration](#configuration)
+  - [Paths and platform support](#paths-and-platform-support)
+- [How it works](#how-it-works)
+- [Validation and trust](#validation-and-trust)
+- [Edge cases and limitations](#edge-cases-and-limitations)
+- [Development](#development)
+- [Privacy, attribution, and terms](#privacy-attribution-and-terms)
+- [License](#license)
+
 ## Features
 
 | Tier | Command | Needs keys? | What you get |
