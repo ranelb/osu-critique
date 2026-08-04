@@ -53,6 +53,14 @@ regression vs baseline. If the player profile is provided, use it for context
 (hours, rank, playstyle) but do not let it override the play data."""
 
 
+def load_system_prompt(prompt_file=None) -> str:
+    """The critique framework prompt; a custom file overrides the built-in."""
+    if prompt_file:
+        with open(prompt_file) as f:
+            return f.read().strip()
+    return SYSTEM_PROMPT
+
+
 def _call_chat(system: str, user: str, key: str, base_url: str, model: str) -> str:
     body = json.dumps({
         "model": model,
@@ -85,10 +93,12 @@ def build_user_message(metrics, baseline=None, profile=None):
     return "\n\n".join(parts)
 
 
-def coach(metrics_path, baseline_path=None, profile=None, model=None):
+def coach(metrics_path, baseline_path=None, profile=None, model=None,
+          prompt_file=None):
     """Run the LLM critique; returns the critique text.
 
-    ``model`` overrides the configured model (setup wizard / OSU_LLM_MODEL)."""
+    ``model`` overrides the configured model (setup wizard / OSU_LLM_MODEL).
+    ``prompt_file`` overrides the built-in critique-framework prompt."""
     from .config import llm_base_url, llm_key, llm_model
     key = llm_key()
     if not key:
@@ -103,8 +113,9 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None):
         with open(baseline_path) as f:
             baseline = json.load(f)
     user = build_user_message(metrics, baseline, profile)
+    system = load_system_prompt(prompt_file)
     try:
-        return _call_chat(SYSTEM_PROMPT, user, key, llm_base_url(),
+        return _call_chat(system, user, key, llm_base_url(),
                           model or llm_model())
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"LLM API error {e.code}: {e.read()[:300]!r}") from e

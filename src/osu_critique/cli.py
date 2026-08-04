@@ -5,6 +5,7 @@ Subcommands:
   pair              resolve replay->map pairs (no analysis)
   batch             pair + analyze every available replay + aggregate
   paths             show resolved (auto-detected) paths
+  prompt  [metrics] [--baseline] [--profile]   print the critique prompt (BYO AI)
   report  <metrics.json> [--baseline]    deterministic critique (no LLM, no keys)
   coach   <metrics.json> [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
   profile <username>                     fetch osu! profile (BYO osu API creds)
@@ -56,6 +57,29 @@ def cmd_batch(args):
     return 0
 
 
+def cmd_prompt(args):
+    """Print the critique-framework prompt; with a metrics JSON, print a full
+    ready-to-paste prompt (system + data) for use with any AI of your choice."""
+    from .coach import build_user_message, load_system_prompt
+    system = load_system_prompt(args.prompt)
+    if args.metrics_json:
+        with open(args.metrics_json) as f:
+            metrics = json.load(f)
+        baseline = None
+        if args.baseline:
+            with open(args.baseline) as f:
+                baseline = json.load(f)
+        profile = None
+        if args.profile:
+            from .profile import fetch_profile
+            profile = fetch_profile(args.profile, allow_scrape=args.scrape or None)
+        print(system)
+        print("\n\n" + build_user_message(metrics, baseline, profile))
+    else:
+        print(system)
+    return 0
+
+
 def cmd_report(args):
     with open(args.metrics_json) as f:
         metrics = json.load(f)
@@ -78,7 +102,7 @@ def cmd_coach(args):
               f"{profile.get('play_time_hours')}h", file=sys.stderr)
     try:
         critique = run_coach(args.metrics_json, args.baseline, profile,
-                             model=args.model)
+                             model=args.model, prompt_file=args.prompt)
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -340,7 +364,19 @@ def main(argv=None):
     p.add_argument("--model", default=None,
                    help="LLM model name to use (overrides config/env), "
                         "e.g. gpt-4o-mini, claude-sonnet-4-5, deepseek-chat")
+    p.add_argument("--prompt", default=None,
+                   help="custom critique-framework prompt file (overrides built-in)")
     p.set_defaults(func=cmd_coach)
+
+    p = sub.add_parser("prompt", help="print the critique-framework prompt (bring-your-own-AI)")
+    p.add_argument("metrics_json", nargs="?", default=None,
+                   help="optional metrics JSON: print a full ready-to-paste prompt")
+    p.add_argument("--baseline", default=None, help="optional baseline metrics JSON")
+    p.add_argument("--profile", default=None, help="optional osu! username for context")
+    p.add_argument("--scrape", action="store_true",
+                   help="allow the unofficial HTML profile fallback")
+    p.add_argument("--prompt", default=None, help="custom prompt file (overrides built-in)")
+    p.set_defaults(func=cmd_prompt)
 
     p = sub.add_parser("profile", help="fetch an osu! profile (API v2, or HTML fallback with --scrape)")
     p.add_argument("username")

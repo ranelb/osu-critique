@@ -129,7 +129,13 @@ osu-critique report out/<tag>_metrics.json [--baseline out/<other>_metrics.json]
 osu-critique coach out/<tag>_metrics.json \
     [--baseline out/<other>_metrics.json] \
     [--profile <username>] \
-    [--model <any-model-name>]
+    [--model <any-model-name>] \
+    [--prompt <custom-prompt-file>]
+
+# bring your own AI: print the critique-framework prompt, or a full
+# ready-to-paste prompt (framework + your metrics) for any LLM of your choice
+osu-critique prompt
+osu-critique prompt out/<tag>_metrics.json [--baseline ...] [--profile <username>]
 
 # osu! profile stats (API v2 if credentials set, else HTML fallback)
 osu-critique profile <username>
