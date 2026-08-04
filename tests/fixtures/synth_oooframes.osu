@@ -1,0 +1,51 @@
+osu file format v14
+
+[General]
+AudioFilename: dummy.mp3
+AudioLeadIn: 0
+PreviewTime: -1
+Countdown: 0
+SampleSet: Soft
+StackLeniency: 0.7
+Mode: 0
+
+[Metadata]
+Title:synth_oooframes
+TitleUnicode:synth_oooframes
+Artist:synthetic
+ArtistUnicode:synthetic
+Creator:osu-critique
+Version:test
+
+[Difficulty]
+HPDrainRate:5
+CircleSize:4
+OverallDifficulty:8
+ApproachRate:9
+SliderMultiplier:1.4
+SliderTickRate:1
+
+[TimingPoints]
+0,500,4,2,1,25,1,0
+
+[HitObjects]
+100.0,192.0,1000,1,0
+400.0,192.0,1500,1,0
+100.0,192.0,2000,1,0
+400.0,192.0,2500,1,0
+100.0,192.0,3000,1,0
+400.0,192.0,3500,1,0
+100.0,192.0,4000,1,0
+400.0,192.0,4500,1,0
+100.0,192.0,5000,1,0
+400.0,192.0,5500,1,0
+100.0,192.0,6000,1,0
+400.0,192.0,6500,1,0
+100.0,192.0,7000,1,0
+400.0,192.0,7500,1,0
+100.0,192.0,8000,1,0
+400.0,192.0,8500,1,0
+100.0,192.0,9000,1,0
+400.0,192.0,9500,1,0
+100.0,192.0,10000,1,0
+400.0,192.0,10500,1,0

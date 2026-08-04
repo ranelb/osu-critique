@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 
 from osu_critique.report import analyze
+import slider
 
 FIX = Path(__file__).parent / "fixtures"
 
@@ -83,6 +84,41 @@ def test_scale_calibration_domino(tmp_path):
                       outdir=str(tmp_path), console=False)
     assert metrics["counts_detected"]["miss"] == 0
     assert metrics["accuracy"] > 0.90
+
+
+# ---------------------------------------------------------------- synth ----
+
+SYNTH = [
+    # name, (300, 100, 50), expected miss, extra assertions
+    ("synth_clean", (17, 2, 1), 0, {}),
+    ("synth_htm", (17, 2, 1), 0, {}),           # HT mod: frames at 4/3 scale
+    ("synth_dt", (17, 2, 1), 0, {}),            # DT mod: frames at 2/3 scale
+    ("synth_mismatch", (17, 2, 1), 20,          # 20 of 40 objects played
+     {"map_version_mismatch": True, "failed_play": True}),
+    ("synth_oooframes", (17, 2, 1), 0, {}),     # out-of-order trailing frame
+]
+
+
+@pytest.mark.parametrize("name,expected,expected_miss,extra", SYNTH,
+                         ids=[s[0] for s in SYNTH])
+def test_synthetic(name, expected, expected_miss, extra, tmp_path):
+    replay, map_path = FIX / f"{name}.osr", FIX / f"{name}.osu"
+    if not replay.exists() or not map_path.exists():
+        pytest.skip(f"{name} not generated (run scripts/make_synthetic_fixtures.py)")
+    metrics = analyze(str(replay), str(map_path), tag=name,
+                      outdir=str(tmp_path), console=False)
+    det = metrics["counts_detected"]
+    assert (det["300"], det["100"], det["50"]) == expected, det
+    assert det["miss"] == expected_miss, det
+    assert metrics["whiffed_presses"] == 0
+    for k, v in extra.items():
+        assert metrics[k] is v
+
+
+def test_anonymized_player_name():
+    """Real fixtures must not contain the author's username."""
+    r = slider.Replay.from_path(FIX / "aaaaa.osr", retrieve_beatmap=False)
+    assert r.player_name == "TestPlayer"
 
 
 def test_report_deterministic(tmp_path):
