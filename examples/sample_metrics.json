@@ -1,0 +1,167 @@
+{
+  "tag": "aaaaa",
+  "player": "ran27",
+  "map": "AaAaAaAAaAaAAa [Hard Easy xD]",
+  "mods": {
+    "DT": false,
+    "HT": false,
+    "HD": false,
+    "HR": false,
+    "NF": false,
+    "FL": false,
+    "EZ": false
+  },
+  "difficulty": {
+    "CS": 4.1,
+    "AR": 9.8,
+    "OD": 5.5,
+    "HP": 3.0
+  },
+  "counts_recorded": {
+    "300": 65,
+    "100": 0,
+    "50": 0,
+    "miss": 0
+  },
+  "counts_detected": {
+    "300": 65,
+    "100": 0,
+    "50": 0,
+    "miss": 0
+  },
+  "map_version_mismatch": false,
+  "failed_play": false,
+  "n_objects_map": 65,
+  "whiffed_presses": 6,
+  "accuracy": 1.0,
+  "max_combo": 92,
+  "full_combo": true,
+  "n_objects": 65,
+  "hit_error_ms": {
+    "mean": 9.461538461537566,
+    "std": 12.591910618239481,
+    "p10": -10.799999999999999,
+    "p90": 21.99999999999418,
+    "abs_mean": 13.98461538461449
+  },
+  "ur": 125.91910618239481,
+  "early_pct": 0.2153846153846154,
+  "aim_px": {
+    "mean": 15.857057606419872,
+    "p90": 27.305294566903626,
+    "mean_norm": 0.44008263783358875
+  },
+  "key_usage": {
+    "A": 32,
+    "B": 33
+  },
+  "spacing_radius": 36.032000000000004,
+  "patterns": {
+    "first": {
+      "n": 1,
+      "miss_rate": 0.0,
+      "miss": 0,
+      "mean_err": 27.0,
+      "std_err": 0.0
+    },
+    "jump": {
+      "n": 51,
+      "miss_rate": 0.0,
+      "miss": 0,
+      "mean_err": 9.549019607842851,
+      "std_err": 12.14506068485572
+    },
+    "bigjump": {
+      "n": 13,
+      "miss_rate": 0.0,
+      "miss": 0,
+      "mean_err": 7.769230769227411,
+      "std_err": 13.69533242303447
+    }
+  },
+  "regions": {
+    "TL": {
+      "n": 16,
+      "miss_rate": 0.0,
+      "miss": 0,
+      "mean_aim": 16.439562677359746
+    },
+    "TR": {
+      "n": 16,
+      "miss_rate": 0.0,
+      "miss": 0,
+      "mean_aim": 15.78401894890287
+    },
+    "BL": {
+      "n": 20,
+      "miss_rate": 0.0,
+      "miss": 0,
+      "mean_aim": 15.010275937115631
+    },
+    "BR": {
+      "n": 13,
+      "miss_rate": 0.0,
+      "miss": 0,
+      "mean_aim": 16.532763050367475
+    }
+  },
+  "quarters": [
+    {
+      "range": [
+        126280.0,
+        128780.0
+      ],
+      "n": 16,
+      "miss": 0,
+      "mean_err": 18.56249999999909,
+      "std_err": 6.837111506331731
+    },
+    {
+      "range": [
+        128780.0,
+        131280.0
+      ],
+      "n": 16,
+      "miss": 0,
+      "mean_err": 16.68749999999727,
+      "std_err": 5.553363282729101
+    },
+    {
+      "range": [
+        131280.0,
+        133780.0
+      ],
+      "n": 16,
+      "miss": 0,
+      "mean_err": 8.125,
+      "std_err": 10.517099172300316
+    },
+    {
+      "range": [
+        133780.0,
+        136280.0
+      ],
+      "n": 16,
+      "miss": 0,
+      "mean_err": -5.75,
+      "std_err": 9.324028099485759
+    }
+  ],
+  "sliders": {
+    "n": 1,
+    "miss": 0
+  },
+  "spinners": {
+    "n": 0
+  },
+  "streams": {
+    "n_segments": 0,
+    "segments": []
+  },
+  "tapping": {
+    "n": 65,
+    "same_key_adjacent": 0,
+    "same_key_pct": 0.0,
+    "alt_ratio": 1.0
+  }
+}
