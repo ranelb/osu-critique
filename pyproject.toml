@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "osu-critique"
+version = "0.1.0"
+description = "Data-driven osu! replay analysis: per-object hit/aim error, patterns, streams, tapping, UR — with deterministic reports and optional AI critique."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ran27" }]
+keywords = ["osu", "replay", "analysis", "hit error", "unstable rate"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Games/Entertainment",
+]
+dependencies = [
+    "numpy>=1.24",
+    "slider>=6.4.1",
+]
+
+[project.optional-dependencies]
+charts = ["matplotlib>=3.7"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+osu-critique = "osu_critique.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
