@@ -23,23 +23,31 @@ def test_probe_picks_first_existing(tmp_path, monkeypatch):
 def test_stable_is_windows_only(monkeypatch):
     from osu_critique import config
     monkeypatch.setattr(config.os, "name", "posix")
-    assert config.stable_root() is None
-    monkeypatch.setattr(config.os, "name", "nt")
-    monkeypatch.setenv("LOCALAPPDATA", "/fake/localappdata")
-    assert config.stable_root() == Path("/fake/localappdata/osu!")
+    assert config.stable_root() is None            # no Path created: safe on all Pythons
+    assert config._stable_candidates() == []       # no wine candidates on posix
 
 
-def test_lazer_candidates_cover_linux(monkeypatch):
-    """Linux lazer candidates must cover Flatpak and AppImage locations."""
+def test_candidate_lists(monkeypatch):
+    """Candidate lists (strings only — never instantiate Path under a fake
+    os.name; Python 3.11's pathlib dispatches per-instantiation)."""
     from osu_critique import config
     monkeypatch.setattr(config.os, "name", "posix")
-    cands = config._lazer_candidates()
-    assert "~/.var/app/sh.ppy.osu/data/osu" in cands      # Flatpak
-    assert "~/.local/share/osu" in cands                  # AppImage
+    assert "~/.var/app/sh.ppy.osu/data/osu" in config._lazer_candidates()  # Flatpak
+    assert "~/.local/share/osu" in config._lazer_candidates()              # AppImage
     monkeypatch.setattr(config.os, "name", "nt")
     monkeypatch.setenv("APPDATA", "/fake/appdata")
-    cands = config._lazer_candidates()
-    assert "/fake/appdata/osu" in cands                   # Windows lazer
+    monkeypatch.setenv("LOCALAPPDATA", "/fake/localappdata")
+    assert "/fake/appdata/osu" in config._lazer_candidates()               # Windows lazer
+    assert config._stable_candidates() == ["/fake/localappdata/osu!"]
+
+
+def test_env_override_wins(monkeypatch, tmp_path):
+    """OSU_STABLE_ROOT / OSU_LAZER_DATA override detection, any platform."""
+    from osu_critique import config
+    monkeypatch.setenv("OSU_STABLE_ROOT", str(tmp_path / "stable"))
+    assert config.stable_root() == tmp_path / "stable"
+    monkeypatch.setenv("OSU_LAZER_DATA", str(tmp_path / "lazer"))
+    assert config.lazer_data() == tmp_path / "lazer"
 
 
 def test_osz_extraction(tmp_path):
