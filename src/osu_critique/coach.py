@@ -85,8 +85,10 @@ def build_user_message(metrics, baseline=None, profile=None):
     return "\n\n".join(parts)
 
 
-def coach(metrics_path, baseline_path=None, profile=None):
-    """Run the LLM critique; returns the critique text."""
+def coach(metrics_path, baseline_path=None, profile=None, model=None):
+    """Run the LLM critique; returns the critique text.
+
+    ``model`` overrides the configured model (setup wizard / OSU_LLM_MODEL)."""
     from .config import llm_base_url, llm_key, llm_model
     key = llm_key()
     if not key:
@@ -102,6 +104,10 @@ def coach(metrics_path, baseline_path=None, profile=None):
             baseline = json.load(f)
     user = build_user_message(metrics, baseline, profile)
     try:
-        return _call_chat(SYSTEM_PROMPT, user, key, llm_base_url(), llm_model())
+        return _call_chat(SYSTEM_PROMPT, user, key, llm_base_url(),
+                          model or llm_model())
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"LLM API error {e.code}: {e.read()[:300]!r}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"could not reach {llm_base_url()} "
+                           f"(offline or wrong base URL?): {e.reason}") from e

@@ -137,3 +137,5 @@ def fetch_profile(username):
             return summarize(fetch_profile_scrape(username))
         except Exception as e:
             raise RuntimeError(f"profile fetch failed: {e}") from e
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"osu! API unreachable: {e.reason}") from e

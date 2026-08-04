@@ -85,7 +85,8 @@ def cmd_coach(args):
               f"#{profile.get('global_rank')} · {profile.get('pp')}pp · "
               f"{profile.get('play_time_hours')}h", file=sys.stderr)
     try:
-        critique = run_coach(args.metrics_json, args.baseline, profile)
+        critique = run_coach(args.metrics_json, args.baseline, profile,
+                             model=args.model)
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
@@ -145,7 +146,9 @@ def cmd_setup(args):
     print("[LLM coach — powers `osu-critique coach`]")
     llm_key = _ask("LLM API key (OpenAI-compatible)", secret=True)
     base_url = _ask("LLM base URL", "https://api.openai.com/v1")
-    model = _ask("LLM model", "gpt-4o-mini")
+    model = _ask("LLM model — enter a custom name if you know yours "
+                 "(e.g. gpt-4o-mini, claude-sonnet-4-5, deepseek-chat)",
+                 "gpt-4o-mini")
 
     print("\n[osu! profile — powers `osu-critique profile` via API v2]")
     client_id = _ask("osu! API client id (https://osu.ppy.sh/oauth/clients)", secret=True)
@@ -316,6 +319,9 @@ def main(argv=None):
     p.add_argument("metrics_json")
     p.add_argument("--baseline", default=None, help="optional baseline metrics JSON")
     p.add_argument("--profile", default=None, help="optional osu! username for context")
+    p.add_argument("--model", default=None,
+                   help="LLM model name to use (overrides config/env), "
+                        "e.g. gpt-4o-mini, claude-sonnet-4-5, deepseek-chat")
     p.set_defaults(func=cmd_coach)
 
     p = sub.add_parser("profile", help="fetch an osu! profile (API v2 or HTML fallback)")
