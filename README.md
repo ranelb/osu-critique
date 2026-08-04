@@ -40,7 +40,7 @@ Per-play metrics include:
 Requires Python ≥ 3.10.
 
 ```sh
-git clone <repo-url> && cd osu-replay-critique-public
+git clone <repo-url> && cd osu-critique
 python3 -m venv .venv && source .venv/bin/activate
 
 pip install -e .            # analysis core (numpy + slider)
@@ -212,14 +212,6 @@ pytest -q                     # 11 tests, no network needed
 - `scripts/make_synthetic_fixtures.py` — regenerates the synthetic fixtures and
   can anonymize `.osr` player names (`--anonymize`).
 - CI (`.github/workflows/test.yml`) runs the suite on Python 3.11 and 3.12.
-
-## Roadmap
-
-- **Phase C (done)**: `coach` + `profile` BYO-key extras, pinned
-  `slider==0.8.4`, golden + synthetic fixtures, anonymization, GitHub Actions CI,
-  `setup` wizard with config file.
-- **Phase D (remaining)**: LICENSE file, first PyPI/GitHub release, example
-  output gallery.
 
 ## Privacy, attribution, and terms
 
