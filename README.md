@@ -20,7 +20,7 @@ optional extras (AI coach, osu! profile) are bring-your-own-key.
 - [Install](#install)
   - [Install from a release (no git needed)](#install-from-a-release-no-git-needed)
 - [First-time setup (optional, ~30 seconds)](#first-time-setup-optional-30-seconds)
-- [Usage](#usage)
+- [Commands](#commands)
   - [Quick example](#quick-example)
 - [Configuration](#configuration)
   - [Paths and platform support](#paths-and-platform-support)
@@ -148,7 +148,7 @@ output dir [out]:
 - Anything in the wizard can be overridden per-run by the matching env var
   (precedence: **env var > config file > default**).
 
-## Usage
+## Commands
 
 ```sh
 # analyze a single replay against its map
