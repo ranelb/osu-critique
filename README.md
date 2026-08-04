@@ -34,7 +34,7 @@ osu-critique report out/<tag>_metrics.json
 
 # AI critique (bring your own LLM key — single API call, no harness)
 export OSU_LLM_KEY=sk-...
-osu-critique coach out/<tag>_metrics.json [--baseline out/<other>_metrics.json] [--profile ran27]
+osu-critique coach out/<tag>_metrics.json [--baseline out/<other>_metrics.json] [--profile <username>]
 
 # osu! profile stats (bring your own API v2 credentials, or HTML fallback)
 export OSU_CLIENT_ID=... OSU_CLIENT_SECRET=...
