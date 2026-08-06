@@ -228,6 +228,14 @@ def test_call_chat_streaming_sse(tmp_path, monkeypatch):
         req = b""
         while b"\r\n\r\n" not in req:
             req += conn.recv(4096)
+        # drain the request body (Content-Length) so no unread bytes linger
+        # in the socket when we close — otherwise the client sees a reset
+        header_end = req.index(b"\r\n\r\n") + 4
+        for line in req[:header_end].split(b"\r\n"):
+            if line.lower().startswith(b"content-length:"):
+                n = int(line.split(b":")[1].strip())
+                while len(req) - header_end < n:
+                    req += conn.recv(4096)
         conn.sendall(b"HTTP/1.1 200 OK\r\n"
                      b"Content-Type: text/event-stream\r\n"
                      b"Connection: close\r\n"

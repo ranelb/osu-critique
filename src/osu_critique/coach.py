@@ -121,7 +121,10 @@ def _read_stream(resp, deadline, total, stream=True):
                 "may be overloaded or the prompt too large. Retry, set "
                 "OSU_LLM_TIMEOUT higher, or coach fewer runs.")
         try:
-            chunk = resp.read(65536)
+            chunk = resp.read(64)    # tiny amt: http.client's chunked reader
+                                     # accumulates to amt then returns, so a big
+                                     # amt buffers the whole stream and kills
+                                     # live output; ~64B ≈ one SSE event per gulp
         except TimeoutError:
             continue  # socket-level stall; the deadline loop decides
         if not chunk:
