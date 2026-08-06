@@ -7,7 +7,7 @@ Subcommands:
   paths             show resolved (auto-detected) paths
   prompt  [metrics] [--baseline] [--profile]   print the critique prompt (BYO AI)
   report  <metrics.json> [--baseline]    deterministic critique (no LLM, no keys)
-  coach   <metrics.json> [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
+  coach   <metrics.json|dir> [--all] [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
   profile <username>                     fetch osu! profile (BYO osu API creds)
   setup   [--show]                       first-time configuration wizard
 """
@@ -98,6 +98,16 @@ def _load_metrics(path):
 
 
 def cmd_report(args):
+    from .coach import _load_metrics_dir
+    import os as _os
+    if _os.path.isdir(args.metrics_json):
+        rows = _load_metrics_dir(args.metrics_json)
+        if not rows:
+            print(f"error: no *_metrics.json files in {args.metrics_json!r}",
+                  file=sys.stderr)
+            return 2
+        _aggregate([m for _, m in rows])
+        return 0
     try:
         metrics = _load_metrics(args.metrics_json)
     except RuntimeError as e:
@@ -118,6 +128,9 @@ def cmd_report(args):
 
 def cmd_coach(args):
     from .coach import coach as run_coach
+    if args.all:
+        from .config import outdir
+        args.metrics_json = str(outdir())
     profile = None
     if args.profile:
         from .profile import fetch_profile
@@ -238,7 +251,7 @@ def cmd_setup(args):
     print(f"\nsaved to {path} (mode 0600)")
     print("try: osu-critique batch")
     print("     osu-critique report out/<tag>_metrics.json")
-    print("     osu-critique coach out/<tag>_metrics.json [--profile <username>]")
+    print("     osu-critique coach out/ --all --profile <username>   # cross-run critique")
     return 0
 
 
@@ -383,7 +396,12 @@ def main(argv=None):
     p.set_defaults(func=cmd_report)
 
     p = sub.add_parser("coach", help="AI critique via LLM API (BYO OSU_LLM_KEY)")
-    p.add_argument("metrics_json")
+    p.add_argument("metrics_json",
+                   help="metrics JSON file, or a directory of *_metrics.json "
+                        "files (e.g. the output folder from `batch`) for a "
+                        "cross-run critique")
+    p.add_argument("--all", action="store_true",
+                   help="coach every run in the configured output dir")
     p.add_argument("--baseline", default=None, help="optional baseline metrics JSON")
     p.add_argument("--profile", default=None, help="optional osu! username for context")
     p.add_argument("--model", default=None,

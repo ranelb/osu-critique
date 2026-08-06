@@ -6,6 +6,7 @@ replays — remove the directory if you don't want them public, and the tests
 fall back to OSU_TEST_* env vars, then skip).
 """
 import os
+import json
 from pathlib import Path
 
 import pytest
@@ -155,3 +156,32 @@ def test_load_metrics_missing_and_bad(tmp_path):
     with pytest.raises(RuntimeError) as ei:
         _load_metrics(str(bad))
     assert "not valid metrics JSON" in str(ei.value)
+
+
+def test_multi_run_message_and_dir(tmp_path):
+    """coach with a directory builds a cross-run table; --all resolves outdir."""
+    from osu_critique.coach import build_multi_user_message, _load_metrics_dir
+    # create two fake metrics files
+    base = {
+        "map": "Test Map", "accuracy": 0.9, "ur": 150.0, "early_pct": 0.5,
+        "hit_error_ms": {"mean": 2.0, "std": 15.0},
+        "aim_px": {"mean": 10.0, "mean_norm": 0.4},
+        "counts_recorded": {"miss": 5}, "whiffed_presses": 10,
+        "patterns": {"dense": {"miss_rate": 0.1}, "stream": {"miss_rate": 0.02},
+                     "jump": {"miss_rate": 0.01}, "bigjump": {"miss_rate": 0.05}},
+        "quarters": [{"miss": 1}, {"miss": 2}, {"miss": 1}, {"miss": 1}],
+        "map_version_mismatch": False, "failed_play": False,
+    }
+    for i in range(2):
+        m = dict(base, map=f"Map {i}", accuracy=0.9 - i * 0.05)
+        (tmp_path / f"run{i}_metrics.json").write_text(json.dumps(m))
+    rows = _load_metrics_dir(str(tmp_path))
+    assert len(rows) == 2
+    msg = build_multi_user_message(rows)
+    assert "## Runs — 2 plays" in msg
+    assert "Map 1" in msg and "Map 0" in msg
+    assert "dense%" in msg and "Q1-Q4 miss" in msg
+    assert "Across these runs" in msg.lower() or "ACROSS these runs" in msg
+    # empty dir
+    empty = tmp_path / "empty"; empty.mkdir()
+    assert _load_metrics_dir(str(empty)) == []

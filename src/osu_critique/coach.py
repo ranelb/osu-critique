@@ -91,9 +91,71 @@ def build_user_message(metrics, baseline=None, profile=None):
     return "\n\n".join(parts)
 
 
+def _run_row(name, m):
+    """Compact per-run summary for the multi-run coach."""
+    h = m["hit_error_ms"]
+    p = m.get("patterns", {}) or {}
+    q = m.get("quarters", []) or []
+
+    def pat(k):
+        d = p.get(k) or {}
+        return round(100 * d.get("miss_rate", 0.0), 1)
+
+    flag = "MISMATCH" if m.get("map_version_mismatch") else (
+        "FAILED" if m.get("failed_play") else "")
+    return {
+        "map": name,
+        "acc_pct": round(100 * m["accuracy"], 1),
+        "ur": round(m["ur"], 1),
+        "mean_ms": round(h.get("mean", 0.0), 1),
+        "aim_r": round(m["aim_px"].get("mean_norm", 0.0), 2),
+        "miss": m["counts_recorded"]["miss"],
+        "whiffs": m["whiffed_presses"],
+        "dense_miss_pct": pat("dense"),
+        "stream_miss_pct": pat("stream"),
+        "jump_miss_pct": pat("jump"),
+        "bigjump_miss_pct": pat("bigjump"),
+        "quarter_miss": [q_.get("miss", 0) for q_ in q],
+        "flag": flag,
+    }
+
+
+def build_multi_user_message(rows, profile=None):
+    """Build the prompt for a cross-run critique (a folder of metrics JSONs).
+
+    ``rows`` is a list of (map_name, metrics_dict) pairs. Presents a compact
+    per-run table instead of N full JSON blobs so any number of runs fits."""
+    lines = ["## Runs — %d plays (compact per-run stats)" % len(rows)]
+    lines.append("| map | acc | UR | mean_ms | aim_r | miss | whiffs | "
+                 "dense% | stream% | jump% | bigjump% | Q1-Q4 miss | flag |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    for name, m in sorted(rows, key=lambda r: r[1]["accuracy"]):
+        r = _run_row(name, m)
+        q = ",".join(str(x) for x in r["quarter_miss"]) if r["quarter_miss"] else "-"
+        lines.append(
+            f"| {r['map'][:40]} | {r['acc_pct']} | {r['ur']} | {r['mean_ms']:+.1f} "
+            f"| {r['aim_r']:.2f} | {r['miss']} | {r['whiffs']} | {r['dense_miss_pct']} "
+            f"| {r['stream_miss_pct']} | {r['jump_miss_pct']} | {r['bigjump_miss_pct']} "
+            f"| {q} | {r['flag']} |")
+    lines.append("")
+    lines.append("Analyze the player ACROSS these runs: per-skill verdicts, "
+                 "recurring weaknesses (patterns, quarters, whiffs, timing bias), "
+                 "aim-vs-timing split, trends if any, and a prioritized practice "
+                 "plan. Compare runs against each other — flag the worst and best "
+                 "and explain the gap. Use the numbers; don't invent others.")
+    parts = ["\n".join(lines)]
+    if profile:
+        parts.append(f"## Player profile\n{json.dumps(profile, indent=1)}")
+    return "\n\n".join(parts)
+
+
 def coach(metrics_path, baseline_path=None, profile=None, model=None,
           prompt_file=None):
     """Run the LLM critique; returns the critique text.
+
+    ``metrics_path`` may be a single metrics JSON *or a directory* containing
+    ``*_metrics.json`` files (e.g. the output folder from ``batch``) — in the
+    latter case the critique covers all runs together.
 
     ``model`` overrides the configured model (setup wizard / OSU_LLM_MODEL).
     ``prompt_file`` overrides the built-in critique-framework prompt."""
@@ -104,24 +166,33 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
             "no LLM key configured. Run `osu-critique setup` (interactive wizard) "
             "or set OSU_LLM_KEY. For a key-free deterministic critique, run "
             "`osu-critique report <metrics.json>` instead.")
-    try:
-        with open(metrics_path) as f:
-            metrics = json.load(f)
-    except FileNotFoundError:
-        raise RuntimeError(
-            f"no such metrics file: {metrics_path!r} — run `osu-critique analyze "
-            "<replay.osr> <map.osu> <tag>` first (it writes out/<tag>_metrics.json)") from None
-    except json.JSONDecodeError:
-        raise RuntimeError(f"{metrics_path!r} is not valid metrics JSON — "
-                           "run `osu-critique analyze` to generate it") from None
     baseline = None
     if baseline_path:
         with open(baseline_path) as f:
             baseline = json.load(f)
-    user = build_user_message(metrics, baseline, profile)
     system = load_system_prompt(prompt_file)
     base, mdl = llm_base_url(), model or llm_model()
     print(f"note: coach using {mdl} @ {base}", file=sys.stderr)
+
+    if os.path.isdir(metrics_path):
+        rows = _load_metrics_dir(metrics_path)
+        if not rows:
+            raise RuntimeError(
+                f"no *_metrics.json files found in directory {metrics_path!r} — "
+                "run `osu-critique batch` first")
+        user = build_multi_user_message(rows, profile)
+    else:
+        try:
+            with open(metrics_path) as f:
+                metrics = json.load(f)
+        except FileNotFoundError:
+            raise RuntimeError(
+                f"no such metrics file: {metrics_path!r} — run `osu-critique analyze "
+                "<replay.osr> <map.osu> <tag>` first (it writes out/<tag>_metrics.json)") from None
+        except json.JSONDecodeError:
+            raise RuntimeError(f"{metrics_path!r} is not valid metrics JSON — "
+                               "run `osu-critique analyze` to generate it") from None
+        user = build_user_message(metrics, baseline, profile)
     try:
         return _call_chat(system, user, key, base, mdl)
     except urllib.error.HTTPError as e:
@@ -129,3 +200,17 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
     except urllib.error.URLError as e:
         raise RuntimeError(f"could not reach {base} "
                            f"(offline or wrong base URL?): {e.reason}") from e
+
+
+def _load_metrics_dir(path):
+    """Load all *_metrics.json files in a directory as (map_name, metrics)."""
+    import glob
+    rows = []
+    for p in sorted(glob.glob(os.path.join(path, "*_metrics.json"))):
+        try:
+            with open(p) as f:
+                m = json.load(f)
+            rows.append((m.get("map", os.path.basename(p)), m))
+        except (json.JSONDecodeError, OSError):
+            continue
+    return rows
