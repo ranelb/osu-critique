@@ -59,7 +59,16 @@ def load_system_prompt(prompt_file=None) -> str:
     return SYSTEM_PROMPT
 
 
-def _call_chat(system: str, user: str, key: str, base_url: str, model: str) -> str:
+def _call_chat(system: str, user: str, key: str, base_url: str, model: str,
+               timeout: float | None = None) -> str:
+    """Single chat-completions call with a TOTAL deadline (not per-read).
+
+    urllib's ``timeout`` is per socket operation — a stalled or trickling
+    response can hang indefinitely. We instead read the body in a loop and
+    enforce a wall-clock deadline, so a slow model fails cleanly instead of
+    appearing frozen."""
+    total = timeout if timeout is not None else float(
+        os.environ.get("OSU_LLM_TIMEOUT", "300"))
     body = json.dumps({
         "model": model,
         "messages": [{"role": "system", "content": system},
@@ -72,8 +81,27 @@ def _call_chat(system: str, user: str, key: str, base_url: str, model: str) -> s
         headers={"Content-Type": "application/json",
                  "Authorization": f"Bearer {key}"},
     )
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        data = json.load(resp)
+    import time
+    deadline = time.monotonic() + total
+    sock_timeout = min(60.0, total)
+    print(f"  waiting for LLM response (deadline {total:.0f}s)...",
+          file=sys.stderr)
+    with urllib.request.urlopen(req, timeout=sock_timeout) as resp:
+        buf = b""
+        while True:
+            if time.monotonic() >= deadline:
+                raise RuntimeError(
+                    f"LLM response did not finish within {total:.0f}s — the "
+                    "model may be overloaded or the prompt too large. Retry, "
+                    "set OSU_LLM_TIMEOUT higher, or coach fewer runs.")
+            try:
+                chunk = resp.read(65536)
+            except TimeoutError:
+                continue  # socket-level stall; the deadline loop decides
+            if not chunk:
+                break
+            buf += chunk
+    data = json.loads(buf.decode())
     return data["choices"][0]["message"]["content"]
 
 
@@ -197,6 +225,8 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
         return _call_chat(system, user, key, base, mdl)
     except urllib.error.HTTPError as e:
         raise RuntimeError(f"LLM API error {e.code}: {e.read()[:300]!r}") from e
+    except TimeoutError as e:
+        raise RuntimeError(str(e)) from e
     except urllib.error.URLError as e:
         raise RuntimeError(f"could not reach {base} "
                            f"(offline or wrong base URL?): {e.reason}") from e

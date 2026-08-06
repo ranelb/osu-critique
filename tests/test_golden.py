@@ -185,3 +185,32 @@ def test_multi_run_message_and_dir(tmp_path):
     # empty dir
     empty = tmp_path / "empty"; empty.mkdir()
     assert _load_metrics_dir(str(empty)) == []
+
+
+def test_call_chat_deadline_fires(tmp_path, monkeypatch):
+    """A stalled LLM response must hit the total deadline instead of hanging."""
+    import socket, threading, time
+    from osu_critique import coach as coach_mod
+
+    srv = socket.socket()
+    srv.bind(("127.0.0.1", 0))
+    srv.listen(1)
+    port = srv.getsockname()[1]
+
+    def slow_server():
+        conn, _ = srv.accept()
+        conn.recv(65536)                      # read request headers/body
+        # send headers + a partial chunk, then stall forever
+        conn.sendall(b"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
+                     b"Transfer-Encoding: chunked\r\n\r\n")
+        conn.sendall(b"5\r\n{abc}\r\n")       # valid-ish first chunk
+        time.sleep(30)                        # never finish
+        conn.close()
+
+    threading.Thread(target=slow_server, daemon=True).start()
+    monkeypatch.setenv("OSU_LLM_TIMEOUT", "3")
+    t0 = time.monotonic()
+    with pytest.raises(RuntimeError, match="did not finish within"):
+        coach_mod._call_chat("sys", "user", "k", f"http://127.0.0.1:{port}", "m")
+    assert time.monotonic() - t0 < 15         # bounded, not infinite
+    srv.close()

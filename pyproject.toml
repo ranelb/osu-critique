@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "osu-critique"
-version = "0.1.3"
+version = "0.1.4"
 description = "Data-driven osu! replay analysis: per-object hit/aim error, patterns, streams, tapping, UR — with deterministic reports and optional AI critique."
 readme = "README.md"
 requires-python = ">=3.10"

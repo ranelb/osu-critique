@@ -232,6 +232,7 @@ it always wins over detection.
 | `OSU_LLM_KEY` | — | LLM API key for `coach` (OpenAI-compatible) |
 | `OSU_LLM_BASE_URL` | `https://api.deepseek.com` | LLM endpoint (OpenAI-compatible; works with OpenRouter, local servers, …) |
 | `OSU_LLM_MODEL` | `deepseek-v4-flash` | default coach model — the tested/recommended model (override per run with `--model`) |
+| `OSU_LLM_TIMEOUT` | `300` | total wall-clock deadline (seconds) for an LLM critique call — raise it for very large multi-run folders, lower it to fail fast |
 | `OSU_CLIENT_ID` / `OSU_CLIENT_SECRET` | — | osu! API v2 credentials for `profile` (optional) |
 | `OSU_ALLOW_SCRAPE` | `false` | allow the unofficial HTML `profile` fallback when no API credentials are set (also config `allow_scrape`) |
 | `OSU_CONFIG_DIR` | `~/.config/osu-critique` | where the config file lives |
