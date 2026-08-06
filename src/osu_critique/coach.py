@@ -108,6 +108,8 @@ def _read_stream(resp, deadline, total, stream=True):
     """Read a chat-completions response. Streaming mode prints tokens live and
     returns the assembled text; non-streaming returns the parsed content."""
     import time
+    max_buf = 16 * 1024 * 1024      # a single SSE line bigger than 16 MiB is a runaway
+    max_total = 64 * 1024 * 1024    # a critique bigger than 64 MiB is a runaway
     buf = b""
     pieces = []
     while True:
@@ -131,9 +133,15 @@ def _read_stream(resp, deadline, total, stream=True):
             break
         if stream:
             buf += chunk
+            if len(buf) > max_buf:
+                raise RuntimeError(f"LLM stream exceeded a single {max_buf//2**20} MiB "
+                                   "line — endpoint behaving abnormally")
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
                 _consume_sse(line, pieces)
+            if sum(len(p) for p in pieces) > max_total:
+                raise RuntimeError(f"LLM response exceeded {max_total//2**20} MiB — "
+                                   "aborting (endpoint runaway?)")
         else:
             buf += chunk
     if stream:

@@ -367,7 +367,25 @@ def render_report(metrics, baseline=None):
 
 # --------------------------------------------------------------- entry ----
 
+def _apply_memory_guard() -> None:
+    """Cap the process address space so a runaway can never freeze the machine.
+
+    A memory-bounded tool must fail fast with MemoryError, not thrash into
+    60+ GiB of swap. ``OSU_MEMORY_LIMIT_GB`` overrides the 6 GiB default
+    (set 0 to disable). Linux-only; ignored elsewhere."""
+    limit_gb = float(os.environ.get("OSU_MEMORY_LIMIT_GB", "6"))
+    if not limit_gb or limit_gb <= 0:
+        return
+    try:
+        import resource
+        cap = int(limit_gb * 1024 ** 3)
+        resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
+    except (ImportError, ValueError, OSError):
+        pass  # non-Linux or unsupported: leave unguarded
+
+
 def main(argv=None):
+    _apply_memory_guard()
     parser = argparse.ArgumentParser(prog="osu-critique",
                                      description="Data-driven osu! replay analysis.")
     parser.add_argument("--version", action="version", version=f"osu-critique {__version__}")

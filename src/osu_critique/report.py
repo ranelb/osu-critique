@@ -39,7 +39,14 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     bm = load_beatmap(map_path)
     r.beatmap = bm  # enables .hits/.accuracy (needs OD)
 
+    # hard input bounds: fail fast instead of materializing absurd sizes
+    if len(bm.hit_objects()) > 100_000:
+        raise RuntimeError(f"map has {len(bm.hit_objects())} objects "
+                           "(> 100k) — refusing to analyze")
     frames = build_frames(r)
+    if len(frames) > 2_000_000:
+        raise RuntimeError(f"replay has {len(frames)} frames (> 2M) — "
+                           "refusing to analyze")
     times = np.array([f[0] for f in frames])
     presses = find_presses(frames)
     press_times = [p[0] for p in presses]
@@ -52,7 +59,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     n_map_objects = len(bm.hit_objects())
 
     # try candidate time scales (mod-based first), keep the one whose detected
-    # miss count agrees best with the recorded miss count
+    # miss count agrees best with the recorded miss count. Losing candidates
+    # are dropped immediately so only one full result set is ever retained.
     candidates = [mod_scale(r), 1.0]
     best = None
     for scale in dict.fromkeys(candidates):  # dedupe, keep order
@@ -67,13 +75,18 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                 "detected": detected, "whiffed": whiffed, "badness": badness,
                 "w300": w300, "w100": w100, "w50": w50}
         if best is None or badness < best["badness"]:
+            if best is not None:
+                del best  # free the previous best before replacing it
             best = cand
+        else:
+            del cand  # losing candidate: release immediately
     objs, results, detected, whiffed_presses = (best["objs"], best["results"],
                                                 best["detected"], best["whiffed"])
     scale = best["scale"]
     w300, w100, w50 = best["w300"], best["w100"], best["w50"]
-    if best["scale"] != mod_scale(r):
-        print(f"!! calibrated time scale: mod-scale {mod_scale(r):.3f} -> {best['scale']:.3f} "
+    del best
+    if scale != mod_scale(r):
+        print(f"!! calibrated time scale: mod-scale {mod_scale(r):.3f} -> {scale:.3f} "
               f"(mod flag may be misleading)", file=sys.stderr)
 
     # version sanity: the map's last object must not be far beyond the replay end
