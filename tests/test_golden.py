@@ -214,3 +214,34 @@ def test_call_chat_deadline_fires(tmp_path, monkeypatch):
         coach_mod._call_chat("sys", "user", "k", f"http://127.0.0.1:{port}", "m")
     assert time.monotonic() - t0 < 15         # bounded, not infinite
     srv.close()
+
+
+def test_call_chat_streaming_sse(tmp_path, monkeypatch):
+    """SSE chunks are assembled (and streamed) into the final text."""
+    import socket, threading
+    from osu_critique import coach as coach_mod
+    srv = socket.socket(); srv.bind(("127.0.0.1", 0)); srv.listen(1)
+    port = srv.getsockname()[1]
+
+    def sse_server():
+        conn, _ = srv.accept()
+        req = b""
+        while b"\r\n\r\n" not in req:
+            req += conn.recv(4096)
+        conn.sendall(b"HTTP/1.1 200 OK\r\n"
+                     b"Content-Type: text/event-stream\r\n"
+                     b"Connection: close\r\n"
+                     b"Transfer-Encoding: chunked\r\n\r\n")
+        for part in (b'data: {"choices":[{"delta":{"content":"Hi "}}]}\n\n',
+                     b'data: {"choices":[{"delta":{"content":"there"}}]}\n\n',
+                     b"data: [DONE]\n\n"):
+            chunk = hex(len(part))[2:].encode() + b"\r\n" + part + b"\r\n"
+            conn.sendall(chunk)
+        conn.sendall(b"0\r\n\r\n")          # terminal chunk
+        conn.close()
+
+    threading.Thread(target=sse_server, daemon=True).start()
+    monkeypatch.setenv("OSU_LLM_TIMEOUT", "10")
+    out = coach_mod._call_chat("sys", "user", "k", f"http://127.0.0.1:{port}", "m")
+    assert out == "Hi there"
+    srv.close()

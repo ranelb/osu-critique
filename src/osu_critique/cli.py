@@ -139,12 +139,11 @@ def cmd_coach(args):
               f"#{profile.get('global_rank')} · {profile.get('pp')}pp · "
               f"{profile.get('play_time_hours')}h", file=sys.stderr)
     try:
-        critique = run_coach(args.metrics_json, args.baseline, profile,
-                             model=args.model, prompt_file=args.prompt)
+        run_coach(args.metrics_json, args.baseline, profile,
+                  model=args.model, prompt_file=args.prompt)
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
-    print(critique)
     return 0
 
 

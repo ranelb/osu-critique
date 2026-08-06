@@ -74,35 +74,92 @@ def _call_chat(system: str, user: str, key: str, base_url: str, model: str,
         "messages": [{"role": "system", "content": system},
                      {"role": "user", "content": user}],
         "temperature": 0.4,
+        "stream": True,
     }).encode()
     req = urllib.request.Request(
         base_url.rstrip("/") + "/chat/completions",
         data=body,
         headers={"Content-Type": "application/json",
+                 "Accept": "text/event-stream",
                  "Authorization": f"Bearer {key}"},
     )
     import time
     deadline = time.monotonic() + total
-    sock_timeout = min(60.0, total)
+    sock_timeout = min(30.0, total)
     print(f"  waiting for LLM response (deadline {total:.0f}s)...",
           file=sys.stderr)
-    with urllib.request.urlopen(req, timeout=sock_timeout) as resp:
-        buf = b""
-        while True:
-            if time.monotonic() >= deadline:
+    try:
+        with urllib.request.urlopen(req, timeout=sock_timeout) as resp:
+            return _read_stream(resp, deadline, total)
+    except urllib.error.HTTPError as e:
+        # some OpenAI-compatible endpoints reject "stream": fall back once
+        if e.code in (400, 404, 422) and b"stream" in (e.read() or b"").lower():
+            body2 = body.replace(b'"stream": true', b'"stream": false')
+            req2 = urllib.request.Request(
+                base_url.rstrip("/") + "/chat/completions", data=body2,
+                headers={"Content-Type": "application/json",
+                         "Authorization": f"Bearer {key}"})
+            with urllib.request.urlopen(req2, timeout=sock_timeout) as resp2:
+                return _read_stream(resp2, deadline, total, stream=False)
+        raise
+
+
+def _read_stream(resp, deadline, total, stream=True):
+    """Read a chat-completions response. Streaming mode prints tokens live and
+    returns the assembled text; non-streaming returns the parsed content."""
+    import time
+    buf = b""
+    pieces = []
+    while True:
+        if time.monotonic() >= deadline:
+            if stream and pieces:
                 raise RuntimeError(
-                    f"LLM response did not finish within {total:.0f}s — the "
-                    "model may be overloaded or the prompt too large. Retry, "
-                    "set OSU_LLM_TIMEOUT higher, or coach fewer runs.")
-            try:
-                chunk = resp.read(65536)
-            except TimeoutError:
-                continue  # socket-level stall; the deadline loop decides
-            if not chunk:
-                break
+                    f"LLM response timed out after {total:.0f}s (got partial "
+                    f"output above) — set OSU_LLM_TIMEOUT higher or coach fewer runs.")
+            raise RuntimeError(
+                f"LLM response did not finish within {total:.0f}s — the model "
+                "may be overloaded or the prompt too large. Retry, set "
+                "OSU_LLM_TIMEOUT higher, or coach fewer runs.")
+        try:
+            chunk = resp.read(65536)
+        except TimeoutError:
+            continue  # socket-level stall; the deadline loop decides
+        if not chunk:
+            break
+        if stream:
             buf += chunk
+            while b"\n" in buf:
+                line, buf = buf.split(b"\n", 1)
+                _consume_sse(line, pieces)
+        else:
+            buf += chunk
+    if stream:
+        if buf.strip():
+            _consume_sse(buf, pieces)
+        return "".join(pieces)
     data = json.loads(buf.decode())
     return data["choices"][0]["message"]["content"]
+
+
+def _consume_sse(line: bytes, pieces: list[str]):
+    """Parse one SSE line: ``data: {json}`` or ``data: [DONE]``."""
+    line = line.strip()
+    if not line.startswith(b"data:"):
+        return
+    payload = line[5:].strip()
+    if payload == b"[DONE]":
+        return
+    try:
+        obj = json.loads(payload)
+    except json.JSONDecodeError:
+        return
+    for ch in obj.get("choices", []):
+        delta = ch.get("delta") or {}
+        text = delta.get("content")
+        if text:
+            pieces.append(text)
+            sys.stdout.write(text)
+            sys.stdout.flush()
 
 
 def _compact(d, limit=12000):

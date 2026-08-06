@@ -52,7 +52,7 @@ The same metrics JSON can be turned into a critique at three levels:
 | Way | Command | Needs? | What you get |
 |---|---|---|---|
 | **Deterministic** | `report <metrics.json\|dir>` | nothing | rule-based critique from thresholds — no AI, no keys, fully offline (a directory prints the cross-run aggregate) |
-| **One-command AI** | `coach <metrics.json\|dir> [--all]` | LLM API key | full natural-language critique via a single API call — point at a folder of runs for a cross-run critique, or use `--all` for the whole output dir |
+| **One-command AI** | `coach <metrics.json\|dir> [--all]` | LLM API key | full natural-language critique via a single API call — **streamed live** (tokens appear as generated); point at a folder of runs for a cross-run critique, or use `--all` for the whole output dir |
 | **Bring-your-own AI** | `prompt <metrics.json>` | nothing | the framework prompt + your data, ready to paste into any AI you choose (then `coach --prompt` to reuse a custom framework) |
 
 `coach` and `prompt` accept the same optional `--baseline` (an earlier metrics
