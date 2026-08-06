@@ -83,3 +83,23 @@ def test_folder_pairing_with_fixtures(tmp_path):
     assert len(pairs) == 1
     rp, mp = pairs[0]
     assert rp.endswith("domino.osr") and mp.endswith("domino.osu")
+
+
+def test_legacy_osu_prefix_key_alias(tmp_path, monkeypatch):
+    """Hand-edited config with 'osu_llm_key' (instead of 'llm_key') must work."""
+    from osu_critique import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cfg_mod, "CONFIG_PATH", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text('{"osu_llm_key": "sk-legacy"}')
+    assert cfg_mod.llm_key() == "sk-legacy"
+    # env var still wins over the alias
+    monkeypatch.setenv("OSU_LLM_KEY", "sk-env")
+    assert cfg_mod.llm_key() == "sk-env"
+
+
+def test_llm_key_reads_canonical(tmp_path, monkeypatch):
+    from osu_critique import config as cfg_mod
+    monkeypatch.setattr(cfg_mod, "CONFIG_DIR", tmp_path)
+    monkeypatch.setattr(cfg_mod, "CONFIG_PATH", tmp_path / "config.json")
+    (tmp_path / "config.json").write_text('{"llm_key": "sk-canon"}')
+    assert cfg_mod.llm_key() == "sk-canon"
