@@ -133,3 +133,25 @@ def test_report_deterministic(tmp_path):
     text = render_report(metrics)
     assert "Accuracy 100.0%" in text
     assert "Primary target" not in text or "No pattern" in text
+
+
+def test_coach_missing_metrics_friendly_error(tmp_path):
+    """A missing metrics file must produce a helpful RuntimeError, not a traceback."""
+    from osu_critique.coach import coach
+    import pytest
+    with pytest.raises(RuntimeError) as ei:
+        coach(str(tmp_path / "nope_metrics.json"))
+    assert "run `osu-critique analyze" in str(ei.value)
+
+
+def test_load_metrics_missing_and_bad(tmp_path):
+    from osu_critique.cli import _load_metrics
+    import pytest
+    with pytest.raises(RuntimeError) as ei:
+        _load_metrics(str(tmp_path / "missing.json"))
+    assert "analyze" in str(ei.value)
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    with pytest.raises(RuntimeError) as ei:
+        _load_metrics(str(bad))
+    assert "not valid metrics JSON" in str(ei.value)

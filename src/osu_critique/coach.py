@@ -104,8 +104,16 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
             "no LLM key configured. Run `osu-critique setup` (interactive wizard) "
             "or set OSU_LLM_KEY. For a key-free deterministic critique, run "
             "`osu-critique report <metrics.json>` instead.")
-    with open(metrics_path) as f:
-        metrics = json.load(f)
+    try:
+        with open(metrics_path) as f:
+            metrics = json.load(f)
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"no such metrics file: {metrics_path!r} — run `osu-critique analyze "
+            "<replay.osr> <map.osu> <tag>` first (it writes out/<tag>_metrics.json)") from None
+    except json.JSONDecodeError:
+        raise RuntimeError(f"{metrics_path!r} is not valid metrics JSON — "
+                           "run `osu-critique analyze` to generate it") from None
     baseline = None
     if baseline_path:
         with open(baseline_path) as f:

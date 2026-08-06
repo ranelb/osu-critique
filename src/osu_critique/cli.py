@@ -63,8 +63,11 @@ def cmd_prompt(args):
     from .coach import build_user_message, load_system_prompt
     system = load_system_prompt(args.prompt)
     if args.metrics_json:
-        with open(args.metrics_json) as f:
-            metrics = json.load(f)
+        try:
+            metrics = _load_metrics(args.metrics_json)
+        except RuntimeError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 2
         baseline = None
         if args.baseline:
             with open(args.baseline) as f:
@@ -80,13 +83,35 @@ def cmd_prompt(args):
     return 0
 
 
+def _load_metrics(path):
+    """Load a metrics JSON with a helpful error instead of a raw traceback."""
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"no such metrics file: {path!r} — run `osu-critique analyze "
+            "<replay.osr> <map.osu> <tag>` first (it writes out/<tag>_metrics.json)")
+    except json.JSONDecodeError:
+        raise RuntimeError(f"{path!r} is not valid metrics JSON — "
+                           "run `osu-critique analyze` to generate it")
+
+
 def cmd_report(args):
-    with open(args.metrics_json) as f:
-        metrics = json.load(f)
+    try:
+        metrics = _load_metrics(args.metrics_json)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
     baseline = None
     if args.baseline:
-        with open(args.baseline) as f:
-            baseline = json.load(f)
+        try:
+            with open(args.baseline) as f:
+                baseline = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            print(f"error: cannot read baseline {args.baseline!r}: {e}",
+                  file=sys.stderr)
+            return 2
     print(render_report(metrics, baseline))
     return 0
 
