@@ -82,6 +82,50 @@ def build_trust(detected, recorded, scale, mod_scale_value, judged,
     }
 
 
+MAX_CURSOR_SPEED = 50.0     # px/ms; above this it is an export artefact, not a flick
+
+
+def aim_velocity(pairs, min_n=8):
+    """Aim error (circle radii) conditioned on how fast the cursor was moving.
+
+    The static thresholds ("0.30-0.45r is good") ignore that a 9r flick and a 1r
+    nudge are not the same task. Fitting error against cursor speed gives a
+    slope: shallow means precision holds as speed rises (a strong aim ceiling),
+    steep means it collapses under movement. cursor_speed was already computed
+    per object and then thrown away before this existed.
+    """
+    pts = [(v, a) for v, a in pairs
+           if v is not None and a is not None and np.isfinite(v) and np.isfinite(a)
+           and 0.0 <= v <= MAX_CURSOR_SPEED]
+    if len(pts) < min_n:
+        return {"n": len(pts), "slope_r_per_px_ms": None, "r2": None, "bins": []}
+    v = np.array([p[0] for p in pts], dtype=float)
+    a = np.array([p[1] for p in pts], dtype=float)
+    # closed-form least squares: no LAPACK, and it cannot blow up on the huge
+    # speeds a dropped-frame export can produce
+    v_bar, a_bar = float(v.mean()), float(a.mean())
+    dv = v - v_bar
+    var = float((dv ** 2).mean())
+    if var <= 0.0:
+        return {"n": len(pts), "slope_r_per_px_ms": None, "r2": None, "bins": []}
+    slope = float((dv * (a - a_bar)).mean()) / var
+    pred = a_bar + slope * dv
+    ss_res = float(((a - pred) ** 2).sum())
+    ss_tot = float(((a - a_bar) ** 2).sum())
+    edges = np.percentile(v, [0, 25, 50, 75, 100])
+    bins = []
+    for i in range(4):
+        sel = (v >= edges[i]) & (v <= edges[i + 1])
+        in_bin = a[sel]
+        bins.append({"v_lo": round(float(edges[i]), 3),
+                     "v_hi": round(float(edges[i + 1]), 3),
+                     "n": int(sel.sum()),
+                     "mean_aim_r": (round(float(in_bin.mean()), 3)
+                                    if len(in_bin) else None)})
+    return {"n": len(pts), "slope_r_per_px_ms": float(slope),
+            "r2": (1.0 - ss_res / ss_tot) if ss_tot > 0 else None, "bins": bins}
+
+
 def analyze(replay_path, map_path, tag="run", do_charts=False,
             outdir=None, hit_tol=1.0, console=True):
     """Analyze one replay against its map; returns the metrics dict.
@@ -162,6 +206,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     hits = [x for x in results if x["result"] != "miss"]
     errs = np.array([x["error"] for x in hits])
     aims = np.array([x["aim"] for x in hits if x["aim"] is not None])
+    aim_speed = aim_velocity([(x["cursor_speed"], x["aim"] / radius) for x in hits
+                              if x["aim"] is not None])
     acc = float(r.accuracy) if hasattr(r, "accuracy") else None
     ur = float(np.std(errs) * 10) if len(errs) else None
 
@@ -206,10 +252,13 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                          "p90": float(np.percentile(errs, 90)) if len(errs) else None,
                          "abs_mean": float(np.mean(np.abs(errs))) if len(errs) else None},
         "ur": ur,
+        "ur_pct_of_300_window": (float(ur / 10.0 / w300 * 100.0)
+                                 if ur is not None else None),
         "early_pct": float(np.mean(errs < 0)) if len(errs) else None,
         "aim_px": {"mean": float(np.mean(aims)) if len(aims) else None,
                    "p90": float(np.percentile(aims, 90)) if len(aims) else None,
                    "mean_norm": float(np.mean(aims) / radius) if len(aims) else None},
+        "aim_vs_speed": aim_speed,
         "key_usage": keys,
         "spacing_radius": radius,
         "patterns": {p: {"n": d["n"], "miss_rate": d["miss"] / d["n"],
@@ -264,9 +313,18 @@ def console_summary(metrics, out_json=None):
               f"of {tr['judged']} objects (miss {tr['count_deltas']['miss']:+d}) - "
               f"per-pattern numbers are approximate")
     print(f"whiffed presses (hit nothing): {metrics['whiffed_presses']}")
+    w = metrics.get("whiffs") or {}
+    if w.get("n"):
+        print(f"  whiff causes: mash {w['mash']}  off_target {w['off_target']} "
+              f"(mean {(w['off_target_mean_r'] or 0):.1f}r)  slider_head {w['slider_head']}  "
+              f"lost {w['lost']}  after_end {w['after_end']}")
     if ur:
         h = metrics["hit_error_ms"]
         print(f"UR={ur:.1f}  mean_err={h['mean']:+.1f}ms  std={h['std']:.1f}ms  early={metrics['early_pct']:.0%}")
+        ur_pct = metrics.get("ur_pct_of_300_window")
+        if ur_pct is not None:
+            print(f"  timing std is {ur_pct:.0f}% of the OD {metrics['difficulty']['OD']:.1f} "
+                  f"300-window ({w300:.0f}ms)")
     aim = metrics["aim_px"]
     if aim["mean"] is not None:
         print(f"aim: mean={aim['mean']:.1f}px ({aim['mean_norm']:.2f}r) p90={aim['p90']:.1f}px")

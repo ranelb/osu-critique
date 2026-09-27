@@ -333,7 +333,14 @@ def render_report(metrics, baseline=None):
               f"- |bias| > 6ms with consistent sign -> consider an offset test."]
     lines += ["", "## Aim",
               f"- mean aim error {aim['mean_norm']:.2f}r ({aim_verdict(aim['mean_norm'])})"
-              + (f" vs baseline {b_aim:.2f}r" if b_aim else ""), ""]
+              + (f" vs baseline {b_aim:.2f}r" if b_aim else "")]
+    avs = metrics.get("aim_vs_speed") or {}
+    if avs.get("slope_r_per_px_ms") is not None:
+        bins = avs.get("bins") or []
+        trend = "  ".join(f"{b['mean_aim_r']:.2f}r" for b in bins if b["mean_aim_r"] is not None)
+        lines.append(f"- aim error vs cursor speed: {avs['slope_r_per_px_ms']:+.3f}r per px/ms "
+                     f"(r2 {avs['r2']:.2f}); slowest->fastest quartile {trend}")
+    lines.append("")
 
     pat = metrics["patterns"]
     if pat:
@@ -367,6 +374,13 @@ def render_report(metrics, baseline=None):
               f"same-key adjacencies {tap['same_key_pct'] * 100:.1f}%",
               f"- keys {metrics['key_usage']} | whiffed presses {metrics['whiffed_presses']} "
               f"(rate {metrics['whiffed_presses'] / max(1, tap['n']):.1%})"]
+    w = metrics.get("whiffs") or {}
+    if w.get("n"):
+        lines.append(f"- whiff causes: {w['mash']} mash, {w['off_target']} off-target "
+                     f"(mean {(w['off_target_mean_r'] or 0):.2f}r), "
+                     f"{w['slider_head']} beside a slider head, {w['lost']} duplicate, "
+                     f"{w['after_end']} after the map - only the off-target share is "
+                     f"'rushing'")
     return "\n".join(lines)
 
 
