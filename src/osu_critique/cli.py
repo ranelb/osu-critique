@@ -29,7 +29,8 @@ from .report import analyze, console_summary
 
 def cmd_analyze(args):
     metrics = analyze(args.replay, args.map, tag=args.tag or "run",
-                      do_charts=args.charts, outdir=args.outdir)
+                      do_charts=args.charts, outdir=args.outdir,
+                      write_objects=not args.no_objects)
     console_summary(metrics)
     return 0
 
@@ -48,7 +49,8 @@ def cmd_batch(args):
     for source, rp, mp in pairs:
         tag = _tag_from_replay(rp)
         metrics = analyze(rp, mp, tag=tag, do_charts=args.charts,
-                          outdir=args.outdir, console=False)
+                          outdir=args.outdir, console=False,
+                          write_objects=not args.no_objects)
         console_summary(metrics)
         rows.append(metrics)
         print()
@@ -317,6 +319,11 @@ def render_report(metrics, baseline=None):
              f"{metrics['counts_recorded']['100']}x100 / "
              f"{metrics['counts_recorded']['50']}x50 / "
              f"{metrics['counts_recorded']['miss']}x miss | max combo {metrics['max_combo']}"]
+    tr = metrics.get("trust") or {}
+    if tr and not tr.get("trustworthy", True):
+        lines.append(f"- TRUST: judgement differs from the game on {tr['abs_delta_total']} "
+                     f"of {tr['judged']} objects (miss {tr['count_deltas']['miss']:+d}, "
+                     f"{tr['abs_delta_pct']:.1f}%) - treat per-pattern numbers as approximate.")
     if metrics.get("failed_play"):
         lines.append("- NOTE: this was a failed play (ended before the map finished).")
     if metrics.get("map_version_mismatch"):
@@ -328,7 +335,14 @@ def render_report(metrics, baseline=None):
               f"- |bias| > 6ms with consistent sign -> consider an offset test."]
     lines += ["", "## Aim",
               f"- mean aim error {aim['mean_norm']:.2f}r ({aim_verdict(aim['mean_norm'])})"
-              + (f" vs baseline {b_aim:.2f}r" if b_aim else ""), ""]
+              + (f" vs baseline {b_aim:.2f}r" if b_aim else "")]
+    avs = metrics.get("aim_vs_speed") or {}
+    if avs.get("slope_r_per_px_ms") is not None:
+        bins = avs.get("bins") or []
+        trend = "  ".join(f"{b['mean_aim_r']:.2f}r" for b in bins if b["mean_aim_r"] is not None)
+        lines.append(f"- aim error vs cursor speed: {avs['slope_r_per_px_ms']:+.3f}r per px/ms "
+                     f"(r2 {avs['r2']:.2f}); slowest->fastest quartile {trend}")
+    lines.append("")
 
     pat = metrics["patterns"]
     if pat:
@@ -362,6 +376,13 @@ def render_report(metrics, baseline=None):
               f"same-key adjacencies {tap['same_key_pct'] * 100:.1f}%",
               f"- keys {metrics['key_usage']} | whiffed presses {metrics['whiffed_presses']} "
               f"(rate {metrics['whiffed_presses'] / max(1, tap['n']):.1%})"]
+    w = metrics.get("whiffs") or {}
+    if w.get("n"):
+        lines.append(f"- whiff causes: {w['mash']} mash, {w['off_target']} off-target "
+                     f"(mean {(w['off_target_mean_r'] or 0):.2f}r), "
+                     f"{w['slider_head']} beside a slider head, {w['lost']} duplicate, "
+                     f"{w['after_end']} after the map - only the off-target share is "
+                     f"'rushing'")
     return "\n".join(lines)
 
 
@@ -396,6 +417,8 @@ def main(argv=None):
     p.add_argument("map")
     p.add_argument("tag", nargs="?", default="run")
     p.add_argument("--charts", action="store_true", help="also render a PNG chart")
+    p.add_argument("--no-objects", action="store_true",
+                   help="skip out/<tag>_objects.json (the per-object records)")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_analyze)
 
@@ -404,6 +427,7 @@ def main(argv=None):
 
     p = sub.add_parser("batch", help="pair + analyze every exported lazer replay")
     p.add_argument("--charts", action="store_true")
+    p.add_argument("--no-objects", action="store_true")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_batch)
 

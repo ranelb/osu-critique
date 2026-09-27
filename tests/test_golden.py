@@ -253,3 +253,60 @@ def test_call_chat_streaming_sse(tmp_path, monkeypatch):
     out = coach_mod._call_chat("sys", "user", "k", f"http://127.0.0.1:{port}", "m")
     assert out == "Hi there"
     srv.close()
+
+
+# ------------------------------------------------------ calibration/trust ----
+
+def test_scale_distance_uses_the_whole_count_vector():
+    """Fitting only the miss count can bless a scale that mis-splits 300s/100s."""
+    from osu_critique.report import count_distance
+
+    recorded = {"300": 100, "100": 10, "50": 0, "miss": 2}
+    lucky_miss = {"300": 108, "100": 2, "50": 0, "miss": 2}   # miss matches by luck
+    exact = {"300": 100, "100": 10, "50": 0, "miss": 2}
+    assert count_distance(lucky_miss, recorded) > count_distance(exact, recorded)
+    assert count_distance(exact, recorded) == 0
+
+
+def test_trust_block_on_a_clean_fixture(tmp_path):
+    replay, map_path = _resolve("aaaaa", str(FIX / "aaaaa.osr"), str(FIX / "aaaaa.osu"))
+    if not replay.exists() or not map_path.exists():
+        pytest.skip("aaaaa fixtures not present")
+    metrics = analyze(str(replay), str(map_path), tag="aaaaa",
+                      outdir=str(tmp_path), console=False)
+    trust = metrics["trust"]
+    assert trust["trustworthy"] is True
+    assert trust["within_tolerance"] is True
+    assert trust["abs_delta_total"] <= trust["total_tolerance"]
+    assert trust["notes"] == []
+    assert trust["scale_overridden"] is False
+
+
+def test_trust_block_flags_a_partial_play(tmp_path):
+    """A map_version_mismatch play is never trustworthy, counts aside."""
+    replay, map_path = FIX / "synth_mismatch.osr", FIX / "synth_mismatch.osu"
+    if not replay.exists():
+        pytest.skip("synth_mismatch not generated")
+    metrics = analyze(str(replay), str(map_path), tag="synth_mismatch",
+                      outdir=str(tmp_path), console=False)
+    trust = metrics["trust"]
+    assert trust["trustworthy"] is False
+    assert any("ends before the map" in n for n in trust["notes"])
+
+
+def test_deterministic_report_shows_the_trust_note(tmp_path):
+    """A play the judge cannot reproduce must not read like a clean analysis."""
+    from osu_critique.cli import render_report
+
+    m = {"map": "X", "accuracy": 0.9, "ur": 150.0, "early_pct": 0.5,
+         "counts_recorded": {"300": 10, "100": 2, "50": 0, "miss": 3},
+         "counts_detected": {"300": 10, "100": 2, "50": 0, "miss": 3},
+         "hit_error_ms": {"mean": 0.0, "std": 15.0}, "aim_px": {"mean_norm": 0.4},
+         "patterns": {}, "streams": {"segments": []}, "tapping": {"alt_ratio": 1.0,
+         "same_key_pct": 0.0, "n": 10}, "key_usage": {"A": 5, "B": 5},
+         "max_combo": 10, "whiffed_presses": 0,
+         "trust": {"abs_delta_total": 30, "judged": 15, "abs_delta_pct": 200.0,
+                   "count_deltas": {"300": 0, "100": 0, "50": 0, "miss": 20},
+                   "trustworthy": False}}
+    text = render_report(m)
+    assert "TRUST" in text

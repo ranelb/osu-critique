@@ -1,13 +1,14 @@
 """High-level analysis: replay + map -> metrics dict (JSON-serialisable).
 
 ``analyze()`` is the package's core API. It ports the validated pipeline:
-frame building (time-sorted), press detection, greedy aim-validated assignment,
+frame building (time-sorted), press detection, press-order (osu!-style) assignment,
 OD-window classification, time-scale auto-calibration (some lazer exports and
 mod flags are misleading), pattern/region/quarter/stream/tapping stats, and
 version/failed-play sanity flags.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -16,19 +17,119 @@ import numpy as np
 
 import slider as _slider  # noqa: F401  (re-exported for convenience; used by circle_radius)
 
-from .io.beatmap import (build_objects, circle_radius, load_beatmap,
-                         mod_scale, od_windows)
+from .io.beatmap import (build_objects, circle_radius, cs_for, load_beatmap,
+                         mod_scale, mod_string, od_for, od_windows)
 from .io.replay import build_frames, find_presses, load_replay
-from .metrics.assignment import assign
+from .metrics.assignment import judge
 from .metrics.patterns import add_pattern_labels, pattern_stats
+from .metrics.structure import SCHEMA_VERSION, annotate, object_records
 from .metrics.sections import quarter_stats, region_stats
 from .metrics.streams import stream_stats
 from .metrics.tapping import key_usage, tapping_stats
 from .config import outdir as _default_outdir
 
 
+def count_distance(detected, recorded):
+    """Weighted L1 over the whole count vector (300/100/50/miss).
+
+    Calibration used to score a candidate time scale on |miss delta| alone, which
+    a wrong scale can match by luck while mis-splitting the 300s and 100s: the
+    four counts always sum to the judged total, so every 300 that should have
+    been a 100 hides a compensating error somewhere else.
+    """
+    return (2.0 * abs(detected["miss"] - recorded["miss"])
+            + 1.0 * abs(detected["100"] - recorded["100"])
+            + 1.0 * abs(detected["50"] - recorded["50"])
+            + 0.5 * abs(detected["300"] - recorded["300"]))
+
+
+def build_trust(detected, recorded, scale, mod_scale_value, judged,
+                map_version_mismatch, failed_play, relax=False):
+    """How far the judgement can be trusted on this play.
+
+    When the count vector disagrees with the game, the per-object analysis is
+    still informative but every pattern/miss number is approximate, and every
+    consumer (report, coach, the agent skill) must say so instead of presenting
+    it as fact.
+    """
+    deltas = {k: detected[k] - recorded[k] for k in ("300", "100", "50", "miss")}
+    abs_total = sum(abs(v) for v in deltas.values())
+    judged = max(1, judged)
+    miss_tol = max(3.0, 0.02 * judged)
+    total_tol = max(5.0, 0.05 * judged)
+    within = abs(deltas["miss"]) <= miss_tol and abs_total <= total_tol
+    notes = []
+    if not within:
+        notes.append(f"judgement differs from the game on {abs_total} of {judged} "
+                     f"objects (miss {deltas['miss']:+d})")
+    if map_version_mismatch:
+        notes.append("replay ends before the map does - only the played part is analysed")
+    if failed_play:
+        notes.append("failed play - only the played part is analysed")
+    if relax:
+        notes.append("relax/autopilot: aim data is meaningless, timing is cursor arrival")
+    return {
+        "count_deltas": deltas,
+        "abs_delta_total": abs_total,
+        "abs_delta_pct": 100.0 * abs_total / judged,
+        "judged": judged,
+        "miss_tolerance": miss_tol,
+        "total_tolerance": total_tol,
+        "within_tolerance": bool(within),
+        "calibrated_scale": scale,
+        "mod_scale": mod_scale_value,
+        "scale_overridden": bool(scale != mod_scale_value),
+        "trustworthy": bool(within and not map_version_mismatch and not failed_play),
+        "notes": notes,
+    }
+
+
+MAX_CURSOR_SPEED = 50.0     # px/ms; above this it is an export artefact, not a flick
+
+
+def aim_velocity(pairs, min_n=8):
+    """Aim error (circle radii) conditioned on how fast the cursor was moving.
+
+    The static thresholds ("0.30-0.45r is good") ignore that a 9r flick and a 1r
+    nudge are not the same task. Fitting error against cursor speed gives a
+    slope: shallow means precision holds as speed rises (a strong aim ceiling),
+    steep means it collapses under movement. cursor_speed was already computed
+    per object and then thrown away before this existed.
+    """
+    pts = [(v, a) for v, a in pairs
+           if v is not None and a is not None and np.isfinite(v) and np.isfinite(a)
+           and 0.0 <= v <= MAX_CURSOR_SPEED]
+    if len(pts) < min_n:
+        return {"n": len(pts), "slope_r_per_px_ms": None, "r2": None, "bins": []}
+    v = np.array([p[0] for p in pts], dtype=float)
+    a = np.array([p[1] for p in pts], dtype=float)
+    # closed-form least squares: no LAPACK, and it cannot blow up on the huge
+    # speeds a dropped-frame export can produce
+    v_bar, a_bar = float(v.mean()), float(a.mean())
+    dv = v - v_bar
+    var = float((dv ** 2).mean())
+    if var <= 0.0:
+        return {"n": len(pts), "slope_r_per_px_ms": None, "r2": None, "bins": []}
+    slope = float((dv * (a - a_bar)).mean()) / var
+    pred = a_bar + slope * dv
+    ss_res = float(((a - pred) ** 2).sum())
+    ss_tot = float(((a - a_bar) ** 2).sum())
+    edges = np.percentile(v, [0, 25, 50, 75, 100])
+    bins = []
+    for i in range(4):
+        sel = (v >= edges[i]) & (v <= edges[i + 1])
+        in_bin = a[sel]
+        bins.append({"v_lo": round(float(edges[i]), 3),
+                     "v_hi": round(float(edges[i + 1]), 3),
+                     "n": int(sel.sum()),
+                     "mean_aim_r": (round(float(in_bin.mean()), 3)
+                                    if len(in_bin) else None)})
+    return {"n": len(pts), "slope_r_per_px_ms": float(slope),
+            "r2": (1.0 - ss_res / ss_tot) if ss_tot > 0 else None, "bins": bins}
+
+
 def analyze(replay_path, map_path, tag="run", do_charts=False,
-            outdir=None, hit_tol=1.0, console=True):
+            outdir=None, hit_tol=1.0, console=True, write_objects=True):
     """Analyze one replay against its map; returns the metrics dict.
 
     Writes ``{outdir}/{tag}_metrics.json`` and, if ``do_charts``, a PNG chart.
@@ -37,6 +138,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
 
     r = load_replay(replay_path)
     bm = load_beatmap(map_path)
+    with open(map_path, "rb") as fh:
+        beatmap_md5 = hashlib.md5(fh.read()).hexdigest()
     r.beatmap = bm  # enables .hits/.accuracy (needs OD)
 
     # hard input bounds: fail fast instead of materializing absurd sizes
@@ -50,8 +153,11 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     times = np.array([f[0] for f in frames])
     presses = find_presses(frames)
     press_times = [p[0] for p in presses]
-    radius = circle_radius(bm.cs())
-    search_od = (200 - 10 * bm.od()) + 120  # 50-window + slack
+    # windows and geometry come from the mod-adjusted difficulty: HR tightens
+    # CS/OD (and reflects the playfield in build_objects), EZ loosens them
+    od = od_for(bm, r)
+    radius = circle_radius(cs_for(bm, r))
+    search_od = (200 - 10 * od) + 120  # 50-window + slack
 
     recorded = {"300": r.count_300, "100": r.count_100,
                 "50": r.count_50, "miss": r.count_miss}
@@ -64,13 +170,13 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     candidates = [mod_scale(r), 1.0]
     best = None
     for scale in dict.fromkeys(candidates):  # dedupe, keep order
-        objs = build_objects(bm, scale)
-        w300, w100, w50 = od_windows(bm.od(), scale)
+        objs = build_objects(bm, scale, hard_rock=r.hard_rock)
+        w300, w100, w50 = od_windows(od, scale)
         search = max(250.0, search_od * scale)
-        results, detected, whiffed = assign(objs, frames, times, presses,
-                                            press_times, w300, w100, w50,
-                                            radius, search, hit_tol)
-        badness = abs(detected["miss"] - recorded["miss"])
+        results, detected, whiffed = judge(objs, frames, times, presses,
+                                           press_times, w300, w100, w50,
+                                           radius, search, hit_tol)
+        badness = count_distance(detected, recorded)
         cand = {"scale": scale, "objs": objs, "results": results,
                 "detected": detected, "whiffed": whiffed, "badness": badness,
                 "w300": w300, "w100": w100, "w50": w50}
@@ -80,8 +186,9 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
             best = cand
         else:
             del cand  # losing candidate: release immediately
-    objs, results, detected, whiffed_presses = (best["objs"], best["results"],
-                                                best["detected"], best["whiffed"])
+    objs, results, detected, whiff_info = (best["objs"], best["results"],
+                                           best["detected"], best["whiffed"])
+    whiffed_presses = whiff_info["n"]
     scale = best["scale"]
     w300, w100, w50 = best["w300"], best["w100"], best["w50"]
     del best
@@ -95,14 +202,25 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     map_version_mismatch = bool(objs) and last_obj_t > last_frame_t + 1000
     failed_play = bool(objs) and judged_total < n_map_objects - 2
 
+    trust = build_trust(detected, recorded, scale, mod_scale(r), judged_total,
+                        map_version_mismatch, failed_play,
+                        relax=bool(getattr(r, "relax", False)))
+
     # --- metrics ---
     hits = [x for x in results if x["result"] != "miss"]
     errs = np.array([x["error"] for x in hits])
     aims = np.array([x["aim"] for x in hits if x["aim"] is not None])
+    aim_speed = aim_velocity([(x["cursor_speed"], x["aim"] / radius) for x in hits
+                              if x["aim"] is not None])
     acc = float(r.accuracy) if hasattr(r, "accuracy") else None
     ur = float(np.std(errs) * 10) if len(errs) else None
 
     add_pattern_labels(results, radius)
+    # rhythm/geometry/difficulty per object: the frozen schema Tier 1 buckets
+    annotate(results, bm, radius, scale,
+             strain_mods={"easy": r.easy, "hard_rock": r.hard_rock,
+                          "double_time": scale == 2.0 / 3.0,
+                          "half_time": scale == 4.0 / 3.0})
     patterns = pattern_stats(results)
     regions = region_stats(results)
     quarters = quarter_stats(results)
@@ -114,18 +232,29 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     keys = key_usage(results)
 
     metrics = {
+        "schema_version": SCHEMA_VERSION,
         "tag": tag,
+        "beatmap_md5": beatmap_md5,
         "player": r.player_name,
         "map": f"{bm.title} [{bm.version}]",
         "mods": {"DT": r.double_time, "HT": r.half_time, "HD": r.hidden,
-                 "HR": r.hard_rock, "NF": r.no_fail, "FL": r.flashlight, "EZ": r.easy},
-        "difficulty": {"CS": bm.cs(), "AR": bm.ar(), "OD": bm.od(), "HP": bm.hp()},
+                 "HR": r.hard_rock, "NF": r.no_fail, "FL": r.flashlight,
+                 "EZ": r.easy, "RX": bool(getattr(r, "relax", False)),
+                 "AP": bool(getattr(r, "auto_pilot", False))},
+        "mod_string": mod_string(r),
+        "time_scale": scale,
+        "windows_ms": {"300": w300, "100": w100, "50": w50},
+        "difficulty": {"CS": cs_for(bm, r),
+                       "AR": bm.ar(easy=r.easy, hard_rock=r.hard_rock),
+                       "OD": od, "HP": bm.hp()},
         "counts_recorded": recorded,
         "counts_detected": detected,
+        "trust": trust,
         "map_version_mismatch": map_version_mismatch,
         "failed_play": failed_play,
         "n_objects_map": n_map_objects,
         "whiffed_presses": whiffed_presses,
+        "whiffs": whiff_info,
         "accuracy": acc,
         "max_combo": r.max_combo,
         "full_combo": r.full_combo,
@@ -136,10 +265,13 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                          "p90": float(np.percentile(errs, 90)) if len(errs) else None,
                          "abs_mean": float(np.mean(np.abs(errs))) if len(errs) else None},
         "ur": ur,
+        "ur_pct_of_300_window": (float(ur / 10.0 / w300 * 100.0)
+                                 if ur is not None else None),
         "early_pct": float(np.mean(errs < 0)) if len(errs) else None,
         "aim_px": {"mean": float(np.mean(aims)) if len(aims) else None,
                    "p90": float(np.percentile(aims, 90)) if len(aims) else None,
                    "mean_norm": float(np.mean(aims) / radius) if len(aims) else None},
+        "aim_vs_speed": aim_speed,
         "key_usage": keys,
         "spacing_radius": radius,
         "patterns": {p: {"n": d["n"], "miss_rate": d["miss"] / d["n"],
@@ -164,16 +296,28 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     with open(out_json, "w") as f:
         json.dump(metrics, f, indent=2, default=float)
 
+    out_objects = None
+    if write_objects:
+        out_objects = os.path.join(outdir, f"{tag}_objects.json")
+        with open(out_objects, "w") as f:
+            json.dump({"schema_version": SCHEMA_VERSION, "tag": tag,
+                       "player": r.player_name, "map": metrics["map"],
+                       "beatmap_md5": beatmap_md5,
+                       "mod_string": metrics["mod_string"],
+                       "counts_recorded": recorded, "counts_detected": detected,
+                       "trust": trust, "objects": object_records(results, radius)},
+                      f, indent=1, allow_nan=False)
+
     if do_charts and len(errs):
         from .charts import render_charts
         render_charts(results, errs, aims, w300, w100, w50, ur, radius, tag, outdir)
 
     if console:
-        console_summary(metrics, out_json)
+        console_summary(metrics, out_json, out_objects)
     return metrics
 
 
-def console_summary(metrics, out_json=None):
+def console_summary(metrics, out_json=None, out_objects=None):
     """Human-readable summary of a metrics dict (mirrors the original CLI output)."""
     acc = metrics["accuracy"]
     ur = metrics["ur"]
@@ -188,10 +332,25 @@ def console_summary(metrics, out_json=None):
     if metrics.get("map_version_mismatch"):
         print("!! WARNING: replay ends before map's last object (failed play or version mismatch)", file=sys.stderr)
     print(f"acc={acc:.2%} max_combo={metrics['max_combo']}  |  recorded 300/100/50/miss={recorded}  detected={detected}")
+    tr = metrics.get("trust") or {}
+    if tr and not tr.get("trustworthy", True):
+        print(f"  ! distrust: judgement differs from the game on {tr['abs_delta_total']} "
+              f"of {tr['judged']} objects (miss {tr['count_deltas']['miss']:+d}) - "
+              f"per-pattern numbers are approximate")
     print(f"whiffed presses (hit nothing): {metrics['whiffed_presses']}")
+    w = metrics.get("whiffs") or {}
+    if w.get("n"):
+        print(f"  whiff causes: mash {w['mash']}  off_target {w['off_target']} "
+              f"(mean {(w['off_target_mean_r'] or 0):.1f}r)  slider_head {w['slider_head']}  "
+              f"lost {w['lost']}  after_end {w['after_end']}")
     if ur:
         h = metrics["hit_error_ms"]
         print(f"UR={ur:.1f}  mean_err={h['mean']:+.1f}ms  std={h['std']:.1f}ms  early={metrics['early_pct']:.0%}")
+        ur_pct = metrics.get("ur_pct_of_300_window")
+        if ur_pct is not None:
+            print(f"  timing std is {ur_pct:.0f}% of the 300-window "
+                  f"({metrics['windows_ms']['300']:.0f}ms at OD "
+                  f"{metrics['difficulty']['OD']:.1f})")
     aim = metrics["aim_px"]
     if aim["mean"] is not None:
         print(f"aim: mean={aim['mean']:.1f}px ({aim['mean_norm']:.2f}r) p90={aim['p90']:.1f}px")
@@ -219,3 +378,5 @@ def console_summary(metrics, out_json=None):
               f"alt={s['alt_ratio']:.0%} {s['key_pattern'][:30]}")
     if out_json:
         print(f"json: {out_json}")
+    if out_objects:
+        print(f"objects: {out_objects}")

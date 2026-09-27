@@ -8,9 +8,12 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.1.1.** The analysis core is validated against real replays —
-> `counts_detected` matches the game's `counts_recorded` on the golden test set
-> (see [Validation](#validation-and-trust)). 11 tests, CI on Python 3.11/3.12.
+> **Status: 0.2.0.** Presses are resolved the way the game resolves them (in
+> press order), hit windows and geometry follow the mods, and every run states
+> how far its own judgement can be trusted. Counts match the game exactly on the
+> golden fixtures and land within a few objects on the real replays used as a
+> gate — see [Validation](#validation-and-trust). 49 tests, CI on Python
+> 3.11/3.12.
 
 ## Table of Contents
 
@@ -79,6 +82,12 @@ Per-play metrics include:
 - **Tapping**: alternation ratio, same-key adjacencies, key balance, whiffed
   presses (taps that hit nothing — the rushing signal)
 - **Sections**: quarter-by-quarter miss/error breakdown (fatigue detection)
+- **Whiffs by cause**: every unused press explained — mash, off-target (the
+  cursor was not on the circle), beside a slider head, duplicate, or after the map
+- **Aim ceiling**: aim error (circle radii) fitted against cursor speed, with the
+  slowest-to-fastest quartile means — a static "0.30-0.45r is good" hides the slope
+- **Trust**: per-count deltas against the game's own recorded hits, the scale the
+  calibration chose, and whether the judgement can be trusted at all
 - **Flags**: `failed_play`, `map_version_mismatch`, mods
 
 ## Install
@@ -96,7 +105,7 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.1.1
+osu-critique --version   # → osu-critique 0.2.0
 ```
 
 The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
@@ -105,12 +114,12 @@ archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.1.1-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.2.0-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.1.1/osu_critique-0.1.1-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.2.0/osu_critique-0.2.0-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 
@@ -184,9 +193,11 @@ osu-critique profile <username>
 osu-critique profile <username> --scrape
 ```
 
-Output: `out/<tag>_metrics.json`, plus `out/<tag>_charts.png` with `--charts`
-(four panels: hit-error histogram, error-over-time, spatial result map, aim
-error histogram).
+Output: `out/<tag>_metrics.json`, `out/<tag>_objects.json` (one record per hit
+object — rhythm snap, spacing, flow angle, strains; the schema is in
+[docs/object_schema.md](docs/object_schema.md), skip it with `--no-objects`),
+plus `out/<tag>_charts.png` with `--charts` (four panels: hit-error histogram,
+error-over-time, spatial result map, aim error histogram).
 
 ### Quick example
 
@@ -244,34 +255,53 @@ it always wins over detection.
 2. **Frames** — replay actions sorted by time (some export tools emit
    out-of-order trailing frames; sorting is required for correct press
    detection and cursor interpolation).
-3. **Assignment** — each object gets its nearest unused keypress, but only if
-   the cursor is within the circle's radius at press time (mirrors osu!'s own
-   aim requirement). Judgements use the map's OD windows.
+3. **Judgement** — objects are walked in time order and each takes the first
+   press inside its window whose cursor is on the circle, exactly as the game
+   does: presses are consumed in order and never reused. The hit windows and the
+   circle radius behind that gate come from the **mod-adjusted** difficulty
+   (Hard Rock raises OD/AR/CS and reflects the playfield vertically, Easy halves
+   them).
 4. **Calibration** — the time scale is auto-selected (mod-based first, then
-   unscaled) to best match the replay's recorded miss count. Some lazer
-   exports and mod flags are misleading; this step disambiguates.
-5. **Metrics** — hit/aim error, UR, pattern buckets, regions, quarters, stream
-   segments, whiffs, tapping style, plus `failed_play` / `map_version_mismatch`
-   flags.
+   unscaled) by the whole recorded count vector, not by the miss count alone.
+   Some lazer exports and mod flags are misleading; this step disambiguates.
+5. **Metrics** — hit/aim error, UR (also as a share of the 300-window), aim error
+   against cursor speed, pattern buckets, regions, quarters, stream segments,
+   whiffs by cause, tapping style, plus `failed_play` / `map_version_mismatch`
+   flags and a `trust` block.
+6. **Records** — every object is written out with its rhythm snap, spacing, flow
+   angle and strains (`out/<tag>_objects.json`): the schema later analyses read.
 6. **Tiers** — `report` renders a deterministic critique from the JSON;
    `coach` upgrades it with one LLM API call (system prompt encodes the same
    critique framework; optional baseline + profile give it context).
 
 ## Validation and trust
 
-The pipeline is validated against a golden set: on every fixture, `counts_detected`
-matches the game's `counts_recorded` (exact on the perfect-FC and synthetic
-fixtures; within a few objects on real messy plays, where slider-tick judgement
-is the known gap). When the two disagree by more than a small delta, the play is
-either a **failed play** or a **map-version mismatch** — both are flagged in the
-JSON rather than silently trusted.
+On every committed fixture, `counts_detected` matches the game's
+`counts_recorded` exactly (perfect-FC and synthetic fixtures included). On four
+real replays used as a gate the judged counts land within a few objects, with
+miss counts of 66 vs 62, 66 vs 55, 20 vs 21 and 5 vs 5 — the press-order judge
+replaced a nearest-press rule that reported 117 misses on the first of those.
+
+Every run also states its own trust: `trust.count_deltas` is the per-count
+difference, `trust.within_tolerance` applies the thresholds (miss within
+max(3, 2% of judged objects); the whole vector within max(5, 5%)), and
+`trust.notes` records why a play is not trustworthy (a failed play, a
+`map_version_mismatch`, relax). The console summary and the deterministic report
+surface it before anything else is concluded.
 
 ## Edge cases and limitations
 
 - **Relax replays**: the game auto-hits from cursor position, so aim data is
   meaningless and timing reflects cursor arrival, not taps.
-- **Slider ticks**: judgement counts include slider ticks that head-based
-  assignment cannot see; slider-heavy maps' accuracy is slightly optimistic.
+- **Sliders are judged by their head**: the game also judges slider ticks and
+  the follow path (the .osr counts themselves exclude ticks — the four counts sum
+  to the map's object count). Presses consumed by a slider body rather than its
+  head appear as `whiffs.slider_head`; treat slider-heavy miss counts as
+  approximate.
+- **Mods**: Hard Rock (OD/AR ×1.4, CS ×1.3, playfield reflected vertically) and
+  Easy are applied to windows and geometry; DT/HT go through the time scale.
+  HD/FL/NF change nothing measurable here. Relax/AutoPilot plays are flagged,
+  because their aim data is meaningless.
 - **Lazer export time convention**: some exports store frames in map-time, not
   real-time; calibration handles it automatically.
 - **`map_version_mismatch`**: replay ends well before the map's last object —
