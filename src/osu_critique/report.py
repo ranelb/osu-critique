@@ -1,7 +1,7 @@
 """High-level analysis: replay + map -> metrics dict (JSON-serialisable).
 
 ``analyze()`` is the package's core API. It ports the validated pipeline:
-frame building (time-sorted), press detection, greedy aim-validated assignment,
+frame building (time-sorted), press detection, press-order (osu!-style) assignment,
 OD-window classification, time-scale auto-calibration (some lazer exports and
 mod flags are misleading), pattern/region/quarter/stream/tapping stats, and
 version/failed-play sanity flags.
@@ -19,7 +19,7 @@ import slider as _slider  # noqa: F401  (re-exported for convenience; used by ci
 from .io.beatmap import (build_objects, circle_radius, load_beatmap,
                          mod_scale, od_windows)
 from .io.replay import build_frames, find_presses, load_replay
-from .metrics.assignment import assign
+from .metrics.assignment import judge
 from .metrics.patterns import add_pattern_labels, pattern_stats
 from .metrics.sections import quarter_stats, region_stats
 from .metrics.streams import stream_stats
@@ -67,9 +67,9 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         objs = build_objects(bm, scale)
         w300, w100, w50 = od_windows(bm.od(), scale)
         search = max(250.0, search_od * scale)
-        results, detected, whiffed = assign(objs, frames, times, presses,
-                                            press_times, w300, w100, w50,
-                                            radius, search, hit_tol)
+        results, detected, whiffed = judge(objs, frames, times, presses,
+                                           press_times, w300, w100, w50,
+                                           radius, search, hit_tol)
         badness = abs(detected["miss"] - recorded["miss"])
         cand = {"scale": scale, "objs": objs, "results": results,
                 "detected": detected, "whiffed": whiffed, "badness": badness,
@@ -80,8 +80,9 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
             best = cand
         else:
             del cand  # losing candidate: release immediately
-    objs, results, detected, whiffed_presses = (best["objs"], best["results"],
-                                                best["detected"], best["whiffed"])
+    objs, results, detected, whiff_info = (best["objs"], best["results"],
+                                           best["detected"], best["whiffed"])
+    whiffed_presses = whiff_info["n"]
     scale = best["scale"]
     w300, w100, w50 = best["w300"], best["w100"], best["w50"]
     del best
@@ -126,6 +127,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         "failed_play": failed_play,
         "n_objects_map": n_map_objects,
         "whiffed_presses": whiffed_presses,
+        "whiffs": whiff_info,
         "accuracy": acc,
         "max_combo": r.max_combo,
         "full_combo": r.full_combo,
