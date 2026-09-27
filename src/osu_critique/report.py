@@ -27,6 +27,61 @@ from .metrics.tapping import key_usage, tapping_stats
 from .config import outdir as _default_outdir
 
 
+def count_distance(detected, recorded):
+    """Weighted L1 over the whole count vector (300/100/50/miss).
+
+    Calibration used to score a candidate time scale on |miss delta| alone, which
+    a wrong scale can match by luck while mis-splitting the 300s and 100s: the
+    four counts always sum to the judged total, so every 300 that should have
+    been a 100 hides a compensating error somewhere else.
+    """
+    return (2.0 * abs(detected["miss"] - recorded["miss"])
+            + 1.0 * abs(detected["100"] - recorded["100"])
+            + 1.0 * abs(detected["50"] - recorded["50"])
+            + 0.5 * abs(detected["300"] - recorded["300"]))
+
+
+def build_trust(detected, recorded, scale, mod_scale_value, judged,
+                map_version_mismatch, failed_play, relax=False):
+    """How far the judgement can be trusted on this play.
+
+    When the count vector disagrees with the game, the per-object analysis is
+    still informative but every pattern/miss number is approximate, and every
+    consumer (report, coach, the agent skill) must say so instead of presenting
+    it as fact.
+    """
+    deltas = {k: detected[k] - recorded[k] for k in ("300", "100", "50", "miss")}
+    abs_total = sum(abs(v) for v in deltas.values())
+    judged = max(1, judged)
+    miss_tol = max(3.0, 0.02 * judged)
+    total_tol = max(5.0, 0.05 * judged)
+    within = abs(deltas["miss"]) <= miss_tol and abs_total <= total_tol
+    notes = []
+    if not within:
+        notes.append(f"judgement differs from the game on {abs_total} of {judged} "
+                     f"objects (miss {deltas['miss']:+d})")
+    if map_version_mismatch:
+        notes.append("replay ends before the map does - only the played part is analysed")
+    if failed_play:
+        notes.append("failed play - only the played part is analysed")
+    if relax:
+        notes.append("relax/autopilot: aim data is meaningless, timing is cursor arrival")
+    return {
+        "count_deltas": deltas,
+        "abs_delta_total": abs_total,
+        "abs_delta_pct": 100.0 * abs_total / judged,
+        "judged": judged,
+        "miss_tolerance": miss_tol,
+        "total_tolerance": total_tol,
+        "within_tolerance": bool(within),
+        "calibrated_scale": scale,
+        "mod_scale": mod_scale_value,
+        "scale_overridden": bool(scale != mod_scale_value),
+        "trustworthy": bool(within and not map_version_mismatch and not failed_play),
+        "notes": notes,
+    }
+
+
 def analyze(replay_path, map_path, tag="run", do_charts=False,
             outdir=None, hit_tol=1.0, console=True):
     """Analyze one replay against its map; returns the metrics dict.
@@ -73,7 +128,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         results, detected, whiffed = judge(objs, frames, times, presses,
                                            press_times, w300, w100, w50,
                                            radius, search, hit_tol)
-        badness = abs(detected["miss"] - recorded["miss"])
+        badness = count_distance(detected, recorded)
         cand = {"scale": scale, "objs": objs, "results": results,
                 "detected": detected, "whiffed": whiffed, "badness": badness,
                 "w300": w300, "w100": w100, "w50": w50}
@@ -98,6 +153,10 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     last_obj_t = float(objs[-1]["t"]) if objs else 0.0
     map_version_mismatch = bool(objs) and last_obj_t > last_frame_t + 1000
     failed_play = bool(objs) and judged_total < n_map_objects - 2
+
+    trust = build_trust(detected, recorded, scale, mod_scale(r), judged_total,
+                        map_version_mismatch, failed_play,
+                        relax=bool(getattr(r, "relax", False)))
 
     # --- metrics ---
     hits = [x for x in results if x["result"] != "miss"]
@@ -131,6 +190,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                        "OD": od, "HP": bm.hp()},
         "counts_recorded": recorded,
         "counts_detected": detected,
+        "trust": trust,
         "map_version_mismatch": map_version_mismatch,
         "failed_play": failed_play,
         "n_objects_map": n_map_objects,
@@ -198,6 +258,11 @@ def console_summary(metrics, out_json=None):
     if metrics.get("map_version_mismatch"):
         print("!! WARNING: replay ends before map's last object (failed play or version mismatch)", file=sys.stderr)
     print(f"acc={acc:.2%} max_combo={metrics['max_combo']}  |  recorded 300/100/50/miss={recorded}  detected={detected}")
+    tr = metrics.get("trust") or {}
+    if tr and not tr.get("trustworthy", True):
+        print(f"  ! distrust: judgement differs from the game on {tr['abs_delta_total']} "
+              f"of {tr['judged']} objects (miss {tr['count_deltas']['miss']:+d}) - "
+              f"per-pattern numbers are approximate")
     print(f"whiffed presses (hit nothing): {metrics['whiffed_presses']}")
     if ur:
         h = metrics["hit_error_ms"]

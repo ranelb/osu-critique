@@ -317,6 +317,11 @@ def render_report(metrics, baseline=None):
              f"{metrics['counts_recorded']['100']}x100 / "
              f"{metrics['counts_recorded']['50']}x50 / "
              f"{metrics['counts_recorded']['miss']}x miss | max combo {metrics['max_combo']}"]
+    tr = metrics.get("trust") or {}
+    if tr and not tr.get("trustworthy", True):
+        lines.append(f"- TRUST: judgement differs from the game on {tr['abs_delta_total']} "
+                     f"of {tr['judged']} objects (miss {tr['count_deltas']['miss']:+d}, "
+                     f"{tr['abs_delta_pct']:.1f}%) - treat per-pattern numbers as approximate.")
     if metrics.get("failed_play"):
         lines.append("- NOTE: this was a failed play (ended before the map finished).")
     if metrics.get("map_version_mismatch"):
