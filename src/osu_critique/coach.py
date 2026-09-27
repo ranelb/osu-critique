@@ -256,12 +256,6 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
     ``model`` overrides the configured model (setup wizard / OSU_LLM_MODEL).
     ``prompt_file`` overrides the built-in critique-framework prompt."""
     from .config import llm_base_url, llm_key, llm_model
-    key = llm_key()
-    if not key:
-        raise RuntimeError(
-            "no LLM key configured. Run `osu-critique setup` (interactive wizard) "
-            "or set OSU_LLM_KEY. For a key-free deterministic critique, run "
-            "`osu-critique report <metrics.json>` instead.")
     baseline = None
     if baseline_path:
         with open(baseline_path) as f:
@@ -289,6 +283,14 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
             raise RuntimeError(f"{metrics_path!r} is not valid metrics JSON — "
                                "run `osu-critique analyze` to generate it") from None
         user = build_user_message(metrics, baseline, profile)
+    # the key is only needed for the API call: report a bad metrics path first,
+    # so a missing file is never masked by "no LLM key configured"
+    key = llm_key()
+    if not key:
+        raise RuntimeError(
+            "no LLM key configured. Run `osu-critique setup` (interactive wizard) "
+            "or set OSU_LLM_KEY. For a key-free deterministic critique, run "
+            "`osu-critique report <metrics.json>` instead.")
     try:
         return _call_chat(system, user, key, base, mdl)
     except urllib.error.HTTPError as e:
