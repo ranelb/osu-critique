@@ -11,7 +11,8 @@ Fields added to each result row (see ``docs/object_schema.md`` for the units):
     pattern        spacing-only bucket (dense/stream/jump/bigjump) -- legacy
     snap           gap to the previous object in quarter-beats (1.0 = 1/4,
                    2.0 = 1/2, 4.0 = 1/1); None without an uninherited point
-    bpm            BPM at this object
+    bpm            BPM at this object, as written in the .osu
+    bpm_eff        BPM as played (``bpm`` scaled by DT/HT)
     angle_deg      turn between the previous two movement vectors: 0 = straight
                    (flow), 180 = a full reversal (anti-flow)
     strain_aim     osu!'s aim strain for this object (mod-aware)
@@ -27,7 +28,7 @@ SCHEMA_VERSION = 1
 # the record fields written to out/<tag>_objects.json, in order
 OBJECT_FIELDS = ("i", "t", "kind", "end_t", "x", "y", "result", "error_ms",
                  "aim_px", "aim_r", "key", "cursor_speed", "spacing_r",
-                 "pattern", "snap", "bpm", "angle_deg", "strain_aim",
+                 "pattern", "snap", "bpm", "bpm_eff", "angle_deg", "strain_aim",
                  "strain_speed")
 
 
@@ -71,13 +72,19 @@ def _strains(bm, mods):
     return strains
 
 
-def annotate(results, bm, radius, scale, strain_mods=None):
-    """Add the structure fields to every result row (in place)."""
+def annotate(results, bm, radius, scale, strain_mods=None, bpm_scale=None):
+    """Add the structure fields to every result row (in place).
+
+    ``scale`` is the calibrated time scale of the rows; ``bpm_scale`` is the
+    scale implied by the replay's mods, which is what the *player* felt -- they
+    differ when the calibration overrides a misleading mod flag.
+    """
     times, beats = beat_grid(bm)
     strains = _strains(bm, strain_mods or {})
     for i, x in enumerate(results):
         x["snap"] = None
         x["bpm"] = None
+        x["bpm_eff"] = None
         x["angle_deg"] = None
         x["strain_aim"] = None
         x["strain_speed"] = None
@@ -85,7 +92,8 @@ def annotate(results, bm, radius, scale, strain_mods=None):
             dt = x["t"] - results[i - 1]["t"]
             beat_ms = _beat_ms_at(times, beats, x["t"] / scale)
             if beat_ms and dt > 0:
-                x["bpm"] = 60000.0 / beat_ms
+                x["bpm"] = 60000.0 / beat_ms              # as written in the .osu
+                x["bpm_eff"] = 60000.0 / (beat_ms * (bpm_scale or scale))  # as played
                 x["snap"] = dt / (beat_ms * scale / 4.0)
         if i > 1:
             x["angle_deg"] = _angle(results[i - 2], results[i - 1], x)
@@ -121,6 +129,7 @@ def object_records(results, radius):
             "pattern": x.get("pattern"),
             "snap": _r(x.get("snap")),
             "bpm": _r(x.get("bpm"), 2),
+            "bpm_eff": _r(x.get("bpm_eff"), 2),
             "angle_deg": _r(x.get("angle_deg"), 1),
             "strain_aim": _r(x.get("strain_aim"), 2),
             "strain_speed": _r(x.get("strain_speed"), 2),

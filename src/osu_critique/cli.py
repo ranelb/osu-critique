@@ -328,6 +328,47 @@ def render_report(metrics, baseline=None):
         lines.append("- NOTE: this was a failed play (ended before the map finished).")
     if metrics.get("map_version_mismatch"):
         lines.append("- NOTE: replay/map timing mismatch detected; analysis unreliable past the replay end.")
+    prof = metrics.get("profile") or {}
+    if prof:
+        lines += ["", "## Map profile"]
+        rate = prof.get("rate") or {}
+        bpm, gap = rate.get("effective_bpm") or {}, rate.get("note_gap_ms") or {}
+        win = rate.get("gap_vs_300_window") or {}
+        if bpm.get("median"):
+            lines.append(f"- rate: {bpm['median']:.0f} bpm effective ({bpm['min']:.0f}-{bpm['max']:.0f}), "
+                         f"note gaps p10 {gap['p10']:.0f} / median {gap['median']:.0f} / p90 {gap['p90']:.0f} ms"
+                         + (f" - the tightest notes sit {win['p10_ratio']:.1f}x the 300-window"
+                            if win.get("p10_ratio") else ""))
+        comp = [f for f in prof.get("composition", []) if f["reported"]]
+        for f in sorted(comp, key=lambda f: -f["n"])[:8]:
+            lines.append(f"- {f['family']}: {f['share'] * 100:.1f}% of objects (n={f['n']}), "
+                         f"non-300 {f['non300_rate'] * 100:.1f}%"
+                         + (f", mean {f['mean_err_ms']:+.1f} ms" if f["mean_err_ms"] is not None else "")
+                         + (f", aim {f['mean_aim_r']:.2f}r" if f.get("mean_aim_r") is not None else ""))
+        stam = prof.get("stamina") or {}
+        if stam.get("peak_notes_per_second"):
+            run = stam.get("longest_sustained") or {}
+            lines.append(f"- stamina: peak {stam['peak_notes_per_second']:.1f} n/s, "
+                         f"{stam['seconds_above_6nps']:.0f}s above 6 n/s"
+                         + (f", longest run {run['notes']} notes (~{run['seconds']:.0f}s)" if run else "")
+                         + (f", {len(stam['breaks'])} break(s)" if stam.get("breaks") else ""))
+        ch = prof.get("chains") or {}
+        if ch.get("n_chains"):
+            pos = ", ".join(f"{p['notes']} notes {p['non300_rate'] * 100:.0f}%" for p in ch["by_position"])
+            lines.append(f"- chains: {ch['n_chains']} runs ({ch['notes']} notes) with a steady gap; "
+                         f"non-300 by position - {pos}")
+        for tf in (prof.get("timing_by_family") or [])[:4]:
+            lines.append(f"- timing `{tf['family']}`: {tf['bias_ms']:+.1f} ms "
+                         f"(p10 {tf['p10']:+.0f} / p90 {tf['p90']:+.0f}, n={tf['n']})")
+        if prof.get("sliders", {}).get("n"):
+            sl = prof["sliders"]
+            lines.append(f"- sliders: {sl['n']} ({sl['long_path_share'] * 100:.0f}% with a real path >=100px), "
+                         f"cursor speed needed p10 {sl['cursor_speed_px_ms']['p10']:.2f} / "
+                         f"median {sl['cursor_speed_px_ms']['median']:.2f} / p90 {sl['cursor_speed_px_ms']['p90']:.2f} px/ms")
+        if prof.get("context"):
+            lines.append("- context: " + " | ".join(
+                f"{c_['after']} {c_['non300_rate'] * 100:.1f}% (n={c_['n']})" for c_ in prof["context"]))
+
     lines += ["", "## Timing",
               f"- mean hit error {h['mean']:+.1f}ms ({metrics['early_pct'] * 100:.0f}% early), "
               f"std {h['std']:.1f}ms",
@@ -352,11 +393,15 @@ def render_report(metrics, baseline=None):
                          f"({d['miss_rate'] * 100:.1f}%) "
                          f"err={d['mean_err'] and round(d['mean_err'], 1)}ms "
                          f"std={d['std_err'] and round(d['std_err'], 1)}ms")
-        worst = max((kv for kv in pat.items() if kv[0] != "first" and kv[1]["miss"] > 0),
-                    key=lambda kv: kv[1]["miss"], default=None)
-        if worst:
-            lines += ["", f"**Primary target: `{worst[0]}`** "
-                          f"({worst[1]['miss']} misses, {worst[1]['miss_rate'] * 100:.1f}% rate)."]
+        # the target is chosen by hit rate among populated families, never by
+        # absolute miss count (which just names the most numerous bucket)
+        from .metrics.profile import primary_target
+        best = primary_target(prof, metrics.get("n_objects", 0)) if prof else None
+        if best:
+            lines += ["", f"**Primary target: `{best['family']}`** — "
+                          f"{best['non300']} of {best['n']} objects off 300 "
+                          f"({best['non300_rate'] * 100:.1f}%, "
+                          f"{best['share'] * 100:.0f}% of the map)."]
         else:
             lines += ["", "**No pattern stands out as a weakness — clean run.**"]
 

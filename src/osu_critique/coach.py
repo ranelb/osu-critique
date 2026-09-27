@@ -49,6 +49,15 @@ Critique framework - use the numbers, don't invent others:
   require at least ~20 objects in a bucket before calling it a weakness. Strain
   deciles ("what happens on the hardest 10% of objects") are the
   difficulty-normalised form.
+- Map profile (metrics["profile"]) describes what the map asked for, not how you
+  played: rate (effective BPM, real note gaps in ms, and the tightest gap as a
+  multiple of the 300-window), composition (families named kind + divisor +
+  spacing with n-gated hit rates), stamina (notes/s, seconds above 6 n/s,
+  longest run, breaks), chains (runs with a steady gap, with the hit rate by
+  position 1-4 / 5-8 / 9-12 / 13+), timing_by_family (signed bias per family)
+  and context (what preceded each object). Quote the real ms gap next to any
+  rhythm claim: "1/4 snap" means nothing without it, and "1/8" in one map's
+  map-time is another map's 1/2.
 - Streams: per-segment std (ms) and alternation ratio. std > 30ms or alternation
   < 90% = rhythm collapse under sustained tapping; long segments failing while
   short ones hold = a sustain problem.

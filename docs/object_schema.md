@@ -46,7 +46,8 @@ all query these rows rather than re-deriving them. Skip it with `--no-objects`.
 | `spacing_r` | circle radii | distance to the previous object's centre |
 | `pattern` | — | legacy spacing-only bucket: `dense` / `stream` / `jump` / `bigjump` |
 | `snap` | quarter-beats | gap to the previous object in 1/4-beat units: `1.0` = 1/4 note, `2.0` = 1/2, `4.0` = 1/1; null without an uninherited timing point |
-| `bpm` | BPM | the map's BPM at this object |
+| `bpm` | BPM | the map's BPM at this object, as written in the .osu |
+| `bpm_eff` | BPM | BPM as played (`bpm` scaled by DT/HT) — the rate the hands feel |
 | `angle_deg` | degrees | turn between the incoming and outgoing movement vectors: `0` = straight (flow), `180` = full reversal (anti-flow); null for the first two objects |
 | `strain_aim` | osu! strain | osu!'s own aim strain for this object, mod-aware; null if unavailable |
 | `strain_speed` | osu! strain | osu!'s own speed strain for this object, mod-aware; null if unavailable |

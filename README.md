@@ -86,6 +86,11 @@ Per-play metrics include:
   cursor was not on the circle), beside a slider head, duplicate, or after the map
 - **Aim ceiling**: aim error (circle radii) fitted against cursor speed, with the
   slowest-to-fastest quartile means — a static "0.30-0.45r is good" hides the slope
+- **Map profile**: the map's own character — effective BPM and real note gaps,
+  pattern families (`kind_divisor_spacing`) with n-gated hit rates, slider
+  character (path length and the cursor speed demanded), stamina (notes/s,
+  longest sustained run, breaks), chains with hit rate by position, and
+  signed bias per family ([docs/profile.md](docs/profile.md))
 - **Trust**: per-count deltas against the game's own recorded hits, the scale the
   calibration chose, and whether the judgement can be trusted at all
 - **Flags**: `failed_play`, `map_version_mismatch`, mods

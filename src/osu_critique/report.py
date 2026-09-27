@@ -22,6 +22,7 @@ from .io.beatmap import (build_objects, circle_radius, cs_for, load_beatmap,
 from .io.replay import build_frames, find_presses, load_replay
 from .metrics.assignment import judge
 from .metrics.patterns import add_pattern_labels, pattern_stats
+from .metrics.profile import build_profile, primary_target
 from .metrics.structure import SCHEMA_VERSION, annotate, object_records
 from .metrics.sections import quarter_stats, region_stats
 from .metrics.streams import stream_stats
@@ -220,8 +221,15 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     annotate(results, bm, radius, scale,
              strain_mods={"easy": r.easy, "hard_rock": r.hard_rock,
                           "double_time": scale == 2.0 / 3.0,
-                          "half_time": scale == 4.0 / 3.0})
+                          "half_time": scale == 4.0 / 3.0},
+             bpm_scale=mod_scale(r))
     patterns = pattern_stats(results)
+    # rows are in calibrated time; the player's time base is the mod scale, so
+    # when calibration overrides a mod flag every ms in the profile is converted
+    profile = build_profile(results, bm, scale,
+                            windows={"300": w300, "100": w100, "50": w50},
+                            radius=radius,
+                            time_factor=mod_scale(r) / scale if scale else 1.0)
     regions = region_stats(results)
     quarters = quarter_stats(results)
 
@@ -250,6 +258,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         "counts_recorded": recorded,
         "counts_detected": detected,
         "trust": trust,
+        "profile": profile,
         "map_version_mismatch": map_version_mismatch,
         "failed_play": failed_play,
         "n_objects_map": n_map_objects,
@@ -376,6 +385,35 @@ def console_summary(metrics, out_json=None, out_objects=None):
               f"err={s['mean_err'] and round(s['mean_err'], 1)}ms "
               f"std={s['std_err'] and round(s['std_err'], 1)}ms "
               f"alt={s['alt_ratio']:.0%} {s['key_pattern'][:30]}")
+    prof = metrics.get("profile") or {}
+    rate = prof.get("rate") or {}
+    if rate.get("note_gap_ms", {}).get("p10"):
+        bpm, gap = rate["effective_bpm"], rate["note_gap_ms"]
+        win = rate.get("gap_vs_300_window") or {}
+        print(f"profile: {bpm['median']:.0f} bpm effective ({bpm['min']:.0f}-{bpm['max']:.0f}) | real note gap "
+              f"p10 {gap['p10']:.0f} / median {gap['median']:.0f} / p90 {gap['p90']:.0f} ms"
+              + (f" | tightest gaps {win['p10_ratio']:.1f}x the 300-window" if win.get("p10_ratio") else ""))
+    comp = [f for f in prof.get("composition", []) if f["reported"]]
+    if comp:
+        print("  composition (share, hit rate) - n >= 10 only:")
+        for f in sorted(comp, key=lambda f: -f["non300_rate"])[:6]:
+            print(f"     {f['family']:26s} {f['share']*100:5.1f}%  n={f['n']:4d}  non-300 {f['non300_rate']*100:5.1f}%"
+                  + (f"  err {f['mean_err_ms']:+.1f}ms" if f["mean_err_ms"] is not None else ""))
+    stam = prof.get("stamina") or {}
+    if stam.get("peak_notes_per_second"):
+        run = stam.get("longest_sustained") or {}
+        print(f"  stamina: peak {stam['peak_notes_per_second']:.1f} n/s, {stam['seconds_above_6nps']:.0f}s above 6 n/s"
+              + (f", longest run {run['notes']} notes (~{run['seconds']:.0f}s)" if run else "")
+              + (f", {len(stam['breaks'])} break(s)" if stam.get("breaks") else ""))
+    ch = prof.get("chains") or {}
+    if ch.get("n_chains"):
+        pos = " ".join(f"{p['notes']}:{p['non300_rate']*100:.0f}%" for p in ch["by_position"])
+        print(f"  chains: {ch['n_chains']} runs / {ch['notes']} notes, non-300 by position {pos}")
+    for tf in (prof.get("timing_by_family") or [])[:3]:
+        print(f"  timing {tf['family']:24s} bias {tf['bias_ms']:+6.1f}ms (n={tf['n']})")
+    if prof.get("context"):
+        print("  context: " + " | ".join(f"{c['after']} {c['non300_rate']*100:.1f}% (n={c['n']})"
+                                         for c in prof["context"]))
     if out_json:
         print(f"json: {out_json}")
     if out_objects:
