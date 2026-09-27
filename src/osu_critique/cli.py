@@ -29,7 +29,8 @@ from .report import analyze, console_summary
 
 def cmd_analyze(args):
     metrics = analyze(args.replay, args.map, tag=args.tag or "run",
-                      do_charts=args.charts, outdir=args.outdir)
+                      do_charts=args.charts, outdir=args.outdir,
+                      write_objects=not args.no_objects)
     console_summary(metrics)
     return 0
 
@@ -48,7 +49,8 @@ def cmd_batch(args):
     for source, rp, mp in pairs:
         tag = _tag_from_replay(rp)
         metrics = analyze(rp, mp, tag=tag, do_charts=args.charts,
-                          outdir=args.outdir, console=False)
+                          outdir=args.outdir, console=False,
+                          write_objects=not args.no_objects)
         console_summary(metrics)
         rows.append(metrics)
         print()
@@ -415,6 +417,8 @@ def main(argv=None):
     p.add_argument("map")
     p.add_argument("tag", nargs="?", default="run")
     p.add_argument("--charts", action="store_true", help="also render a PNG chart")
+    p.add_argument("--no-objects", action="store_true",
+                   help="skip out/<tag>_objects.json (the per-object records)")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_analyze)
 
@@ -423,6 +427,7 @@ def main(argv=None):
 
     p = sub.add_parser("batch", help="pair + analyze every exported lazer replay")
     p.add_argument("--charts", action="store_true")
+    p.add_argument("--no-objects", action="store_true")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_batch)
 

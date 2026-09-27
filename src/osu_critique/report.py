@@ -8,6 +8,7 @@ version/failed-play sanity flags.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sys
@@ -21,6 +22,7 @@ from .io.beatmap import (build_objects, circle_radius, cs_for, load_beatmap,
 from .io.replay import build_frames, find_presses, load_replay
 from .metrics.assignment import judge
 from .metrics.patterns import add_pattern_labels, pattern_stats
+from .metrics.structure import SCHEMA_VERSION, annotate, object_records
 from .metrics.sections import quarter_stats, region_stats
 from .metrics.streams import stream_stats
 from .metrics.tapping import key_usage, tapping_stats
@@ -127,7 +129,7 @@ def aim_velocity(pairs, min_n=8):
 
 
 def analyze(replay_path, map_path, tag="run", do_charts=False,
-            outdir=None, hit_tol=1.0, console=True):
+            outdir=None, hit_tol=1.0, console=True, write_objects=True):
     """Analyze one replay against its map; returns the metrics dict.
 
     Writes ``{outdir}/{tag}_metrics.json`` and, if ``do_charts``, a PNG chart.
@@ -136,6 +138,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
 
     r = load_replay(replay_path)
     bm = load_beatmap(map_path)
+    with open(map_path, "rb") as fh:
+        beatmap_md5 = hashlib.md5(fh.read()).hexdigest()
     r.beatmap = bm  # enables .hits/.accuracy (needs OD)
 
     # hard input bounds: fail fast instead of materializing absurd sizes
@@ -212,6 +216,11 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     ur = float(np.std(errs) * 10) if len(errs) else None
 
     add_pattern_labels(results, radius)
+    # rhythm/geometry/difficulty per object: the frozen schema Tier 1 buckets
+    annotate(results, bm, radius, scale,
+             strain_mods={"easy": r.easy, "hard_rock": r.hard_rock,
+                          "double_time": scale == 2.0 / 3.0,
+                          "half_time": scale == 4.0 / 3.0})
     patterns = pattern_stats(results)
     regions = region_stats(results)
     quarters = quarter_stats(results)
@@ -223,7 +232,9 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     keys = key_usage(results)
 
     metrics = {
+        "schema_version": SCHEMA_VERSION,
         "tag": tag,
+        "beatmap_md5": beatmap_md5,
         "player": r.player_name,
         "map": f"{bm.title} [{bm.version}]",
         "mods": {"DT": r.double_time, "HT": r.half_time, "HD": r.hidden,
@@ -231,6 +242,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                  "EZ": r.easy, "RX": bool(getattr(r, "relax", False)),
                  "AP": bool(getattr(r, "auto_pilot", False))},
         "mod_string": mod_string(r),
+        "time_scale": scale,
+        "windows_ms": {"300": w300, "100": w100, "50": w50},
         "difficulty": {"CS": cs_for(bm, r),
                        "AR": bm.ar(easy=r.easy, hard_rock=r.hard_rock),
                        "OD": od, "HP": bm.hp()},
@@ -283,16 +296,28 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     with open(out_json, "w") as f:
         json.dump(metrics, f, indent=2, default=float)
 
+    out_objects = None
+    if write_objects:
+        out_objects = os.path.join(outdir, f"{tag}_objects.json")
+        with open(out_objects, "w") as f:
+            json.dump({"schema_version": SCHEMA_VERSION, "tag": tag,
+                       "player": r.player_name, "map": metrics["map"],
+                       "beatmap_md5": beatmap_md5,
+                       "mod_string": metrics["mod_string"],
+                       "counts_recorded": recorded, "counts_detected": detected,
+                       "trust": trust, "objects": object_records(results, radius)},
+                      f, indent=1, allow_nan=False)
+
     if do_charts and len(errs):
         from .charts import render_charts
         render_charts(results, errs, aims, w300, w100, w50, ur, radius, tag, outdir)
 
     if console:
-        console_summary(metrics, out_json)
+        console_summary(metrics, out_json, out_objects)
     return metrics
 
 
-def console_summary(metrics, out_json=None):
+def console_summary(metrics, out_json=None, out_objects=None):
     """Human-readable summary of a metrics dict (mirrors the original CLI output)."""
     acc = metrics["accuracy"]
     ur = metrics["ur"]
@@ -323,8 +348,9 @@ def console_summary(metrics, out_json=None):
         print(f"UR={ur:.1f}  mean_err={h['mean']:+.1f}ms  std={h['std']:.1f}ms  early={metrics['early_pct']:.0%}")
         ur_pct = metrics.get("ur_pct_of_300_window")
         if ur_pct is not None:
-            print(f"  timing std is {ur_pct:.0f}% of the OD {metrics['difficulty']['OD']:.1f} "
-                  f"300-window ({w300:.0f}ms)")
+            print(f"  timing std is {ur_pct:.0f}% of the 300-window "
+                  f"({metrics['windows_ms']['300']:.0f}ms at OD "
+                  f"{metrics['difficulty']['OD']:.1f})")
     aim = metrics["aim_px"]
     if aim["mean"] is not None:
         print(f"aim: mean={aim['mean']:.1f}px ({aim['mean_norm']:.2f}r) p90={aim['p90']:.1f}px")
@@ -352,3 +378,5 @@ def console_summary(metrics, out_json=None):
               f"alt={s['alt_ratio']:.0%} {s['key_pattern'][:30]}")
     if out_json:
         print(f"json: {out_json}")
+    if out_objects:
+        print(f"objects: {out_objects}")
