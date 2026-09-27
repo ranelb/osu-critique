@@ -16,8 +16,8 @@ import numpy as np
 
 import slider as _slider  # noqa: F401  (re-exported for convenience; used by circle_radius)
 
-from .io.beatmap import (build_objects, circle_radius, load_beatmap,
-                         mod_scale, od_windows)
+from .io.beatmap import (build_objects, circle_radius, cs_for, load_beatmap,
+                         mod_scale, mod_string, od_for, od_windows)
 from .io.replay import build_frames, find_presses, load_replay
 from .metrics.assignment import judge
 from .metrics.patterns import add_pattern_labels, pattern_stats
@@ -50,8 +50,11 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     times = np.array([f[0] for f in frames])
     presses = find_presses(frames)
     press_times = [p[0] for p in presses]
-    radius = circle_radius(bm.cs())
-    search_od = (200 - 10 * bm.od()) + 120  # 50-window + slack
+    # windows and geometry come from the mod-adjusted difficulty: HR tightens
+    # CS/OD (and reflects the playfield in build_objects), EZ loosens them
+    od = od_for(bm, r)
+    radius = circle_radius(cs_for(bm, r))
+    search_od = (200 - 10 * od) + 120  # 50-window + slack
 
     recorded = {"300": r.count_300, "100": r.count_100,
                 "50": r.count_50, "miss": r.count_miss}
@@ -64,8 +67,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     candidates = [mod_scale(r), 1.0]
     best = None
     for scale in dict.fromkeys(candidates):  # dedupe, keep order
-        objs = build_objects(bm, scale)
-        w300, w100, w50 = od_windows(bm.od(), scale)
+        objs = build_objects(bm, scale, hard_rock=r.hard_rock)
+        w300, w100, w50 = od_windows(od, scale)
         search = max(250.0, search_od * scale)
         results, detected, whiffed = judge(objs, frames, times, presses,
                                            press_times, w300, w100, w50,
@@ -119,8 +122,13 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         "player": r.player_name,
         "map": f"{bm.title} [{bm.version}]",
         "mods": {"DT": r.double_time, "HT": r.half_time, "HD": r.hidden,
-                 "HR": r.hard_rock, "NF": r.no_fail, "FL": r.flashlight, "EZ": r.easy},
-        "difficulty": {"CS": bm.cs(), "AR": bm.ar(), "OD": bm.od(), "HP": bm.hp()},
+                 "HR": r.hard_rock, "NF": r.no_fail, "FL": r.flashlight,
+                 "EZ": r.easy, "RX": bool(getattr(r, "relax", False)),
+                 "AP": bool(getattr(r, "auto_pilot", False))},
+        "mod_string": mod_string(r),
+        "difficulty": {"CS": cs_for(bm, r),
+                       "AR": bm.ar(easy=r.easy, hard_rock=r.hard_rock),
+                       "OD": od, "HP": bm.hp()},
         "counts_recorded": recorded,
         "counts_detected": detected,
         "map_version_mismatch": map_version_mismatch,
