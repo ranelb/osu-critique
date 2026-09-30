@@ -91,3 +91,33 @@ def test_profile_in_metrics_and_in_the_report(tmp_path):
     text = render_report(metrics)
     assert "## Map profile" in text
     assert "bpm effective" in text
+
+
+
+def test_sliders_fall_back_to_length_when_pixel_length_is_absent():
+    """Some parsed sliders expose only length; the profile must not report 0."""
+    import datetime
+
+    class Slider:
+        length = 150.0
+        repeat = 1
+        time = datetime.timedelta(milliseconds=1000)
+        end_time = datetime.timedelta(milliseconds=1300)
+
+    class FakeMap:
+        def hit_objects(self):
+            return [Slider()]
+
+    sl = P._sliders(FakeMap(), 1.0)
+    assert sl["n"] == 1
+    assert sl["cursor_speed_px_ms"]["median"] == pytest.approx(0.5)
+    assert sl["long_path_share"] == 1.0
+
+
+def test_primary_target_gate_scales_down_on_short_maps():
+    prof = {"composition": [
+        {"family": "small", "n": 13, "share": 0.07, "non300": 4, "non300_rate": 0.31},
+        {"family": "big", "n": 161, "share": 0.93, "non300": 22, "non300_rate": 0.14},
+    ]}
+    assert P.primary_target(prof, 174)["family"] == "small"    # 31% vs 15% overall
+    assert P.primary_target(prof, 1016) is None                # 13 objects is noise there

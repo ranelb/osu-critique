@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.3.0.** Presses are resolved the way the game resolves them (in
+> **Status: 0.3.1.** Presses are resolved the way the game resolves them (in
 > press order), hit windows and geometry follow the mods, and every run states
 > how far its own judgement can be trusted. Counts match the game exactly on the
 > golden fixtures and land within a few objects on the real replays used as a
@@ -111,7 +111,7 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.3.0
+osu-critique --version   # → osu-critique 0.3.1
 ```
 
 The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
@@ -120,12 +120,12 @@ archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.3.0-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.3.1-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.3.0/osu_critique-0.3.0-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.3.0/osu_critique-0.3.1-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 

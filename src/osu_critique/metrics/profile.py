@@ -166,7 +166,9 @@ def _sliders(bm, scale):
     for o in bm.hit_objects():
         if type(o).__name__ != "Slider":
             continue
-        length = float(getattr(o, "pixel_length", 0) or 0)
+        # pixel_length is absent on some parsed sliders; length is always there
+        length = float(getattr(o, "pixel_length", None)
+                       or getattr(o, "length", None) or 0)
         repeats = max(1, int(getattr(o, "repeat", 1) or 1))
         dur = max(1e-6, (o.end_time - o.time).total_seconds() * 1000.0 * scale)
         rows.append((length, repeats, dur, length / (dur / repeats)))
@@ -358,8 +360,9 @@ def primary_target(profile, total_objects, min_n=20, min_factor=1.5):
     target when it is populated (``min_n``) and clearly worse than the play as a
     whole (``min_factor``).
     """
-    fams = [f for f in profile.get("composition", [])
-            if f["n"] >= max(min_n, 0.03 * total_objects)]
+    # a 60-second map cannot field 20-object families: scale the gate down
+    gate = min(min_n, max(8.0, 0.03 * total_objects))
+    fams = [f for f in profile.get("composition", []) if f["n"] >= gate]
     if not fams:
         return None
     total = sum(f["n"] for f in fams)
