@@ -19,12 +19,13 @@ import slider as _slider  # noqa: F401  (re-exported for convenience; used by ci
 
 from .io.beatmap import (build_objects, circle_radius, cs_for, load_beatmap,
                          mod_scale, mod_string, od_for, od_windows)
-from .io.replay import build_frames, find_presses, load_replay
+from .io.replay import build_frames, cursor_at, find_presses, load_replay
 from .metrics.assignment import judge
 from .metrics.aim import build_aim
 from .metrics.autopsy import build as build_autopsy
 from .metrics.patterns import add_pattern_labels, pattern_stats
 from .metrics.profile import build_profile, primary_target
+from .metrics.sliders import annotate as annotate_sliders
 from .metrics.structure import SCHEMA_VERSION, annotate, object_records
 from .metrics.sections import quarter_stats, region_stats
 from .metrics.streams import stream_stats
@@ -240,8 +241,9 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     regions = region_stats(results)
     quarters = quarter_stats(results)
 
-    sliders = [x for x in results if x["kind"] == "Slider"]
-    slider_miss = sum(1 for x in sliders if x["result"] == "miss")
+    slider_block = annotate_sliders(results, list(bm.hit_objects()), frames,
+                                    times, radius, scale,
+                                    cursor_at=lambda t: cursor_at(frames, times, t))
     segs = stream_stats(results)
     tap = tapping_stats(results)
     keys = key_usage(results)
@@ -311,7 +313,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                         "mean_aim": float(np.mean(d["aims"])) if d["aims"] else None}
                     for q, d in regions.items()},
         "quarters": quarters,
-        "sliders": {"n": len(sliders), "miss": slider_miss},
+        "sliders": slider_block,
         "spinners": {"n": sum(1 for x in results if x["kind"] == "Spinner")},
         "streams": {"n_segments": len(segs), "segments": segs},
         "tapping": tap,

@@ -48,6 +48,11 @@ Critique framework - use the numbers, don't invent others:
   Only the off_target share is the cursor not arriving in time; mash is a press
   with nothing in the window; slider_head is a limit of the head-only slider
   model. Do not call whiffs "rushing" without checking which cause dominates.
+- Slider bodies (metrics.sliders): n / miss / cut and cut_pct (how often the
+  cursor left the follow circle), tick_missed_pct, tail_off (dropped end),
+  off_pct_median. Turn them into coaching ("you cut 25% of the sliders"), but do
+  not treat them as judgements: measured on these replays the game still counts a
+  cut slider as a 300, so cuts cost combo and flow, not accuracy points.
 - Patterns: the spacing buckets (dense/stream/jump/bigjump) are coarse - one
   bucket mixes a 1/2 jump with a 1/6 one. Prefer the shape classes
   (metrics.autopsy.shapes) and the per-family composition: they are built from

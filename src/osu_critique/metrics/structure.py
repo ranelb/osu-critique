@@ -29,7 +29,8 @@ SCHEMA_VERSION = 1
 OBJECT_FIELDS = ("i", "t", "kind", "end_t", "x", "y", "result", "error_ms",
                  "aim_px", "aim_r", "key", "cursor_speed", "spacing_r",
                  "pattern", "snap", "bpm", "bpm_eff", "angle_deg", "strain_aim",
-                 "strain_speed")
+                 "strain_speed", "slider_tail_off", "slider_missed_ticks",
+                 "slider_off_pct")
 
 
 def beat_grid(bm):
@@ -133,5 +134,8 @@ def object_records(results, radius):
             "angle_deg": _r(x.get("angle_deg"), 1),
             "strain_aim": _r(x.get("strain_aim"), 2),
             "strain_speed": _r(x.get("strain_speed"), 2),
+            "slider_tail_off": x.get("slider_tail_off"),
+            "slider_missed_ticks": x.get("slider_missed_ticks"),
+            "slider_off_pct": _r(x.get("slider_off_pct"), 1),
         })
     return records

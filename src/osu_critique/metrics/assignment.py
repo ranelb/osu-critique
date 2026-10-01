@@ -26,15 +26,29 @@ SLIDER_HEAD = "slider_head"    # on-target press beside a slider head (head-only
 LOST = "lost"                  # object in window, cursor on it, press left over
 AFTER_END = "after_end"        # press after the last object's window
 
+EDGE_GUARD_MS = 1.0            # see classify(): the stored frame clock is floored
 
-def classify(error, w300, w100, w50):
-    """OD-window judgement for a hit error in real ms."""
+
+def classify(error, w300, w100, w50, guard=EDGE_GUARD_MS):
+    """OD-window judgement for a hit error in real ms.
+
+    ``guard`` shrinks every window by that much, because a replay's frame clock
+    is **floored to the millisecond**: the stored press time can be up to 1 ms
+    earlier than the time the game actually judged, so an error we measure at the
+    window edge belongs to a press the game saw outside it.
+
+    The value is empirical and measured on the author's 55 stored replays: it is
+    the difference between 1 and 14 plays whose counts the tool reproduces
+    *exactly*, and it halves the total drift (weighted L1 1943 -> 1470). The same
+    evidence rejects a 0.5 ms guard (8 exact) and no guard at all (1 exact). See
+    README "Validation and trust".
+    """
     ae = abs(error)
-    if ae <= w300:
+    if ae + guard <= w300:
         return "300"
-    if ae <= w100:
+    if ae + guard <= w100:
         return "100"
-    if ae <= w50:
+    if ae + guard <= w50:
         return "50"
     return "miss"
 
@@ -58,7 +72,7 @@ def _row(o, result, error=None, aim=None, key=None, speed=None, press_t=None):
 
 
 def judge(objs, frames, times, presses, press_times, w300, w100, w50,
-          radius, search, hit_tol=1.0):
+          radius, search, hit_tol=1.0, guard=EDGE_GUARD_MS):
     """Resolve presses against objects in the game's order (osu! semantics).
 
     Objects are walked in time order; each takes the **first** press inside its
@@ -98,17 +112,18 @@ def judge(objs, frames, times, presses, press_times, w300, w100, w50,
         error = pt - o["t"]
         aim = (None if o["kind"] == "Spinner"
                else math.hypot(*_delta(cursor_at(frames, times, pt), o)))
-        results.append(_row(o, classify(error, w300, w100, w50), error, aim,
-                            key, cursor_speed_at(frames, times, pt), pt))
+        results.append(_row(o, classify(error, w300, w100, w50, guard), error,
+                            aim, key, cursor_speed_at(frames, times, pt), pt))
 
     detected = {"300": 0, "100": 0, "50": 0, "miss": 0}
     for x in results:
         detected[x["result"]] += 1
     return results, detected, classify_whiffs(objs, frames, times, presses, used,
-                                              radius, w50)
+                                              radius, w50, guard)
 
 
-def classify_whiffs(objs, frames, times, presses, used, radius, w50):
+def classify_whiffs(objs, frames, times, presses, used, radius, w50,
+                    guard=EDGE_GUARD_MS):
     """Explain every unconsumed press (see the cause constants)."""
     counts = {MASH: 0, OFF_TARGET: 0, SLIDER_HEAD: 0, LOST: 0, AFTER_END: 0}
     off_r = []
@@ -117,7 +132,7 @@ def classify_whiffs(objs, frames, times, presses, used, radius, w50):
     for j, (pt, _key) in enumerate(presses):
         if used[j]:
             continue
-        if not objs or pt > last_t + w50:
+        if not objs or pt > last_t + w50 + guard:
             counts[AFTER_END] += 1
             continue
         i = bisect.bisect_left(obj_t, pt)
@@ -129,7 +144,7 @@ def classify_whiffs(objs, frames, times, presses, used, radius, w50):
             if o["kind"] == "Spinner":
                 inside = o["t"] <= pt <= o["end"]
             else:
-                inside = abs(pt - o["t"]) <= w50
+                inside = abs(pt - o["t"]) + guard <= w50
             if inside and (near is None or abs(pt - o["t"]) < abs(pt - near["t"])):
                 near = o
         if near is None:
@@ -152,7 +167,7 @@ def classify_whiffs(objs, frames, times, presses, used, radius, w50):
 
 
 def assign_nearest(objs, frames, times, presses, press_times, w300, w100, w50,
-                   radius, search, hit_tol=1.0):
+                   radius, search, hit_tol=1.0, guard=EDGE_GUARD_MS):
     """Deprecated reference: per-object nearest press. Kept for comparison only."""
     used = set()
     results = []
@@ -183,8 +198,8 @@ def assign_nearest(objs, frames, times, presses, press_times, w300, w100, w50,
         error = pt - o["t"]
         aim = (None if o["kind"] == "Spinner"
                else math.hypot(*_delta(cursor_at(frames, times, pt), o)))
-        results.append(_row(o, classify(error, w300, w100, w50), error, aim,
-                            key, cursor_speed_at(frames, times, pt), pt))
+        results.append(_row(o, classify(error, w300, w100, w50, guard), error,
+                            aim, key, cursor_speed_at(frames, times, pt), pt))
     detected = {"300": 0, "100": 0, "50": 0, "miss": 0}
     for x in results:
         detected[x["result"]] += 1
