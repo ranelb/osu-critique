@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.8.0**, `main` = `81fef6c`, 115 tests green, CI on every push, tag →
+State: **0.9.0**, `main` = `81fef6c`, 126 tests green, CI on every push, tag →
 wheel + GitHub release (`.github/workflows/release.yml`).
 
 ## Shipped since the handoff
@@ -86,7 +86,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 115 tests, no network
+.venv/bin/python -m pytest -q                       # 126 tests, no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
@@ -248,19 +248,36 @@ the windows of the mod the replay *claims*, multiplied through. On Domino (DT
 claimed, frames in map time) the 300-window is 29 ms of frames = 19 ms of real
 play, both present; on a play whose flag holds, nothing is printed at all.
 
-**Cost note.** Scoped "~2 hours" in the first pass; took ~30 minutes, because the
-conversion already existed in `profile.py` and the Domino fixture already
-triggered the case. The estimates in this file are session budgets, not
+**Cost note.** Scoped "~2 hours" in the first pass; it took ~3 minutes of work,
+because the conversion already existed in `profile.py` and the Domino fixture
+already triggered the case. The estimates in this file are session budgets, not
 measurements — the expensive part of an item is the diagnosis, and this one had
 none.
 
-### 6. Stream detection by rhythm + velocity continuity (half a session)
+### 6. Stream detection by rhythm + velocity continuity — ✅ shipped in 0.9.0
 
-**Why.** The detector is still "≥4 consecutive circles with ≤4r spacing". It
-called 1/2 filler runs "streams" on Bang Bang (where the real speed material is
-1/8 slider-jumps) and it is blind to slider-interleaved bursts. `profile.py`'s
-`chains` (steady gap ≤ tolerance, any kind) is the better primitive — promote it
-and add a velocity-continuity term (`spacing / dt` within ±40 % across the run).
+**Why.** The detector was still "≥4 consecutive circles with ≤4r spacing" —
+*spacing* standing in for speed. It called 1/2 filler runs streams on Bang Bang
+and was blind to slider-interleaved bursts: **0 segments on MONTAGEM**, whose
+runs are rhythmically tight (115 ms) but ~6r wide.
+
+**Spec / what shipped.** `metrics.streams.find_runs` is now the shared primitive:
+consecutive objects with a steady gap (within ±35 % of the running gap,
+≤250 ms — the rule ``profile._chains`` already used) and a steady required cursor
+speed (`spacing/dt` within ±40 % of the run's median), **any object kind**;
+spinners break a run. `profile._chains` calls the same function with the velocity
+term off, so the profile's numbers are unchanged (verified run-for-run on six
+replays). `stream_stats` returns, per run: t_start/t_end, n, miss, mean/std err,
+alt_ratio, key_pattern — plus what the material *was*: `gap_ms`, `notes_per_s`,
+`velocity_r_ms`, `kinds`. `metrics.streams` also carries the aggregate
+(`notes`, `misses`, gap and speed percentiles, kind mix); the report, console and
+coach prompt quote the rate and the material instead of the word "streams".
+
+**Measured effect** (old → new segments/notes): MONTAGEM 0 → 19/100, 4ever
+0 → 12/59, Bang Bang 22 → 33/166, RASPUTIN 39 → 69/520, down 87 → 134/843. The
+misfire it retires is pinned by a test: steady 100 ms gaps with spacing swinging
+1r ↔ 3.9r (a 4x speed swing at constant rhythm) — the old rule called it a
+stream, the new one does not.
 
 ### 7. Optional / later
 

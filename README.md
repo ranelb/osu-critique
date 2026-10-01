@@ -8,11 +8,11 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.8.0.** Presses are resolved the way the game resolves them (in
+> **Status: 0.9.0.** Presses are resolved the way the game resolves them (in
 > press order), hit windows and geometry follow the mods, and every run states
 > how far its own judgement can be trusted. Counts match the game exactly on the
 > golden fixtures and land within a few objects on the real replays used as a
-> gate — see [Validation](#validation-and-trust). 115 tests, CI on Python
+> gate — see [Validation](#validation-and-trust). 126 tests, CI on Python
 > 3.11/3.12. Every run also profiles the map (effective BPM, families, stamina,
 > chains — docs/profile.md), re-derives the cursor's arrival from the frames
 > (docs/aim.md) and autopsies the misses themselves (docs/autopsy.md), so a Relax
@@ -103,8 +103,13 @@ Per-play metrics include:
   swing between sessions
 - **Patterns**: miss rates by spacing bucket — dense (≤2r), stream (2–4r),
   jump (4–7r), bigjump (>7r)
-- **Streams**: every stream segment, with per-segment timing (std/UR) and
-  alternation ratio (same-finger double-taps under pressure)
+- **Streams**: runs of sustained notes found by **rhythm and velocity
+  continuity** (steady gap ≤250 ms, required speed `spacing/dt` steady within
+  40 %, any object kind — the old "≥4 circles at ≤4r spacing" rule used spacing
+  as a proxy for speed and missed MONTAGEM's slider-interleaved bursts entirely:
+  0 segments before, 19 now). Each run reports what the material was — median
+  gap, notes/s, required speed, circle/slider mix — plus per-segment timing
+  (std/UR) and alternation ratio (same-finger double-taps under pressure)
 - **Tapping**: alternation ratio, same-key adjacencies, key balance, whiffed
   presses (taps that hit nothing — the rushing signal)
 - **Sections**: quarter-by-quarter miss/error breakdown (fatigue detection)
@@ -136,7 +141,7 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.8.0
+osu-critique --version   # → osu-critique 0.9.0
 ```
 
 The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
@@ -145,12 +150,12 @@ archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.8.0-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.9.0-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.8.0/osu_critique-0.8.0-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.9.0/osu_critique-0.9.0-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 
@@ -385,7 +390,7 @@ count still drifts (a dropped slider end is the remaining suspect); those stay
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 115 tests, no network needed
+pytest -q                     # 126 tests, no network needed
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
