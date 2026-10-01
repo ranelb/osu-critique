@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.7.0**, `main` = `81fef6c`, 111 tests green, CI on every push, tag →
+State: **0.8.0**, `main` = `81fef6c`, 115 tests green, CI on every push, tag →
 wheel + GitHub release (`.github/workflows/release.yml`).
 
 ## Shipped since the handoff
@@ -33,6 +33,9 @@ wheel + GitHub release (`.github/workflows/release.yml`).
   comparing family and shape rates across attempts into consistent weaknesses vs
   swing ("one-off") buckets. New metrics fields `played_at` / `replay_md5` make
   the grouping and de-duplication possible.
+- **0.8.0 — two clocks, labelled** (`metrics.time_base`): when a replay's mod
+  flag and its frames disagree, the player-time windows are reported beside the
+  frames' ones and both readers say which base every ms is in.
 
 ---
 
@@ -83,7 +86,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 111 tests, no network
+.venv/bin/python -m pytest -q                       # 115 tests, no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
@@ -223,15 +226,33 @@ change.
 not needed at 22 stored runs over 9 repeated maps; the metrics files carry the
 family and shape rates already. Revisit when a single map has ~20-30 plays.
 
-### 5. Dual-window reporting when calibration overrides a mod flag (~2 hours)
-**Why.** Some lazer exports store frames in map time while claiming DT (Bang
-Bang, 4ever). The calibration then picks scale 1.0 and every ms in the metrics is
-map time, which is a silent 1.5× factor for a reader. `profile.py` already
-converts to the player's time base (`time_factor = mod_scale / scale`); the raw
-metrics and the console do not.
+### 5. Dual-window reporting when calibration overrides a mod flag — ✅ shipped in 0.8.0
 
-**Spec.** Whenever `trust.scale_overridden`, report both: the calibrated windows
-and the player-time windows, and label every ms column with which base it is in.
+**Why.** Some exports store frames in one clock while the mod flag claims another
+(Bang Bang, 4ever, Domino). Calibration then keeps the frames' scale and every ms
+in the metrics is that base — a silent 1.5x for a reader who believes the flag.
+`profile.py` already converted (`time_factor = mod_scale / scale`); the raw
+metrics and the console did not.
+
+**Spec / what shipped.** `metrics["time_base"]` is emitted on every run:
+`overridden`, `rows_scale`, `player_scale`, `rows_to_player`, `windows_ms_player`
+and a `note` in words (None when the flag holds). `windows_ms` stays the frames'
+base. The console summary prints the note and appends the felt window to the
+timing line; the deterministic report prints it as a `TIME BASE:` line; both label
+the map profile as `(player time)`; the coach prompt has a time-base bullet
+warning against comparing ms across bases.
+
+**The invariant that makes it real** (and the test that pins it):
+``windows_ms_player == od_windows(od, mod_scale)`` — the second base is exactly
+the windows of the mod the replay *claims*, multiplied through. On Domino (DT
+claimed, frames in map time) the 300-window is 29 ms of frames = 19 ms of real
+play, both present; on a play whose flag holds, nothing is printed at all.
+
+**Cost note.** Scoped "~2 hours" in the first pass; took ~30 minutes, because the
+conversion already existed in `profile.py` and the Domino fixture already
+triggered the case. The estimates in this file are session budgets, not
+measurements — the expensive part of an item is the diagnosis, and this one had
+none.
 
 ### 6. Stream detection by rhythm + velocity continuity (half a session)
 

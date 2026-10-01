@@ -8,11 +8,11 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.7.0.** Presses are resolved the way the game resolves them (in
+> **Status: 0.8.0.** Presses are resolved the way the game resolves them (in
 > press order), hit windows and geometry follow the mods, and every run states
 > how far its own judgement can be trusted. Counts match the game exactly on the
 > golden fixtures and land within a few objects on the real replays used as a
-> gate — see [Validation](#validation-and-trust). 111 tests, CI on Python
+> gate — see [Validation](#validation-and-trust). 115 tests, CI on Python
 > 3.11/3.12. Every run also profiles the map (effective BPM, families, stamina,
 > chains — docs/profile.md), re-derives the cursor's arrival from the frames
 > (docs/aim.md) and autopsies the misses themselves (docs/autopsy.md), so a Relax
@@ -92,6 +92,11 @@ Per-play metrics include:
   slider — how much of each body the cursor actually traced, how many ticks it
   missed, and whether the tail was dropped (`metrics.sliders` and the
   `slider_*` fields in the per-object records)
+- **Two clocks, labelled**: when a replay's mod flag and its frames disagree (a
+  DT export stored in map time), `metrics.time_base` carries both — the frames'
+  base that every ms is in, and the player's (`windows_ms_player`) — and the
+  console summary and report say which is which, instead of quoting a silent
+  1.5x
 - **Cross-attempt structure** (`attempts`): metrics files grouped by beatmap md5
   and ordered by `played_at`, comparing family and shape rates across attempts —
   which weaknesses are worse than the play itself *every* time, and which just
@@ -131,7 +136,7 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.7.0
+osu-critique --version   # → osu-critique 0.8.0
 ```
 
 The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
@@ -140,12 +145,12 @@ archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.7.0-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.8.0-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.7.0/osu_critique-0.7.0-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.8.0/osu_critique-0.8.0-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 
@@ -368,7 +373,9 @@ count still drifts (a dropped slider end is the remaining suspect); those stay
   HD/FL/NF change nothing measurable here. Relax/AutoPilot plays are flagged and
   judged from the cursor-arrival block.
 - **Lazer export time convention**: some exports store frames in map-time, not
-  real-time; calibration handles it automatically.
+  real-time; calibration handles it automatically, and when the mod flag and the
+  frames disagree the run reports both clocks (`metrics.time_base`) instead of
+  quoting one silently.
 - **`map_version_mismatch`**: replay ends well before the map's last object —
   analysis is only reliable up to the replay end.
 - **Mod flags**: a replay may claim DT/HT while its frames are at map-time
@@ -378,7 +385,7 @@ count still drifts (a dropped slider end is the remaining suspect); those stay
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 111 tests, no network needed
+pytest -q                     # 115 tests, no network needed
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
