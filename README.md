@@ -319,14 +319,25 @@ surface it before anything else is concluded.
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 11 tests, no network needed
+pytest -q                     # 58 tests, no network needed
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
   edge-case fixtures (see `tests/fixtures/ATTRIBUTION.md`).
+- `scripts/autopsy.py` — cursor autopsy for one replay: what the hand did
+  (distance at the note, closest approach and when it peaks, the along/lateral
+  split, the speed-conditioned ceiling curve, shape classes, worst windows).
+  Works with or without Relax. Prints numbers and writes two figures.
 - `scripts/make_synthetic_fixtures.py` — regenerates the synthetic fixtures and
   can anonymize `.osr` player names (`--anonymize`).
 - CI (`.github/workflows/test.yml`) runs the suite on Python 3.11 and 3.12.
+
+## Roadmap
+
+What is planned and why (aim mode, miss autopsy, slider bodies, cross-attempt
+structure) lives in [docs/ROADMAP.md](docs/ROADMAP.md) — read it before
+changing the analysis; it also records the traps that have already bitten
+(the snap/divisor convention, the calibration override, population gates).
 
 ## Privacy, attribution, and terms
 
