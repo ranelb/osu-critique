@@ -8,14 +8,15 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.4.0.** Presses are resolved the way the game resolves them (in
+> **Status: 0.5.0.** Presses are resolved the way the game resolves them (in
 > press order), hit windows and geometry follow the mods, and every run states
 > how far its own judgement can be trusted. Counts match the game exactly on the
 > golden fixtures and land within a few objects on the real replays used as a
-> gate — see [Validation](#validation-and-trust). 71 tests, CI on Python
+> gate — see [Validation](#validation-and-trust). 90 tests, CI on Python
 > 3.11/3.12. Every run also profiles the map (effective BPM, families, stamina,
-> chains — docs/profile.md) and re-derives the cursor's arrival from the frames
-> (docs/aim.md), so a Relax replay is analysable too.
+> chains — docs/profile.md), re-derives the cursor's arrival from the frames
+> (docs/aim.md) and autopsies the misses themselves (docs/autopsy.md), so a Relax
+> replay is analysable too.
 
 ## Table of Contents
 
@@ -82,6 +83,11 @@ Per-play metrics include:
   but not on time, the along/lateral split, and the ceiling curve (distance at
   the note against the cursor speed the jump demands). Works with or without
   Relax ([docs/aim.md](docs/aim.md))
+- **Miss autopsy**: the shape classes (5-note windows: near-reversal chain /
+  cornered box / flow / mixed) with n-gated off-300 rates, the press-time arrival
+  margin, press vs arrival timing, per-leg heading error and path efficiency,
+  mid-travel "stutter" presses, and each miss with its own press and geometry
+  ([docs/autopsy.md](docs/autopsy.md))
 - **Patterns**: miss rates by spacing bucket — dense (≤2r), stream (2–4r),
   jump (4–7r), bigjump (>7r)
 - **Streams**: every stream segment, with per-segment timing (std/UR) and
@@ -117,7 +123,7 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.4.0
+osu-critique --version   # → osu-critique 0.5.0
 ```
 
 The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
@@ -126,12 +132,12 @@ archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.4.0-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.5.0-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.4.0/osu_critique-0.4.0-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.5.0/osu_critique-0.5.0-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 
@@ -207,10 +213,12 @@ osu-critique profile <username> --scrape
 Output: `out/<tag>_metrics.json`, `out/<tag>_objects.json` (one record per hit
 object — rhythm snap, spacing, flow angle, strains; the schema is in
 [docs/object_schema.md](docs/object_schema.md), skip it with `--no-objects`),
-plus `out/<tag>_charts.png` with `--charts` (four panels: hit-error histogram,
-error-over-time, spatial result map, aim error histogram) and
-`out/<tag>_aim.png` (six cursor-arrival panels — [docs/aim.md](docs/aim.md)).
-The cursor-arrival block is computed for every run; skip it with `--no-aim`.
+plus, with `--charts`, `out/<tag>_charts.png` (four panels: hit-error histogram,
+error-over-time, spatial result map, aim error histogram), `out/<tag>_aim.png`
+(six cursor-arrival panels — [docs/aim.md](docs/aim.md)) and
+`out/<tag>_windows.png` (the worst arrival stretches — [docs/autopsy.md](docs/autopsy.md)).
+The cursor-arrival and miss-autopsy blocks are computed for every run; skip them
+with `--no-aim` / `--no-autopsy`.
 
 ### Quick example
 
@@ -286,9 +294,14 @@ it always wins over detection.
    timing, the along/lateral split and the speed-conditioned ceiling curve
    (`metrics.aim_mode`). This needs no taps, so it is the whole aim picture on a
    Relax replay ([docs/aim.md](docs/aim.md)).
-7. **Records** — every object is written out with its rhythm snap, spacing, flow
+7. **Miss autopsy** — the shape classes, the press-time arrival margin, press
+   vs arrival timing, per-leg heading and path efficiency, mid-travel presses and
+   each miss with its own press and geometry (`metrics.autopsy`,
+   [docs/autopsy.md](docs/autopsy.md)). Under Relax the tap-derived sections are
+   reported as unavailable rather than as zero.
+8. **Records** — every object is written out with its rhythm snap, spacing, flow
    angle and strains (`out/<tag>_objects.json`): the schema later analyses read.
-8. **Tiers** — `report` renders a deterministic critique from the JSON;
+9. **Tiers** — `report` renders a deterministic critique from the JSON;
    `coach` upgrades it with one LLM API call (system prompt encodes the same
    critique framework; optional baseline + profile give it context).
 
@@ -332,17 +345,19 @@ surface it before anything else is concluded.
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 71 tests, no network needed
+pytest -q                     # 90 tests, no network needed
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
   edge-case fixtures (see `tests/fixtures/ATTRIBUTION.md`).
 - `src/osu_critique/metrics/aim.py` — the cursor-arrival ("aim mode") block and
-  its six-panel figure; the reference numbers live in `docs/aim.md`.
-- `scripts/autopsy.py` — the exploratory views that are not (yet) in the
-  pipeline: per-leg path efficiency, mid-travel "stutter" presses, 5-note shape
-  classes and the worst arrival stretches. Uses the library's aim block, so the
-  numbers cannot drift.
+  its six-panel figure (`docs/aim.md`).
+- `src/osu_critique/metrics/autopsy.py` — the miss-autopsy block: shape classes,
+  arrival margin, press-vs-arrival, legs, stutter and the misses themselves
+  (`docs/autopsy.md`).
+- `scripts/autopsy.py` — a thin printer over both blocks for one replay (plus the
+  worst-arrival table). It used to be the reference implementation; the numbers
+  now come from the library, so they cannot drift.
 - `scripts/make_synthetic_fixtures.py` — regenerates the synthetic fixtures
   (including the Relax `synth_rx` pair) and can anonymize `.osr` player names
   (`--anonymize`).

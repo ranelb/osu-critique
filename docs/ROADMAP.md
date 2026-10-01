@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.4.0**, `main` = `81fef6c`, 71 tests green, CI on every push, tag →
+State: **0.5.0**, `main` = `81fef6c`, 90 tests green, CI on every push, tag →
 wheel + GitHub release (`.github/workflows/release.yml`).
 
 ## Shipped since the handoff
@@ -17,9 +17,13 @@ wheel + GitHub release (`.github/workflows/release.yml`).
   (`out/<tag>_aim.png`) and `--no-aim` to skip it. Works with or without Relax,
   so a Relax replay is now analysable: the old note said "aim data is
   meaningless", which was only true of the press-time numbers.
-  `scripts/autopsy.py` keeps the exploratory views (path efficiency, stutter
-  presses, shape classes, worst stretches) and now reads the library's aim
-  block, so its numbers cannot drift.
+  `scripts/autopsy.py` is now a thin printer over the library's blocks (plus the
+  worst-arrival table), so its numbers cannot drift.
+- **0.5.0 — miss autopsy** (`metrics["autopsy"]`, `docs/autopsy.md`): 5-note shape
+  classes with n-gated off-300 rates, the press-time arrival margin, press vs
+  arrival timing, per-leg heading error and path efficiency, mid-travel
+  ("stutter") press share, and each miss with its own press and geometry; plus the
+  worst-stretch gallery (`out/<tag>_windows.png`) and `--no-autopsy` to skip it.
 
 ---
 
@@ -36,11 +40,12 @@ Concretely, in order of leverage:
    `spacing_r`, `snap` (in **quarter-beats**), `bpm_eff`, `angle_deg`,
    `strain_aim`, `strain_speed`. Bucket it and you can answer almost anything
    without touching the replay again.
-2. When the question is about the **hand** rather than the taps, use the
-   cursor-arrival block (`metrics.aim_mode`, docs/aim.md) — it is now computed
-   for every run — and re-derive from the frames for anything it does not cover
-   (path efficiency, stutter presses, shape-conditioned arrival).
-   `scripts/autopsy.py` does exactly this for one replay (numbers + two figures).
+2. When the question is about the **hand** rather than the taps, the two
+   re-derivation blocks are now computed for every run: the cursor arrival
+   (`metrics.aim_mode`, docs/aim.md) and the miss autopsy (`metrics.autopsy`,
+   docs/autopsy.md — shape classes, arrival margin, press vs arrival, legs,
+   stutter, the misses themselves). Re-derive from the frames for anything they do
+   not cover; `scripts/autopsy.py` prints both for one replay, with the figures.
 3. The **trust block is what makes the output usable.** It states the per-count
    deltas against the game and refuses to let an untrustworthy judgement read as
    fact. Keep that discipline: every new block should carry its own sample size
@@ -51,7 +56,7 @@ Concretely, in order of leverage:
    arrival vs press timing. Prefer features that produce a contrast.
 
 Two examples of what that way of working produced (both reproduced by
-`scripts/autopsy.py`):
+`metrics.aim_mode` + `metrics.autopsy`):
 
 - Three replays had misses at press-time aim of 1.07–1.45 r. The frames showed
   the cursor's *closest approach* was 0.26–0.4 r (fine) but that it peaked
@@ -69,7 +74,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 71 tests, no network
+.venv/bin/python -m pytest -q                       # 90 tests, no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
@@ -113,7 +118,7 @@ autopsy indexed its non-spinner rows by object index, which silently mis-mapped
 every object after the first spinner; the shape/worst tables were off until
 this shipped as a dict keyed by object index.
 
-### 2. Miss-autopsy block (~1 session)
+### 2. Miss-autopsy block — ✅ shipped in 0.5.0 (`docs/autopsy.md`, `metrics.autopsy`)
 
 **Why.** The shape-class table, arrival margin and per-leg path efficiency are
 what produced every finding; they belong in the tool instead of in throwaway
@@ -122,13 +127,22 @@ scripts.
 **Spec.** Per-play: 5-note window shape classes (`near-reversal chain` /
 `cornered (box)` / `flow` / `mixed`) with n-gated non-300 rates; arrival-margin
 distribution at press time; press-time vs arrival offset; per-leg heading error
-and path efficiency; mid-travel "stutter" press share. Rendered as a report
-section plus a worst-window gallery figure.
+and path efficiency; mid-travel "stutter" press share; plus a report section and
+the worst-window gallery figure (`out/<tag>_windows.png`).
 
-**Acceptance.** Reproduces the published tables for the author's MONTAGEM and
-4ever replays: reversals 17.5 % / 9.1 % off-300 vs cornered 0 % / 0 %; the two
-4ever misses at 0.98 r and 1.20 r short with presses +16 ms / −9 ms; per-leg
-heading error 0–14°.
+**Acceptance.** Met: MONTAGEM reversals 17.5 % off-300 (n=143) vs cornered 0 %
+(n=14), 4ever 9.1 % (n=165) vs 0 % (n=9); the 4ever misses at 1.20 r (press
+−9 ms, aim 1.26 r) and 0.98 r (press +16 ms, aim 1.07 r) and MONTAGEM's three at
+1.32/1.30/1.07 r (presses +5/+2/−3 ms); per-leg heading error median 2-3°, p90
+6-8°, max 14° — no reading problem. `tests/test_autopsy.py` pins the helpers on
+synthetic frames and checks these numbers when the replays are pointed at with
+`OSU_TEST_MONTAGEM_*` / `OSU_TEST_4EVER_*`.
+
+**Traps (learned).** Legs shorter than ~1.5 circle radii have no meaningful
+direction (including them produced a 117° "heading error" on a leg where the
+cursor moved 2 px) — filter on the object gap *in radii*, not pixels. The turn
+list was also reading `objs[-1]` for the `i == 2` window (the last object of the
+map); guard `k - 2 >= 0`.
 
 ### 3. Slider bodies, ends and ticks (~2 sessions)
 
