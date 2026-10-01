@@ -126,6 +126,21 @@ def make_osu(title, circles, first_t=1000, interval=500):
     return text, hashlib.md5(text.encode("utf-8")).hexdigest()
 
 
+def rx_actions(waypoints):
+    """Cursor-only frames for a Relax (RX) replay: no key masks ever set.
+
+    ``waypoints`` is a list of ``(t_ms, x, y)``; the cursor is at that position at
+    that time and moves linearly between them, which is exactly what the aim
+    block interpolates. This is the aim-mode reference fixture.
+    """
+    actions = []
+    prev_t = 0.0
+    for t, x, y in waypoints:
+        actions.append((int(round(t - prev_t)), x, y, 0))
+        prev_t = t
+    return actions
+
+
 def play_actions(times, errors, scale=1.0, positions=None, trailing=None):
     """Press/release frames. scale maps map-time -> real-time (mods).
     trailing: optional (t_ms, x, y) frame appended out of order (out-of-order frame artifact)."""
@@ -191,6 +206,21 @@ def generate():
     (FIX / "synth_oooframes.osu").write_text(text)
     acts = play_actions(times, clean_errors(20), positions=circles, trailing=(5100.0, 250.0, 192.0, 0))
     (FIX / "synth_oooframes.osr").write_bytes(make_osr("TestPlayer", md5, (17, 2, 1, 0), 123456, 20, False, 0, acts))
+
+    # Relax (RX) aim-mode reference: 60 objects at 500 ms alternating x=100/400
+    # (gap 300 px = 8.22 r at CS4), the cursor reaching each object exactly
+    # LATE_MS = 100 ms after the note. At every note instant it has covered 4/5 of
+    # the leg, so it is 60 px (1.64 r) short -- and closest approach is a clean 0
+    # at +100 ms. Everything the aim block reports is therefore known exactly.
+    n, LATE = 60, 100.0
+    circles_rx, times_rx = gen_circles(n)
+    text, md5 = make_osu("synth_rx", circles_rx)
+    (FIX / "synth_rx.osu").write_text(text)
+    start = (400.0, 192.0)                      # the mirrored point 300 px from object 0
+    waypoints = [(times_rx[0] - (500.0 - LATE), *start)]
+    waypoints += [(t + LATE, x, y) for t, (x, y) in zip(times_rx, circles_rx)]
+    acts = rx_actions(waypoints)
+    (FIX / "synth_rx.osr").write_bytes(make_osr("TestPlayer", md5, (0, 0, 0, n), 0, 0, False, RX, acts))
 
     print(f"wrote synthetic fixtures to {FIX}")
 

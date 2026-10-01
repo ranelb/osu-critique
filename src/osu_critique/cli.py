@@ -30,7 +30,8 @@ from .report import analyze, console_summary
 def cmd_analyze(args):
     metrics = analyze(args.replay, args.map, tag=args.tag or "run",
                       do_charts=args.charts, outdir=args.outdir,
-                      write_objects=not args.no_objects)
+                      write_objects=not args.no_objects,
+                      write_aim=not args.no_aim)
     console_summary(metrics)
     return 0
 
@@ -50,7 +51,8 @@ def cmd_batch(args):
         tag = _tag_from_replay(rp)
         metrics = analyze(rp, mp, tag=tag, do_charts=args.charts,
                           outdir=args.outdir, console=False,
-                          write_objects=not args.no_objects)
+                          write_objects=not args.no_objects,
+                          write_aim=not args.no_aim)
         console_summary(metrics)
         rows.append(metrics)
         print()
@@ -313,9 +315,10 @@ def render_report(metrics, baseline=None):
             return "acceptable"
         return "aim struggling"
 
+    ur_str = f"{ur:.1f} ({ur_verdict(ur)})" if ur is not None else "n/a"
     lines = [f"# Report: {metrics['map']}", "",
-             f"- Accuracy {metrics['accuracy'] * 100:.1f}% | UR {ur:.1f} ({ur_verdict(ur)}) "
-             f"| {metrics['counts_recorded']['300']}x300 / "
+             f"- Accuracy {metrics['accuracy'] * 100:.1f}% | UR {ur_str} | "
+             f"{metrics['counts_recorded']['300']}x300 / "
              f"{metrics['counts_recorded']['100']}x100 / "
              f"{metrics['counts_recorded']['50']}x50 / "
              f"{metrics['counts_recorded']['miss']}x miss | max combo {metrics['max_combo']}"]
@@ -370,13 +373,36 @@ def render_report(metrics, baseline=None):
                 f"{c_['after']} {c_['non300_rate'] * 100:.1f}% (n={c_['n']})" for c_ in prof["context"]))
 
     lines += ["", "## Timing",
-              f"- mean hit error {h['mean']:+.1f}ms ({metrics['early_pct'] * 100:.0f}% early), "
-              f"std {h['std']:.1f}ms",
+              (f"- mean hit error {h['mean']:+.1f}ms "
+               f"({metrics['early_pct'] * 100:.0f}% early), std {h['std']:.1f}ms"
+               if h.get("mean") is not None and h.get("std") is not None
+               else "- no taps were assigned to an object (Relax play, or all misses)"),
               f"- vs baseline: UR {ur_verdict(ur)}" + (f" (baseline {b_ur:.0f})" if b_ur else ""),
               f"- |bias| > 6ms with consistent sign -> consider an offset test."]
+    aim_str = (f"{aim['mean_norm']:.2f}r ({aim_verdict(aim['mean_norm'])})"
+               if aim.get("mean_norm") is not None else "n/a")
     lines += ["", "## Aim",
-              f"- mean aim error {aim['mean_norm']:.2f}r ({aim_verdict(aim['mean_norm'])})"
+              f"- mean aim error at press time {aim_str}"
               + (f" vs baseline {b_aim:.2f}r" if b_aim else "")]
+    am = metrics.get("aim_mode") or {}
+    if am.get("n"):
+        d = am["distance_at_note_r"]
+        ca = am["closest_approach_r"]
+        pk = am["peak_offset_ms"]
+        rn = am["reached_not_on_time"]
+        es = am["error_shape"]
+        lines.append(f"- cursor arrival (n={am['n']}, window +/-{am['window_ms']:.0f}ms): "
+                     f"{d['mean']:.2f}r at the note ({d['inside_pct']:.0f}% inside), "
+                     f"closest approach {ca['median']:.2f}r, "
+                     f"peak {pk['median']:+.0f}ms ({pk['late_pct']:.0f}% late)")
+        lines.append(f"- there but not then: {rn['pct']:.1f}% of notes "
+                     f"({rn['n']}) were reached within the window but not on time; "
+                     f"{es['short_pct']:.0f}% of arrivals stopped short, "
+                     f"{es['past_pct']:.0f}% went past")
+        if am.get("ceiling"):
+            trend = "  ".join(f"{b['v_lo']:.1f}-{b['v_hi']:.0f}:{b['mean_r']:.2f}r"
+                              for b in am["ceiling"])
+            lines.append(f"- aim ceiling (required px/ms -> distance at the note): {trend}")
     avs = metrics.get("aim_vs_speed") or {}
     if avs.get("slope_r_per_px_ms") is not None:
         bins = avs.get("bins") or []
@@ -464,6 +490,8 @@ def main(argv=None):
     p.add_argument("--charts", action="store_true", help="also render a PNG chart")
     p.add_argument("--no-objects", action="store_true",
                    help="skip out/<tag>_objects.json (the per-object records)")
+    p.add_argument("--no-aim", action="store_true",
+                   help="skip the cursor-arrival aim block (metrics.aim_mode)")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_analyze)
 
@@ -473,6 +501,7 @@ def main(argv=None):
     p = sub.add_parser("batch", help="pair + analyze every exported lazer replay")
     p.add_argument("--charts", action="store_true")
     p.add_argument("--no-objects", action="store_true")
+    p.add_argument("--no-aim", action="store_true")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_batch)
 

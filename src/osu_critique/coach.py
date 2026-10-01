@@ -33,11 +33,17 @@ Critique framework - use the numbers, don't invent others:
   (windows_ms). Under ~50% is tight for a human; near 100% means the spread
   covers the whole 300 window. |bias| > 6ms with a consistent sign -> suggest a
   universal offset test.
-- Aim: mean aim error in circle radii (aim_px.mean_norm) plus aim_vs_speed: the
-  slope in radii per px/ms and the slowest-to-fastest quartile means. A shallow
-  slope means precision holds as the cursor speeds up; a steep one means it
-  collapses under movement. That slope, not the absolute average, is the aim
-  ceiling.
+- Aim, two clocks. Press-time aim (aim_px.mean_norm, aim_vs_speed) samples the
+  cursor only at the tap. metrics.aim_mode samples the cursor path itself: the
+  distance at the note instant (distance_at_note_r), the closest approach within
+  the window (closest_approach_r), when that approach peaks (peak_offset_ms -
+  late means the cursor arrives after the note), the share reached but not on
+  time (reached_not_on_time), the along/lateral split (error_shape: short vs
+  past, and sideways) and the ceiling curve (distance at the note binned by the
+  cursor speed the jump demands). A large aim_mode distance with a small
+  closest_approach_r is an arrival-timing problem, not a precision one - say so.
+  aim_vs_speed gives the press-time slope in radii per px/ms. Under Relax (RX)
+  there are no taps, so aim_mode is the only aim data that means anything.
 - Whiffed presses: whiffs.mash / off_target / slider_head / lost / after_end.
   Only the off_target share is the cursor not arriving in time; mash is a press
   with nothing in the window; slider_head is a limit of the head-only slider
@@ -68,8 +74,9 @@ Critique framework - use the numbers, don't invent others:
   under pressure; key balance A vs B.
 - Flags: failed_play = the run ended early (only critique the played portion and
   say so); map_version_mismatch = replay/map timing mismatch, unreliable past the
-  replay end; relax (RX) or autopilot = the game hit from cursor position, so aim
-  data is meaningless and timing is cursor arrival.
+  replay end; relax (RX) or autopilot = the game hit from cursor position, so
+  press-time aim and timing are the game's - judge aim and timing from aim_mode
+  (cursor arrival) instead, and ignore whiffs/tapping.
 
 Output: a concise markdown critique with (1) a verdict summary, (2) strengths,
 (3) weaknesses ranked by impact, (4) 3-5 specific practice recommendations tied to
@@ -227,12 +234,14 @@ def _run_row(name, m):
 
     flag = "MISMATCH" if m.get("map_version_mismatch") else (
         "FAILED" if m.get("failed_play") else "")
+    am = (m.get("aim_mode") or {}).get("distance_at_note_r") or {}
     return {
         "map": name,
         "acc_pct": round(100 * m["accuracy"], 1),
         "ur": round(m["ur"], 1),
         "mean_ms": round(h.get("mean", 0.0), 1),
         "aim_r": round(m["aim_px"].get("mean_norm", 0.0), 2),
+        "arrive_r": (round(am["mean"], 2) if am.get("mean") is not None else "-"),
         "miss": m["counts_recorded"]["miss"],
         "whiffs": m["whiffed_presses"],
         "dense_miss_pct": pat("dense"),
@@ -250,15 +259,16 @@ def build_multi_user_message(rows, profile=None):
     ``rows`` is a list of (map_name, metrics_dict) pairs. Presents a compact
     per-run table instead of N full JSON blobs so any number of runs fits."""
     lines = ["## Runs — %d plays (compact per-run stats)" % len(rows)]
-    lines.append("| map | acc | UR | mean_ms | aim_r | miss | whiffs | "
+    lines.append("| map | acc | UR | mean_ms | aim_r | arrive_r | miss | whiffs | "
                  "dense% | stream% | jump% | bigjump% | Q1-Q4 miss | flag |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for name, m in sorted(rows, key=lambda r: r[1]["accuracy"]):
         r = _run_row(name, m)
         q = ",".join(str(x) for x in r["quarter_miss"]) if r["quarter_miss"] else "-"
         lines.append(
             f"| {r['map'][:40]} | {r['acc_pct']} | {r['ur']} | {r['mean_ms']:+.1f} "
-            f"| {r['aim_r']:.2f} | {r['miss']} | {r['whiffs']} | {r['dense_miss_pct']} "
+            f"| {r['aim_r']:.2f} | {r['arrive_r']} | {r['miss']} | {r['whiffs']} "
+            f"| {r['dense_miss_pct']} "
             f"| {r['stream_miss_pct']} | {r['jump_miss_pct']} | {r['bigjump_miss_pct']} "
             f"| {q} | {r['flag']} |")
     lines.append("")

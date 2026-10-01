@@ -21,6 +21,7 @@ from .io.beatmap import (build_objects, circle_radius, cs_for, load_beatmap,
                          mod_scale, mod_string, od_for, od_windows)
 from .io.replay import build_frames, find_presses, load_replay
 from .metrics.assignment import judge
+from .metrics.aim import build_aim
 from .metrics.patterns import add_pattern_labels, pattern_stats
 from .metrics.profile import build_profile, primary_target
 from .metrics.structure import SCHEMA_VERSION, annotate, object_records
@@ -68,7 +69,9 @@ def build_trust(detected, recorded, scale, mod_scale_value, judged,
     if failed_play:
         notes.append("failed play - only the played part is analysed")
     if relax:
-        notes.append("relax/autopilot: aim data is meaningless, timing is cursor arrival")
+        notes.append("relax/autopilot: the game taps, so press-time aim is not "
+                     "meaningful - read the cursor-arrival aim block (aim_mode) "
+                     "instead")
     return {
         "count_deltas": deltas,
         "abs_delta_total": abs_total,
@@ -130,10 +133,13 @@ def aim_velocity(pairs, min_n=8):
 
 
 def analyze(replay_path, map_path, tag="run", do_charts=False,
-            outdir=None, hit_tol=1.0, console=True, write_objects=True):
+            outdir=None, hit_tol=1.0, console=True, write_objects=True,
+            write_aim=True):
     """Analyze one replay against its map; returns the metrics dict.
 
-    Writes ``{outdir}/{tag}_metrics.json`` and, if ``do_charts``, a PNG chart.
+    Writes ``{outdir}/{tag}_metrics.json`` and, if ``do_charts``, PNG charts
+    (``{tag}_charts.png`` plus, when the aim block is computed,
+    ``{tag}_aim.png``).
     """
     outdir = outdir or _default_outdir()
 
@@ -239,6 +245,11 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     tap = tapping_stats(results)
     keys = key_usage(results)
 
+    is_relax = bool(getattr(r, "relax", False) or getattr(r, "auto_pilot", False))
+    aim_block, aim_rows = (build_aim(objs, frames, times, radius,
+                                     is_relax=is_relax)
+                           if write_aim else (None, None))
+
     metrics = {
         "schema_version": SCHEMA_VERSION,
         "tag": tag,
@@ -259,6 +270,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         "counts_detected": detected,
         "trust": trust,
         "profile": profile,
+        "aim_mode": aim_block,
         "map_version_mismatch": map_version_mismatch,
         "failed_play": failed_play,
         "n_objects_map": n_map_objects,
@@ -320,6 +332,10 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     if do_charts and len(errs):
         from .charts import render_charts
         render_charts(results, errs, aims, w300, w100, w50, ur, radius, tag, outdir)
+    if do_charts and aim_rows:
+        from .charts import render_aim_charts
+        render_aim_charts(aim_rows, radius, aim_block["window_ms"], tag, outdir,
+                          title=f"{metrics['map']} [{metrics['mod_string']}]")
 
     if console:
         console_summary(metrics, out_json, out_objects)
@@ -363,6 +379,19 @@ def console_summary(metrics, out_json=None, out_objects=None):
     aim = metrics["aim_px"]
     if aim["mean"] is not None:
         print(f"aim: mean={aim['mean']:.1f}px ({aim['mean_norm']:.2f}r) p90={aim['p90']:.1f}px")
+    am = metrics.get("aim_mode") or {}
+    if am.get("n"):
+        d = am["distance_at_note_r"]
+        ca = am["closest_approach_r"]
+        pk = am["peak_offset_ms"]
+        rn = am["reached_not_on_time"]
+        print(f"aim (cursor arrival, n={am['n']}): at the note {d['mean']:.2f}r "
+              f"(inside {d['inside_pct']:.0f}%) | closest {ca['median']:.2f}r | "
+              f"peak {pk['median']:+.0f}ms | reached not on time {rn['pct']:.0f}%")
+        if am.get("ceiling"):
+            print("  ceiling (px/ms -> r at the note): "
+                  + "  ".join(f"{b['v_lo']:.1f}-{b['v_hi']:.0f} {b['mean_r']:.2f}"
+                              for b in am["ceiling"]))
     print("patterns:")
     for p, d in sorted(metrics["patterns"].items(), key=lambda kv: -kv[1]["n"]):
         print(f"  {p:8s} n={d['n']:4d} miss={d['miss']:3d} ({d['miss_rate']:.1%})  "
@@ -370,10 +399,9 @@ def console_summary(metrics, out_json=None, out_objects=None):
               f"std={('%.1f' % d['std_err']) if d['std_err'] is not None else '--'}")
     print("regions:")
     for q, d in metrics["regions"].items():
-        if d["mean_aim"] is not None:
-            print(f"  {q} n={d['n']:4d} miss={d['miss']:3d} ({d['miss_rate']:.1%})  mean_aim={d['mean_aim']:.1f}px")
-        else:
-            print(f"  {q} n={d['n']:4d} miss={d['miss']:3d} ({d['miss_rate']:.1%})  mean_aim=--")
+        rate = f"{d['miss_rate']:.1%}" if d["miss_rate"] is not None else "--"
+        mean_aim = f"{d['mean_aim']:.1f}px" if d["mean_aim"] is not None else "--"
+        print(f"  {q} n={d['n']:4d} miss={d['miss']:3d} ({rate})  mean_aim={mean_aim}")
     print("quarters (miss / mean_err / std):")
     for k, q in enumerate(metrics["quarters"]):
         print(f"  Q{k + 1} n={q['n']:3d} miss={q['miss']:3d} "
