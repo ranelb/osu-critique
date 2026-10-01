@@ -50,8 +50,9 @@ def cmd_batch(args):
     print(f"\npaired {len(pairs)} replay+map sets\n")
 
     rows = []
+    tags = set()
     for source, rp, mp in pairs:
-        tag = _tag_from_replay(rp)
+        tag = _tag_from_replay(rp, tags)
         metrics = analyze(rp, mp, tag=tag, do_charts=args.charts,
                           outdir=args.outdir, console=False,
                           write_objects=not args.no_objects,
@@ -314,14 +315,33 @@ def cmd_setup(args):
 
 # ------------------------------------------------------------- helpers ----
 
-def _tag_from_replay(replay_path):
+def _tag_from_replay(replay_path, taken=None):
+    """A stable, unique tag for one exported replay.
+
+    The bracket is the difficulty, which is *not* unique: two attempts of the same
+    difficulty used to collide, so ``batch`` silently overwrote the first with the
+    second and the cross-attempt view saw one play instead of two. The export's
+    date stamp (``(2026-09-22_00-33)``) makes the tag per attempt; ``taken`` is a
+    last-resort guard for two exports from the same minute.
+    """
     import os
     import re
     name = os.path.basename(replay_path)
     m = re.search(r"\[([^\]]+)\]", name)
-    if m:
-        return re.sub(r"[^A-Za-z0-9_-]+", "_", m.group(1)).strip("_")[:40]
-    return "run"
+    base = (re.sub(r"[^A-Za-z0-9_-]+", "_", m.group(1)).strip("_")[:34]
+            if m else "run")
+    date = re.search(r"(\d{4}-\d{2}-\d{2})[T_ ]?(\d{2})?[-_](\d{2})?", name)
+    if date:
+        base = f"{base}_{date.group(1)}_{date.group(2) or '00'}{date.group(3) or '00'}"
+    base = base[:60]
+    if taken is None:
+        return base
+    tag, n = base, 2
+    while tag in taken:
+        tag = f"{base}-{n}"
+        n += 1
+    taken.add(tag)
+    return tag
 
 
 def _aggregate(rows):
