@@ -7,6 +7,7 @@ Subcommands:
   paths             show resolved (auto-detected) paths
   prompt  [metrics] [--baseline] [--profile]   print the critique prompt (BYO AI)
   report  <metrics.json> [--baseline]    deterministic critique (no LLM, no keys)
+  attempts [metrics.json|dir]            cross-attempt structure for one map
   coach   <metrics.json|dir> [--all] [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
   profile <username>                     fetch osu! profile (BYO osu API creds)
   setup   [--show]                       first-time configuration wizard
@@ -113,6 +114,12 @@ def cmd_report(args):
                   file=sys.stderr)
             return 2
         _aggregate([m for _, m in rows])
+        from .metrics.attempts import build as _attempts_build
+        block = _attempts_build(rows)
+        if block["n_repeated"]:
+            print(f"\n{block['n_repeated']} map(s) have more than one attempt — "
+                  "run `osu-critique attempts <dir>` for cross-attempt structure "
+                  "(stable weaknesses vs one-off noise)")
         return 0
     try:
         metrics = _load_metrics(args.metrics_json)
@@ -170,6 +177,35 @@ def cmd_profile(args):
     if p.get("rank_highest"):
         rh = p["rank_highest"]
         print(f"peak rank #{rh.get('rank')} ({rh.get('updated_at', '')[:10]})")
+    return 0
+
+
+def cmd_attempts(args):
+    """Cross-attempt structure: which weaknesses hold across plays of one map."""
+    import json as _json
+    from .coach import _load_metrics_dir
+    from .metrics.attempts import build, describe
+
+    target = args.path_or_dir or str(outdir())
+    if os.path.isdir(target):
+        rows = _load_metrics_dir(target)
+        if not rows:
+            print(f"error: no *_metrics.json files in {target!r} — run "
+                  "`osu-critique batch` or `analyze` first", file=sys.stderr)
+            return 2
+    else:
+        try:
+            with open(target) as f:
+                rows = [(target, _json.load(f))]
+        except (FileNotFoundError, _json.JSONDecodeError) as e:
+            print(f"error: cannot read {target!r}: {e}", file=sys.stderr)
+            return 2
+    block = build(rows, min_n=args.min_n)
+    if args.json:
+        print(_json.dumps(block, indent=2, default=float))
+        return 0
+    for line in describe(block, only_repeated=not args.all):
+        print(line)
     return 0
 
 
@@ -598,6 +634,17 @@ def main(argv=None):
     p = sub.add_parser("setup", help="first-time configuration wizard (paths + optional keys)")
     p.add_argument("--show", action="store_true", help="show the effective config (masked)")
     p.set_defaults(func=cmd_setup)
+
+    p = sub.add_parser("attempts", help="cross-attempt structure: stable weaknesses "
+                                        "vs one-off noise (same map, several plays)")
+    p.add_argument("path_or_dir", nargs="?", default=None,
+                   help="a metrics JSON or a directory of *_metrics.json (default: outdir)")
+    p.add_argument("--min-n", type=int, default=None,
+                   help="objects a bucket needs in EVERY attempt to be compared")
+    p.add_argument("--all", action="store_true",
+                   help="also list maps with a single attempt")
+    p.add_argument("--json", action="store_true", help="print the block as JSON")
+    p.set_defaults(func=cmd_attempts)
 
     p = sub.add_parser("paths", help="show resolved replay/map/output paths (auto-detected)")
     p.set_defaults(func=cmd_paths)

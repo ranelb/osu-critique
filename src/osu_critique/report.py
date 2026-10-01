@@ -136,7 +136,7 @@ def aim_velocity(pairs, min_n=8):
 
 def analyze(replay_path, map_path, tag="run", do_charts=False,
             outdir=None, hit_tol=1.0, console=True, write_objects=True,
-            write_aim=True, write_autopsy=True):
+            write_aim=True, write_autopsy=True, guard=None):
     """Analyze one replay against its map; returns the metrics dict.
 
     Writes ``{outdir}/{tag}_metrics.json`` and, if ``do_charts``, PNG charts
@@ -170,6 +170,10 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
 
     recorded = {"300": r.count_300, "100": r.count_100,
                 "50": r.count_50, "miss": r.count_miss}
+    played_at = getattr(r, "timestamp", None)
+    played_at = played_at.isoformat() if hasattr(played_at, "isoformat") else (
+        str(played_at) if played_at else None)
+    replay_md5 = getattr(r, "replay_md5", None) or None
     judged_total = sum(recorded.values())
     n_map_objects = len(bm.hit_objects())
 
@@ -184,7 +188,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         search = max(250.0, search_od * scale)
         results, detected, whiffed = judge(objs, frames, times, presses,
                                            press_times, w300, w100, w50,
-                                           radius, search, hit_tol)
+                                           radius, search, hit_tol,
+                                           **({"guard": guard} if guard is not None else {}))
         badness = count_distance(detected, recorded)
         cand = {"scale": scale, "objs": objs, "results": results,
                 "detected": detected, "whiffed": whiffed, "badness": badness,
@@ -261,6 +266,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         "schema_version": SCHEMA_VERSION,
         "tag": tag,
         "beatmap_md5": beatmap_md5,
+        "replay_md5": replay_md5,
+        "played_at": played_at,
         "player": r.player_name,
         "map": f"{bm.title} [{bm.version}]",
         "mods": {"DT": r.double_time, "HT": r.half_time, "HD": r.hidden,
