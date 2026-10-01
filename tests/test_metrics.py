@@ -54,3 +54,64 @@ def test_aim_velocity_ignores_export_artefacts():
     out = aim_velocity(pairs)
     assert out["n"] == 20
     assert abs(out["slope_r_per_px_ms"]) < 1e-9
+
+
+# ------------------------------------------------------------- time base ----
+
+def _analyze(name, tmp_path):
+    return analyze(f"tests/fixtures/{name}.osr", f"tests/fixtures/{name}.osu",
+                   tag=name, outdir=str(tmp_path), console=False,
+                   write_objects=False)
+
+
+def test_time_base_is_the_identity_when_the_mod_flag_holds(tmp_path):
+    m = _analyze("aaaaa", tmp_path)
+    tb = m["time_base"]
+    assert tb["overridden"] is False
+    assert tb["rows_to_player"] == pytest.approx(1.0)
+    assert tb["windows_ms_player"] == m["windows_ms"]
+    assert tb["note"] is None
+
+
+def test_time_base_reports_both_clocks_when_calibration_overrides(tmp_path):
+    """Domino claims DT but stores frames in map time: 29 ms here is 19 ms felt."""
+    m = _analyze("domino", tmp_path)
+    tb = m["time_base"]
+    assert m["trust"]["scale_overridden"] is True
+    assert tb["overridden"] is True
+    assert tb["rows_scale"] == pytest.approx(1.0)
+    assert tb["rows_to_player"] == pytest.approx(2 / 3, abs=1e-6)
+    assert tb["windows_ms_player"]["300"] == pytest.approx(
+        m["windows_ms"]["300"] * 2 / 3, rel=1e-9)
+    assert tb["windows_ms_player"]["300"] < m["windows_ms"]["300"]
+    assert "DT" in tb["note"] and "real play" in tb["note"]
+
+
+def test_the_player_windows_are_the_windows_of_the_claimed_mod(tmp_path):
+    """The invariant that makes the second base meaningful, not decorative."""
+    from osu_critique.io.beatmap import load_beatmap, mod_scale, od_windows
+    import slider
+    m = _analyze("domino", tmp_path)
+    r = slider.Replay.from_path("tests/fixtures/domino.osr", retrieve_beatmap=False)
+    od = load_beatmap("tests/fixtures/domino.osu").od()
+    player = od_windows(od, mod_scale(r))
+    for i, k in enumerate(("300", "100", "50")):
+        assert m["time_base"]["windows_ms_player"][k] == pytest.approx(player[i], rel=1e-9)
+
+
+def test_both_readers_label_the_base(tmp_path, capsys):
+    from osu_critique.cli import render_report
+    from osu_critique.report import console_summary
+    m = _analyze("domino", tmp_path)
+    console_summary(m)
+    out = capsys.readouterr().out
+    assert "time base:" in out
+    assert "frames' base" in out and "the player felt" in out
+    assert "(player time)" in out                  # the profile line is labelled
+    text = render_report(m)
+    assert "TIME BASE:" in text and "(player time)" in text
+    # a play whose flag holds says none of this
+    ok = _analyze("aaaaa", tmp_path)
+    console_summary(ok)
+    assert "time base:" not in capsys.readouterr().out
+    assert "TIME BASE" not in render_report(ok)

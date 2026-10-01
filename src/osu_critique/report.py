@@ -90,6 +90,23 @@ def build_trust(detected, recorded, scale, mod_scale_value, judged,
     }
 
 
+def _time_base_note(scale, mod_scale_value, factor, w300):
+    """Say, in words, which clock the milliseconds in this file are in.
+
+    Some exports store frames in one clock while the mod flag claims another
+    (a DT replay whose frames are in map time), so the same hit window is two
+    different numbers depending on who is reading it. Everything in the metrics
+    is the *frames'* base unless it says "player"; only the map profile converts.
+    """
+    if abs(factor - 1.0) < 1e-9:
+        return None
+    claim = "DT" if mod_scale_value < scale else "HT"
+    return (f"the replay claims {claim} but its frames are in another clock: every "
+            f"ms here is the frames' base unless it says 'player'. The 300-window "
+            f"is {w300:.0f} ms of frames = {w300 * factor:.0f} ms of real play "
+            f"(x{factor:.3f}); metrics.profile is already player time.")
+
+
 MAX_CURSOR_SPEED = 50.0     # px/ms; above this it is an export artefact, not a flick
 
 
@@ -239,10 +256,13 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     patterns = pattern_stats(results)
     # rows are in calibrated time; the player's time base is the mod scale, so
     # when calibration overrides a mod flag every ms in the profile is converted
+    # rows are in the frames' clock; the player's clock is the mod scale. They
+    # differ exactly when calibration overrode a misleading mod flag, and every
+    # ms in this file is the former unless a consumer says otherwise.
+    time_factor = (mod_scale(r) / scale) if scale else 1.0
     profile = build_profile(results, bm, scale,
                             windows={"300": w300, "100": w100, "50": w50},
-                            radius=radius,
-                            time_factor=mod_scale(r) / scale if scale else 1.0)
+                            radius=radius, time_factor=time_factor)
     regions = region_stats(results)
     quarters = quarter_stats(results)
 
@@ -277,6 +297,16 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         "mod_string": mod_string(r),
         "time_scale": scale,
         "windows_ms": {"300": w300, "100": w100, "50": w50},
+        "time_base": {
+            "overridden": bool(scale != mod_scale(r)),
+            "rows_scale": scale,
+            "player_scale": mod_scale(r),
+            "rows_to_player": time_factor,
+            "windows_ms_player": {"300": w300 * time_factor,
+                                  "100": w100 * time_factor,
+                                  "50": w50 * time_factor},
+            "note": _time_base_note(scale, mod_scale(r), time_factor, w300),
+        },
         "difficulty": {"CS": cs_for(bm, r),
                        "AR": bm.ar(easy=r.easy, hard_rock=r.hard_rock),
                        "OD": od, "HP": bm.hp()},
@@ -380,6 +410,9 @@ def console_summary(metrics, out_json=None, out_objects=None):
         print(f"  ! distrust: judgement differs from the game on {tr['abs_delta_total']} "
               f"of {tr['judged']} objects (miss {tr['count_deltas']['miss']:+d}) - "
               f"per-pattern numbers are approximate")
+    tb = metrics.get("time_base") or {}
+    if tb.get("note"):
+        print(f"  ! time base: {tb['note']}")
     print(f"whiffed presses (hit nothing): {metrics['whiffed_presses']}")
     w = metrics.get("whiffs") or {}
     if w.get("n"):
@@ -391,9 +424,14 @@ def console_summary(metrics, out_json=None, out_objects=None):
         print(f"UR={ur:.1f}  mean_err={h['mean']:+.1f}ms  std={h['std']:.1f}ms  early={metrics['early_pct']:.0%}")
         ur_pct = metrics.get("ur_pct_of_300_window")
         if ur_pct is not None:
+            base = ""
+            tb = metrics.get("time_base") or {}
+            if tb.get("overridden"):
+                base = (f" [frames' base; the player felt "
+                        f"{tb['windows_ms_player']['300']:.0f}ms]")
             print(f"  timing std is {ur_pct:.0f}% of the 300-window "
                   f"({metrics['windows_ms']['300']:.0f}ms at OD "
-                  f"{metrics['difficulty']['OD']:.1f})")
+                  f"{metrics['difficulty']['OD']:.1f})" + base)
     aim = metrics["aim_px"]
     if aim["mean"] is not None:
         print(f"aim: mean={aim['mean']:.1f}px ({aim['mean_norm']:.2f}r) p90={aim['p90']:.1f}px")
@@ -441,8 +479,9 @@ def console_summary(metrics, out_json=None, out_objects=None):
     if rate.get("note_gap_ms", {}).get("p10"):
         bpm, gap = rate["effective_bpm"], rate["note_gap_ms"]
         win = rate.get("gap_vs_300_window") or {}
+        player = " (player time)" if tb.get("overridden") else ""
         print(f"profile: {bpm['median']:.0f} bpm effective ({bpm['min']:.0f}-{bpm['max']:.0f}) | real note gap "
-              f"p10 {gap['p10']:.0f} / median {gap['median']:.0f} / p90 {gap['p90']:.0f} ms"
+              f"p10 {gap['p10']:.0f} / median {gap['median']:.0f} / p90 {gap['p90']:.0f} ms{player}"
               + (f" | tightest gaps {win['p10_ratio']:.1f}x the 300-window" if win.get("p10_ratio") else ""))
     comp = [f for f in prof.get("composition", []) if f["reported"]]
     if comp:

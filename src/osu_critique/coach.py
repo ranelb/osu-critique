@@ -28,6 +28,13 @@ Critique framework - use the numbers, don't invent others:
   is large relative to judged, say that in your first line and mark every
   per-pattern and miss number as approximate; trust.notes says why (failed play,
   map_version_mismatch, relax). Never present untrusted numbers as fact.
+- Time base first: metrics.time_base says whether the replay's mod flag and its
+  frames disagree (overridden). Every ms in the metrics is the *frames'* base
+  unless it says "player"; time_base.windows_ms_player is the same windows in the
+  clock the player actually felt, and metrics.profile is already player time.
+  Never compare an ms from one base with one from the other: when
+  rows_to_player != 1 the same hit window is two different numbers, and the quote
+  must say which.
 - Timing: mean hit error (early/late sign), std, UR = std*10, and
   ur_pct_of_300_window - the spread as a share of the OD 300-window
   (windows_ms). Under ~50% is tight for a human; near 100% means the spread

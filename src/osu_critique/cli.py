@@ -360,6 +360,9 @@ def render_report(metrics, baseline=None):
              f"{metrics['counts_recorded']['100']}x100 / "
              f"{metrics['counts_recorded']['50']}x50 / "
              f"{metrics['counts_recorded']['miss']}x miss | max combo {metrics['max_combo']}"]
+    tb = metrics.get("time_base") or {}
+    if tb.get("note"):
+        lines.append(f"- TIME BASE: {tb['note']}")
     tr = metrics.get("trust") or {}
     if tr and not tr.get("trustworthy", True):
         lines.append(f"- TRUST: judgement differs from the game on {tr['abs_delta_total']} "
@@ -376,10 +379,11 @@ def render_report(metrics, baseline=None):
         bpm, gap = rate.get("effective_bpm") or {}, rate.get("note_gap_ms") or {}
         win = rate.get("gap_vs_300_window") or {}
         if bpm.get("median"):
+            player = " (player time)" if tb.get("overridden") else ""
             lines.append(f"- rate: {bpm['median']:.0f} bpm effective ({bpm['min']:.0f}-{bpm['max']:.0f}), "
                          f"note gaps p10 {gap['p10']:.0f} / median {gap['median']:.0f} / p90 {gap['p90']:.0f} ms"
                          + (f" - the tightest notes sit {win['p10_ratio']:.1f}x the 300-window"
-                            if win.get("p10_ratio") else ""))
+                            if win.get("p10_ratio") else "") + player)
         comp = [f for f in prof.get("composition", []) if f["reported"]]
         for f in sorted(comp, key=lambda f: -f["n"])[:8]:
             lines.append(f"- {f['family']}: {f['share'] * 100:.1f}% of objects (n={f['n']}), "
