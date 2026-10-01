@@ -30,6 +30,8 @@ from __future__ import annotations
 import collections
 import statistics as st
 
+from .streams import find_runs
+
 def hit_error(x):
     """Signed hit error in ms, from a pipeline row or a written record."""
     return x["error_ms"] if "error_ms" in x else x.get("error")
@@ -236,33 +238,23 @@ def _chains(results, min_notes=4, max_gap_ms=250.0, tolerance=0.35):
 
     Rhythm continuity (consecutive gaps within +/-``tolerance``) instead of the
     old ">=4 circles with <=4r spacing": that rule called 1/2 filler runs
-    "streams" while ignoring slider-interleaved speed material entirely.
+    "streams" while ignoring slider-interleaved speed material. The primitive
+    lives in ``metrics.streams.find_runs`` (which the stream detector also uses,
+    with its velocity term on) so the two views cannot drift apart.
     """
-    chains, run = [], []
-    for x, prev, gap, _b in _rows(results):
-        if prev is None or gap is None or gap <= 0:
-            continue
-        fast = gap <= max_gap_ms
-        steady = (not run) or abs(gap - run[-1][2]) <= tolerance * max(gap, run[-1][2])
-        if fast and steady:
-            run.append((x, prev, gap))
-        else:
-            if len(run) >= min_notes:
-                chains.append(run)
-            run = [(x, prev, gap)] if fast else []
-    if len(run) >= min_notes:
-        chains.append(run)
+    chains = [list(r) for r in find_runs(results, min_notes, max_gap_ms, tolerance,
+                                         velocity_tolerance=None, break_kinds=())]
 
     by_pos = collections.defaultdict(lambda: [0, 0])
     worst = []
     for c in chains:
-        for i, (x, _p, _g) in enumerate(c):
+        for i, (x, _p, _g, _v) in enumerate(c):
             key = "1-4" if i < 4 else ("5-8" if i < 8 else ("9-12" if i < 12 else "13+"))
             by_pos[key][0] += 1
             by_pos[key][1] += 1 if x["result"] != "300" else 0
-        nb = sum(1 for x, _p, _g in c if x["result"] != "300")
+        nb = sum(1 for x, _p, _g, _v in c if x["result"] != "300")
         worst.append({"t_start": c[0][0]["t"], "notes": len(c), "non300": nb,
-                      "gap_ms": st.median([g for _x, _p, g in c]),
+                      "gap_ms": st.median([g for _x, _p, g, _v in c]),
                       "family": family(c[0][0])})
     return {
         "n_chains": len(chains),

@@ -88,9 +88,14 @@ Critique framework - use the numbers, don't invent others:
   and context (what preceded each object). Quote the real ms gap next to any
   rhythm claim: "1/4 snap" means nothing without it, and "1/8" in one map's
   map-time is another map's 1/2.
-- Streams: per-segment std (ms) and alternation ratio. std > 30ms or alternation
-  < 90% = rhythm collapse under sustained tapping; long segments failing while
-  short ones hold = a sustain problem.
+- Streams (metrics.streams): runs of sustained notes found by *rhythm* (steady
+  gap, <= 250 ms) and *velocity continuity* (required speed spacing/dt steady
+  within 40%) - any kind, sliders included - not by spacing, so wide but tight
+  patterns count and slow small-spacing filler does not. Each segment reports what
+  the material was (gap_ms, notes_per_s, velocity_r_ms, kinds) plus std (ms) and
+  alternation. std > 30 ms or alternation < 90% = rhythm collapse under sustained
+  tapping; long segments failing while short ones hold = a sustain problem. Quote
+  the rate and the material, not just "streams".
 - Quarters: misses clustering in one quarter means section difficulty; std
   degrading toward Q4 looks like fatigue, but a map that ramps in difficulty
   looks identical - check the strain fields before blaming fatigue.

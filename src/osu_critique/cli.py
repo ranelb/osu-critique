@@ -521,14 +521,22 @@ def render_report(metrics, baseline=None):
             lines += ["", "**No pattern stands out as a weakness — clean run.**"]
 
     segs = metrics["streams"]["segments"]
+    st_sum = metrics["streams"]
     if segs:
-        lines += ["", "## Streams", f"- {len(segs)} segments, "
-                                    f"{sum(s['n'] for s in segs)} objects, "
-                                    f"{sum(s['miss'] for s in segs)} misses"]
+        lines += ["", "## Streams",
+                  f"- {len(segs)} runs of sustained notes, {st_sum['notes']} notes "
+                  f"({st_sum['misses']} miss); median run {st_sum['gap_ms_median']:.0f} ms "
+                  f"= {st_sum['notes_per_s_p50']:.1f} notes/s at "
+                  f"{st_sum['velocity_r_ms_p50']:.3f} r/ms, kinds "
+                  + ", ".join(f"{k} {v}" for k, v in (st_sum["kinds"] or {}).items())]
         for s in sorted(segs, key=lambda s: -(s["std_err"] or 0))[:3]:
             lines.append(f"- t={s['t_start'] / 1000:.0f}s-{s['t_end'] / 1000:.0f}s "
                          f"n={s['n']} miss={s['miss']} std={s['std_err'] and round(s['std_err'], 1)}ms "
-                         f"alt={s['alt_ratio'] * 100:.0f}%")
+                         f"alt={s['alt_ratio'] * 100:.0f}% "
+                         f"({s['gap_ms'] and round(s['gap_ms'])} ms, "
+                         f"{s['notes_per_s'] and round(s['notes_per_s'], 1)} n/s, "
+                         + "+".join(f"{k[0]}{v}" for k, v in (s.get("kinds") or {}).items())
+                         + ")")
 
     tap = metrics["tapping"]
     lines += ["", "## Tapping",

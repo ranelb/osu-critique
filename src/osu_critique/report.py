@@ -28,7 +28,7 @@ from .metrics.profile import build_profile, primary_target
 from .metrics.sliders import annotate as annotate_sliders
 from .metrics.structure import SCHEMA_VERSION, annotate, object_records
 from .metrics.sections import quarter_stats, region_stats
-from .metrics.streams import stream_stats
+from .metrics.streams import stream_stats, summarise as summarise_streams
 from .metrics.tapping import key_usage, tapping_stats
 from .config import outdir as _default_outdir
 
@@ -352,7 +352,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         "quarters": quarters,
         "sliders": slider_block,
         "spinners": {"n": sum(1 for x in results if x["kind"] == "Spinner")},
-        "streams": {"n_segments": len(segs), "segments": segs},
+        "streams": {"n_segments": len(segs), "segments": segs,
+                    **summarise_streams(segs)},
         "tapping": tap,
     }
 
@@ -468,12 +469,19 @@ def console_summary(metrics, out_json=None, out_objects=None):
         print(f"  Q{k + 1} n={q['n']:3d} miss={q['miss']:3d} "
               f"err={q['mean_err'] and round(q['mean_err'], 1)}ms std={q['std_err'] and round(q['std_err'], 1)}ms")
     print(f"keys: {key_usage}  |  same-key adjacencies: {tap['same_key_pct']:.0%} (alt_ratio {tap['alt_ratio']:.0%})")
-    print(f"streams: {len(stream_stats)} segments, worst 3 by std:")
+    st_sum = metrics["streams"]
+    print(f"streams: {len(stream_stats)} runs, {st_sum['notes']} notes, "
+          f"{st_sum['misses']} misses"
+          + (f" | gap {st_sum['gap_ms_median']:.0f}ms, {st_sum['notes_per_s_p50']:.1f} n/s"
+             f" at {st_sum['velocity_r_ms_p50']:.3f} r/ms (median run)"
+             if st_sum["gap_ms_median"] else ""))
     for s in sorted(stream_stats, key=lambda s: -(s["std_err"] or 0))[:3]:
+        kinds = "+".join(f"{k[0]}{v}" for k, v in (s.get("kinds") or {}).items())
         print(f"  t={s['t_start']:.0f}-{s['t_end']:.0f}ms n={s['n']} miss={s['miss']} "
-              f"err={s['mean_err'] and round(s['mean_err'], 1)}ms "
               f"std={s['std_err'] and round(s['std_err'], 1)}ms "
-              f"alt={s['alt_ratio']:.0%} {s['key_pattern'][:30]}")
+              f"alt={s['alt_ratio']:.0%} {kinds} "
+              f"{s['gap_ms'] and round(s['gap_ms'])}ms "
+              f"{s['notes_per_s'] and round(s['notes_per_s'], 1)}n/s")
     prof = metrics.get("profile") or {}
     rate = prof.get("rate") or {}
     if rate.get("note_gap_ms", {}).get("p10"):
