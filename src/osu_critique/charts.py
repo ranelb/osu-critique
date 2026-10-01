@@ -5,6 +5,8 @@ import os
 
 import numpy as np
 
+from .io.replay import cursor_at
+
 
 def render_charts(results, errs, aims, w300, w100, w50, ur, radius,
                   tag, outdir):
@@ -179,5 +181,75 @@ def render_aim_charts(rows, radius, window_ms, tag, outdir, title=""):
     plt.tight_layout(rect=(0, 0, 1, 0.965))
     path = os.path.join(outdir, f"{tag}_aim.png")
     plt.savefig(path, dpi=105)
+    plt.close()
+    return path
+
+
+def render_worst_windows(rows, objs, frames, times, radius, tag, outdir,
+                         title="", n_windows=3, min_gap_r=4.0):
+    """Write ``{outdir}/{tag}_windows.png``: the worst arrival stretches, drawn.
+
+    Ranks 4-note windows (with real spacing) by their mean distance at the note
+    and draws the ``n_windows`` worst, kept apart: the object polyline, the cursor
+    path coloured by time, and the cursor position when each note was due.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import statistics as st
+
+    by_i = {r["i"]: r for r in rows}
+    scored = []
+    for i in range(1, len(rows) - 3):
+        win = rows[i:i + 4]
+        if any(r["gap_r"] is None or r["gap_r"] < min_gap_r for r in win):
+            continue
+        scored.append((st.mean([r["d"] for r in win]), i))
+    scored.sort(reverse=True)
+    picks, used = [], []
+    for score, i in scored:
+        if any(abs(i - j) < 12 for j in used):
+            continue
+        picks.append((score, i))
+        used.append(i)
+        if len(picks) == n_windows:
+            break
+    if not picks:
+        return None
+
+    fig, axes = plt.subplots(1, len(picks), figsize=(7.6 * len(picks), 7.4),
+                             squeeze=False)
+    for axx, (score, i) in zip(axes[0], picks):
+        win = rows[i:i + 4]
+        lo, hi = max(0, win[0]["i"] - 2), win[-1]["i"] + 2
+        seq = [by_i[k] for k in range(lo, hi + 1) if k in by_i]
+        ts = np.arange(seq[0]["t"] - 80, seq[-1]["t"] + 160, 4)
+        pts = np.array([cursor_at(frames, times, t) for t in ts])
+        axx.plot(pts[:, 0], pts[:, 1], "-", color="#c8c8c8", lw=1, zorder=1)
+        axx.scatter(pts[:, 0], pts[:, 1], c=ts, cmap="viridis", s=7, zorder=2)
+        axx.plot([o["x"] for o in seq], [o["y"] for o in seq], "--",
+                 color="#8888ff", lw=1.2, zorder=3)
+        for o in seq:
+            col = ("#e02020" if o["d"] > 1
+                   else ("#e8c000" if o["d"] > 0.7 else "#39b54a"))
+            axx.add_patch(plt.Circle((o["x"], o["y"]), radius, color=col,
+                                     alpha=0.45, zorder=4))
+            axx.text(o["x"] + radius * 0.85, o["y"] - radius * 0.85, str(o["i"]),
+                     fontsize=9, zorder=6)
+            c = cursor_at(frames, times, o["t"])
+            axx.plot([c[0]], [c[1]], "*", ms=13, color=col, zorder=8)
+            if o["d"] > 1:
+                axx.plot([c[0], o["x"]], [c[1], o["y"]], "-", color="#e02020",
+                         lw=1.5, zorder=7)
+        axx.set_xlim(-14, 526); axx.set_ylim(398, -14); axx.set_aspect("equal")
+        axx.set_xticks([]); axx.set_yticks([])
+        axx.set_title(f"t={win[0]['t'] / 1000:.1f}s  mean {score:.2f}r at the note\n"
+                      f"ring colour = distance when the note was due, star = cursor then",
+                      fontsize=10.5)
+    plt.suptitle(f"{title} - cursor path (viridis = time) against the pattern, "
+                 f"worst stretches", fontsize=12)
+    plt.tight_layout(rect=(0, 0, 1, 0.93))
+    path = os.path.join(outdir, f"{tag}_windows.png")
+    plt.savefig(path, dpi=110)
     plt.close()
     return path

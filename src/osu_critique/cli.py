@@ -31,7 +31,8 @@ def cmd_analyze(args):
     metrics = analyze(args.replay, args.map, tag=args.tag or "run",
                       do_charts=args.charts, outdir=args.outdir,
                       write_objects=not args.no_objects,
-                      write_aim=not args.no_aim)
+                      write_aim=not args.no_aim,
+                      write_autopsy=not args.no_autopsy)
     console_summary(metrics)
     return 0
 
@@ -52,7 +53,8 @@ def cmd_batch(args):
         metrics = analyze(rp, mp, tag=tag, do_charts=args.charts,
                           outdir=args.outdir, console=False,
                           write_objects=not args.no_objects,
-                          write_aim=not args.no_aim)
+                          write_aim=not args.no_aim,
+                          write_autopsy=not args.no_autopsy)
         console_summary(metrics)
         rows.append(metrics)
         print()
@@ -400,7 +402,7 @@ def render_report(metrics, baseline=None):
                      f"{es['short_pct']:.0f}% of arrivals stopped short, "
                      f"{es['past_pct']:.0f}% went past")
         if am.get("ceiling"):
-            trend = "  ".join(f"{b['v_lo']:.1f}-{b['v_hi']:.0f}:{b['mean_r']:.2f}r"
+            trend = "  ".join(f"{b['v_lo']:.1f}-{b['v_hi']:.1f}:{b['mean_r']:.2f}r"
                               for b in am["ceiling"])
             lines.append(f"- aim ceiling (required px/ms -> distance at the note): {trend}")
     avs = metrics.get("aim_vs_speed") or {}
@@ -409,6 +411,53 @@ def render_report(metrics, baseline=None):
         trend = "  ".join(f"{b['mean_aim_r']:.2f}r" for b in bins if b["mean_aim_r"] is not None)
         lines.append(f"- aim error vs cursor speed: {avs['slope_r_per_px_ms']:+.3f}r per px/ms "
                      f"(r2 {avs['r2']:.2f}); slowest->fastest quartile {trend}")
+
+    au = metrics.get("autopsy") or {}
+    classes = [c for c in (au.get("shapes") or {}).get("classes", []) if c["reported"]]
+    if classes or au.get("arrival_margin_r") or (au.get("misses") or {}).get("n"):
+        lines += ["", "## Miss autopsy"]
+        if classes:
+            table = "  ".join(
+                f"`{c['class']}` {c['non300_rate'] * 100:.1f}% off 300 "
+                f"(n={c['n']}, {c['share'] * 100:.0f}% of the map"
+                + (f", {c['mean_d_r']:.2f}r at the note" if c["mean_d_r"] is not None else "")
+                + ")" for c in classes)
+            lines.append(f"- shapes (5-note windows): {table}")
+        if au.get("arrival_margin_r"):
+            m = au["arrival_margin_r"]
+            lines.append(f"- arrival margin at press (n={m['n']}): median {m['median']:.2f}r, "
+                         f"p90 {m['p90']:.2f}r, p99 {m['p99']:.2f}r, max {m['max']:.2f}r — "
+                         f"{m['beyond_rim_pct']:.1f}% pressed beyond 0.8r")
+        if au.get("press_vs_arrival_ms"):
+            p = au["press_vs_arrival_ms"]
+            lines.append(f"- press vs arrival (n={p['n']}): median {p['median']:+.0f}ms "
+                         f"(p10 {p['p10']:+.0f} / p90 {p['p90']:+.0f}); "
+                         f"{p['pressed_before_arrival_pct']:.0f}% of presses land before the "
+                         f"cursor's closest approach")
+        if au.get("legs"):
+            g = au["legs"]
+            h = g["heading_err_deg"]
+            line = (f"- legs (n={g['n']}): heading error median {h['median']:.0f}deg "
+                    f"(p90 {h['p90']:.0f}deg, max {h['max']:.0f}deg)")
+            if g.get("path_efficiency"):
+                e = g["path_efficiency"]
+                line += (f"; path efficiency median {e['median']:.2f} "
+                         f"(<0.7 in {e['below_70pct_pct']:.1f}% of legs)")
+            lines.append(line)
+        if au.get("stutter"):
+            s = au["stutter"]
+            lines.append(f"- mid-travel presses: {s['n']} of {s['presses']} "
+                         f"({s['pct']:.1f}%) — pressed >{s['min_early_ms']:.0f}ms early while "
+                         f"the cursor was still >{s['threshold_r']:.1f}r away")
+        if (au.get("misses") or {}).get("n"):
+            lines.append(f"- misses ({au['misses']['n']}, worst first): " + " | ".join(
+                f"#{m['i']} {m['kind'].lower()} at {m['t'] / 1000:.1f}s "
+                + (f"{m['d_r']:.2f}r at the note, " if m["d_r"] is not None else "")
+                + (f"press {m['press_ms']:+.0f}ms, " if m["press_ms"] is not None else "no press, ")
+                + (f"aim {m['aim_at_press_r']:.2f}r, " if m["aim_at_press_r"] is not None else "")
+                + (f"gap {m['gap_r']:.1f}r, " if m["gap_r"] is not None else "")
+                + (f"turn {m['turn_deg']:.0f}deg" if m["turn_deg"] is not None else "")
+                for m in au["misses"]["rows"][:5]))
     lines.append("")
 
     pat = metrics["patterns"]
@@ -492,6 +541,8 @@ def main(argv=None):
                    help="skip out/<tag>_objects.json (the per-object records)")
     p.add_argument("--no-aim", action="store_true",
                    help="skip the cursor-arrival aim block (metrics.aim_mode)")
+    p.add_argument("--no-autopsy", action="store_true",
+                   help="skip the miss-autopsy block (metrics.autopsy)")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_analyze)
 
@@ -502,6 +553,7 @@ def main(argv=None):
     p.add_argument("--charts", action="store_true")
     p.add_argument("--no-objects", action="store_true")
     p.add_argument("--no-aim", action="store_true")
+    p.add_argument("--no-autopsy", action="store_true")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_batch)
 

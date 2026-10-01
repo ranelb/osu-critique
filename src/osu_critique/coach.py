@@ -49,12 +49,24 @@ Critique framework - use the numbers, don't invent others:
   with nothing in the window; slider_head is a limit of the head-only slider
   model. Do not call whiffs "rushing" without checking which cause dominates.
 - Patterns: the spacing buckets (dense/stream/jump/bigjump) are coarse - one
-  bucket mixes a 1/2 jump with a 1/6 one. When the per-object records
-  (out/<tag>_objects.json: snap in quarter-beats, spacing_r, angle_deg,
-  strain_aim, strain_speed) are at hand, prefer buckets built from those, and
-  require at least ~20 objects in a bucket before calling it a weakness. Strain
-  deciles ("what happens on the hardest 10% of objects") are the
+  bucket mixes a 1/2 jump with a 1/6 one. Prefer the shape classes
+  (metrics.autopsy.shapes) and the per-family composition: they are built from
+  the per-object records (out/<tag>_objects.json: snap in quarter-beats,
+  spacing_r, angle_deg, strain_aim, strain_speed) and require >= 20 objects in a
+  bucket before calling it a weakness (each entry carries n and reported).
+  Strain deciles ("what happens on the hardest 10% of objects") are the
   difficulty-normalised form.
+- Miss autopsy (metrics["autopsy"]) answers "why *these* notes": shapes (5-note
+  window classes - near-reversal chain / cornered (box) / flow / mixed) with
+  n-gated off-300 rates and the arrival distance per class; arrival_margin_r
+  (the press-time distance from the centre - the "living on the rim" tail);
+  press_vs_arrival_ms (press offset minus closest-approach offset; negative =
+  the button went down while the cursor was still travelling); legs (heading
+  error between consecutive notes and path efficiency - both clean means the
+  problem is timing or speed, not reading or path-finding); stutter (presses
+  made mid-travel); and misses (each miss with its nearest press, its distance
+  at the note instant and the local geometry). Use the shape contrast: a
+  weakness in one class and not another names what to practise.
 - Map profile (metrics["profile"]) describes what the map asked for, not how you
   played: rate (effective BPM, real note gaps in ms, and the tightest gap as a
   multiple of the 300-window), composition (families named kind + divisor +
@@ -235,6 +247,8 @@ def _run_row(name, m):
     flag = "MISMATCH" if m.get("map_version_mismatch") else (
         "FAILED" if m.get("failed_play") else "")
     am = (m.get("aim_mode") or {}).get("distance_at_note_r") or {}
+    classes = ((m.get("autopsy") or {}).get("shapes") or {}).get("classes") or []
+    rev = next((c for c in classes if c["class"] == "near-reversal chain"), None)
     return {
         "map": name,
         "acc_pct": round(100 * m["accuracy"], 1),
@@ -242,6 +256,8 @@ def _run_row(name, m):
         "mean_ms": round(h.get("mean", 0.0), 1),
         "aim_r": round(m["aim_px"].get("mean_norm", 0.0), 2),
         "arrive_r": (round(am["mean"], 2) if am.get("mean") is not None else "-"),
+        "reversal_pct": (round(100 * rev["non300_rate"], 1)
+                         if rev and rev["non300_rate"] is not None else "-"),
         "miss": m["counts_recorded"]["miss"],
         "whiffs": m["whiffed_presses"],
         "dense_miss_pct": pat("dense"),
@@ -260,8 +276,8 @@ def build_multi_user_message(rows, profile=None):
     per-run table instead of N full JSON blobs so any number of runs fits."""
     lines = ["## Runs — %d plays (compact per-run stats)" % len(rows)]
     lines.append("| map | acc | UR | mean_ms | aim_r | arrive_r | miss | whiffs | "
-                 "dense% | stream% | jump% | bigjump% | Q1-Q4 miss | flag |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+                 "dense% | stream% | jump% | bigjump% | reversal% | Q1-Q4 miss | flag |")
+    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
     for name, m in sorted(rows, key=lambda r: r[1]["accuracy"]):
         r = _run_row(name, m)
         q = ",".join(str(x) for x in r["quarter_miss"]) if r["quarter_miss"] else "-"
@@ -270,7 +286,7 @@ def build_multi_user_message(rows, profile=None):
             f"| {r['aim_r']:.2f} | {r['arrive_r']} | {r['miss']} | {r['whiffs']} "
             f"| {r['dense_miss_pct']} "
             f"| {r['stream_miss_pct']} | {r['jump_miss_pct']} | {r['bigjump_miss_pct']} "
-            f"| {q} | {r['flag']} |")
+            f"| {r['reversal_pct']} | {q} | {r['flag']} |")
     lines.append("")
     lines.append("Analyze the player ACROSS these runs: per-skill verdicts, "
                  "recurring weaknesses (patterns, quarters, whiffs, timing bias), "

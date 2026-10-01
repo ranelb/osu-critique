@@ -22,6 +22,7 @@ from .io.beatmap import (build_objects, circle_radius, cs_for, load_beatmap,
 from .io.replay import build_frames, find_presses, load_replay
 from .metrics.assignment import judge
 from .metrics.aim import build_aim
+from .metrics.autopsy import build as build_autopsy
 from .metrics.patterns import add_pattern_labels, pattern_stats
 from .metrics.profile import build_profile, primary_target
 from .metrics.structure import SCHEMA_VERSION, annotate, object_records
@@ -134,7 +135,7 @@ def aim_velocity(pairs, min_n=8):
 
 def analyze(replay_path, map_path, tag="run", do_charts=False,
             outdir=None, hit_tol=1.0, console=True, write_objects=True,
-            write_aim=True):
+            write_aim=True, write_autopsy=True):
     """Analyze one replay against its map; returns the metrics dict.
 
     Writes ``{outdir}/{tag}_metrics.json`` and, if ``do_charts``, PNG charts
@@ -249,6 +250,10 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     aim_block, aim_rows = (build_aim(objs, frames, times, radius,
                                      is_relax=is_relax)
                            if write_aim else (None, None))
+    autopsy_block = (build_autopsy(objs, results, frames, times, radius,
+                                   aim_rows=aim_rows, presses=presses, w50=w50,
+                                   is_relax=is_relax)
+                     if write_autopsy else None)
 
     metrics = {
         "schema_version": SCHEMA_VERSION,
@@ -271,6 +276,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         "trust": trust,
         "profile": profile,
         "aim_mode": aim_block,
+        "autopsy": autopsy_block,
         "map_version_mismatch": map_version_mismatch,
         "failed_play": failed_play,
         "n_objects_map": n_map_objects,
@@ -336,6 +342,9 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         from .charts import render_aim_charts
         render_aim_charts(aim_rows, radius, aim_block["window_ms"], tag, outdir,
                           title=f"{metrics['map']} [{metrics['mod_string']}]")
+        from .charts import render_worst_windows
+        render_worst_windows(aim_rows, objs, frames, times, radius, tag, outdir,
+                             title=f"{metrics['map']} [{metrics['mod_string']}]")
 
     if console:
         console_summary(metrics, out_json, out_objects)
@@ -390,8 +399,13 @@ def console_summary(metrics, out_json=None, out_objects=None):
               f"peak {pk['median']:+.0f}ms | reached not on time {rn['pct']:.0f}%")
         if am.get("ceiling"):
             print("  ceiling (px/ms -> r at the note): "
-                  + "  ".join(f"{b['v_lo']:.1f}-{b['v_hi']:.0f} {b['mean_r']:.2f}"
+                  + "  ".join(f"{b['v_lo']:.1f}-{b['v_hi']:.1f} {b['mean_r']:.2f}"
                               for b in am["ceiling"]))
+    au = metrics.get("autopsy") or {}
+    if au.get("shapes"):
+        from .metrics.autopsy import console_lines
+        for line in console_lines(au):
+            print(line)
     print("patterns:")
     for p, d in sorted(metrics["patterns"].items(), key=lambda kv: -kv[1]["n"]):
         print(f"  {p:8s} n={d['n']:4d} miss={d['miss']:3d} ({d['miss_rate']:.1%})  "
