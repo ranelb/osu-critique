@@ -8,11 +8,11 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.9.0.** Presses are resolved the way the game resolves them (in
+> **Status: 0.10.0.** Presses are resolved the way the game resolves them (in
 > press order), hit windows and geometry follow the mods, and every run states
 > how far its own judgement can be trusted. Counts match the game exactly on the
 > golden fixtures and land within a few objects on the real replays used as a
-> gate — see [Validation](#validation-and-trust). 126 tests, CI on Python
+> gate — see [Validation](#validation-and-trust). 136 tests, CI on Python
 > 3.11/3.12. Every run also profiles the map (effective BPM, families, stamina,
 > chains — docs/profile.md), re-derives the cursor's arrival from the frames
 > (docs/aim.md) and autopsies the misses themselves (docs/autopsy.md), so a Relax
@@ -97,6 +97,10 @@ Per-play metrics include:
   base that every ms is in, and the player's (`windows_ms_player`) — and the
   console summary and report say which is which, instead of quoting a silent
   1.5x
+- **Rolling baselines**: the report compares a run against your stored runs
+  (difficulty-normalised: UR as a share of the 300-window, misses per 100 objects,
+  aim at one required-speed band) and says "better than 87 % of 21 runs" instead
+  of only quoting a frozen threshold
 - **Cross-attempt structure** (`attempts`): metrics files grouped by beatmap md5
   and ordered by `played_at`, comparing family and shape rates across attempts —
   which weaknesses are worse than the play itself *every* time, and which just
@@ -141,7 +145,7 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.9.0
+osu-critique --version   # → osu-critique 0.10.0
 ```
 
 The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
@@ -150,12 +154,12 @@ archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.9.0-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.10.0-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.9.0/osu_critique-0.9.0-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.10.0/osu_critique-0.10.0-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 
@@ -208,6 +212,8 @@ osu-critique paths
 
 # deterministic critique from a metrics JSON (no LLM, no keys)
 # (a directory prints the cross-run aggregate and points at `attempts`)
+# --history <dir> adds the rolling comparison against your stored runs
+# (default: the configured output dir; --no-history turns it off)
 osu-critique report out/<tag>_metrics.json [--baseline out/<other>_metrics.json]
 
 # cross-attempt structure: the same map played several times, so a weakness can
@@ -390,7 +396,7 @@ count still drifts (a dropped slider end is the remaining suspect); those stay
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 126 tests, no network needed
+pytest -q                     # 136 tests, no network needed
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

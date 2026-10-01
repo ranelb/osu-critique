@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.9.0**, `main` = `81fef6c`, 126 tests green, CI on every push, tag →
+State: **0.10.0**, `main` = `81fef6c`, 136 tests green, CI on every push, tag →
 wheel + GitHub release (`.github/workflows/release.yml`).
 
 ## Shipped since the handoff
@@ -33,6 +33,10 @@ wheel + GitHub release (`.github/workflows/release.yml`).
   comparing family and shape rates across attempts into consistent weaknesses vs
   swing ("one-off") buckets. New metrics fields `played_at` / `replay_md5` make
   the grouping and de-duplication possible.
+- **0.10.0 — rolling baselines** (`report --history`, `metrics/baseline.py`): the
+  report now compares a run against the player's stored runs, difficulty-
+  normalised, instead of only quoting frozen thresholds. The `client.realm`
+  spike is answered (no per-object truth there) - see item 7.
 - **0.8.0 — two clocks, labelled** (`metrics.time_base`): when a replay's mod
   flag and its frames disagree, the player-time windows are reported beside the
   frames' ones and both readers say which base every ms is in.
@@ -86,7 +90,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 126 tests, no network
+.venv/bin/python -m pytest -q                       # 136 tests, no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
@@ -281,16 +285,52 @@ stream, the new one does not.
 
 ### 7. Optional / later
 
-- **`client.realm` ground truth**: lazer persists per-object hit events for local
-  scores. A 1-hour spike decides whether that removes the inverse-judgement
-  problem for lazer plays entirely (map-time/HR/relax quirks included). Do it
-  before investing more in the judge if it works.
-- **Percentile baselines**: replace any frozen baseline string with a rolling,
-  difficulty-normalised percentile over stored runs (needs item 4's storage).
-- **Family taxonomy depth**: only after items 1–3; taxonomy richness over an
-  unvalidated judge is confident nonsense.
+**a. `client.realm` ground truth — SPIKE DONE (0.10.0), and the answer is no.**
+The premise was "lazer persists per-object hit events for local scores". For this
+install it does not: `client.realm` (14 MB) contains **no `HitEvent` type at all**
+(no such string anywhere; the schema stores `BeatmapInfo`, `Ruleset`,
+`TotalScore`, `MaxCombo`, `Accuracy`, `Statistics`...). What it *does* hold, per
+local score, is a **category-count map** of lazer's own hit results — e.g.
+`{"none":0,"miss":12,"meh":0,"ok":44,"great":406,"large_tick_hit":15,
+"ignore_hit":147,"slider_tail_hit":146}` — plus the **SHA-256 of the exported
+`.osr`** (89 of the author's exports match verbatim), so a score *can* in
+principle be linked to a replay.
 
----
+Two things kill it as a practical source:
+
+1. **It is per category, not per object.** It could say "this play had 44 oks and
+   146 slider tails", never *which* object was misjudged, so it cannot validate a
+   per-object judgement — only the shape of the model.
+2. **Extracting it needs a Realm Core reader.** A strings-level harvest cannot pair
+   a stats map to its replay (verified: 32 candidate pairs, 0 matched their
+   replay's recorded counts — the file's string order is table-based, not
+   record-based), and the only Python package named `realm` on PyPI is an unrelated
+   project. A real reader means the .NET Realm SDK or hand-walking the file's
+   B-trees: a day's work for per-category data.
+
+**Decision: stop here.** The residual miss drift (a handful of plays, reported by
+`trust`) stays unexplained, and that is the honest state of the tool: the recorded
+counts are the only per-play truth available. One thing the spike *did* confirm in
+passing: `slider_tail_hit` exists as a first-class result type, separate from
+great/ok/meh/miss, which is consistent with the head-only model item 3 shipped
+(the .osr counts sum to the object count).
+
+**b. Percentile baselines — ✅ shipped in 0.10.0** (`report --history`,
+`metrics/baseline.py`). Three difficulty-normalised scalars with a rolling
+percentile over the stored runs: `timing_spread` (UR as a % of the 300-window —
+OD/DT-normalised), `miss_rate` (per 100 objects — length-normalised) and
+`aim_at_demand` (mean distance at the note, pooled over the 0.5-2.0 px/ms required
+speed band, so the demand is the same on every map). The report prints
+"No comparison: better than 87 % of 21 stored runs (median 63.6)" instead of only
+"UR 150 (good)", and says so plainly when there are fewer than 8 comparable runs.
+The frozen thresholds stay as the fallback (and as an absolute sanity check);
+`--no-history` turns the section off.
+
+**c. Family taxonomy depth — not now.** With the judge validated and the
+cross-attempt layer in place this is the last structural item, but nothing in the
+data currently demands more taxonomy: the shape classes (item 2) plus
+`kind_divisor_spacing` already separate the material, and every extra bucket
+shrinks the n behind each rate. Revisit with a question, not a hunch.
 
 ## Traps and environment quirks (learned the hard way)
 
