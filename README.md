@@ -8,13 +8,14 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.3.1.** Presses are resolved the way the game resolves them (in
+> **Status: 0.4.0.** Presses are resolved the way the game resolves them (in
 > press order), hit windows and geometry follow the mods, and every run states
 > how far its own judgement can be trusted. Counts match the game exactly on the
 > golden fixtures and land within a few objects on the real replays used as a
-> gate — see [Validation](#validation-and-trust). 56 tests, CI on Python
-> 3.11/3.12. Every run also profiles the map itself: effective BPM and
-> real note gaps, pattern families, stamina and chains (docs/profile.md).
+> gate — see [Validation](#validation-and-trust). 71 tests, CI on Python
+> 3.11/3.12. Every run also profiles the map (effective BPM, families, stamina,
+> chains — docs/profile.md) and re-derives the cursor's arrival from the frames
+> (docs/aim.md), so a Relax replay is analysable too.
 
 ## Table of Contents
 
@@ -76,6 +77,11 @@ Per-play metrics include:
 - **Timing**: mean hit error (early/late bias), std → UR, distribution percentiles
 - **Aim**: cursor distance from object centre at press time (in circle radii),
   per screen region
+- **Aim (cursor arrival)**: the cursor path itself — distance at the note
+  instant, closest approach within ±320 ms and when it peaks, the share reached
+  but not on time, the along/lateral split, and the ceiling curve (distance at
+  the note against the cursor speed the jump demands). Works with or without
+  Relax ([docs/aim.md](docs/aim.md))
 - **Patterns**: miss rates by spacing bucket — dense (≤2r), stream (2–4r),
   jump (4–7r), bigjump (>7r)
 - **Streams**: every stream segment, with per-segment timing (std/UR) and
@@ -111,7 +117,7 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.3.1
+osu-critique --version   # → osu-critique 0.4.0
 ```
 
 The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
@@ -120,12 +126,12 @@ archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.3.1-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.4.0-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.3.0/osu_critique-0.3.1-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.4.0/osu_critique-0.4.0-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 
@@ -167,7 +173,6 @@ output dir [out]:
 ```sh
 # analyze a single replay against its map
 osu-critique analyze <replay.osr> <map.osu> [tag] [--charts]
-
 # resolve replay->map pairs without analyzing (auto-detects all sources)
 osu-critique pair
 
@@ -203,7 +208,9 @@ Output: `out/<tag>_metrics.json`, `out/<tag>_objects.json` (one record per hit
 object — rhythm snap, spacing, flow angle, strains; the schema is in
 [docs/object_schema.md](docs/object_schema.md), skip it with `--no-objects`),
 plus `out/<tag>_charts.png` with `--charts` (four panels: hit-error histogram,
-error-over-time, spatial result map, aim error histogram).
+error-over-time, spatial result map, aim error histogram) and
+`out/<tag>_aim.png` (six cursor-arrival panels — [docs/aim.md](docs/aim.md)).
+The cursor-arrival block is computed for every run; skip it with `--no-aim`.
 
 ### Quick example
 
@@ -274,9 +281,14 @@ it always wins over detection.
    against cursor speed, pattern buckets, regions, quarters, stream segments,
    whiffs by cause, tapping style, plus `failed_play` / `map_version_mismatch`
    flags and a `trust` block.
-6. **Records** — every object is written out with its rhythm snap, spacing, flow
+6. **Cursor arrival** — the frames are sampled around every note to measure where
+   the cursor actually was: distance at the note, closest approach and its
+   timing, the along/lateral split and the speed-conditioned ceiling curve
+   (`metrics.aim_mode`). This needs no taps, so it is the whole aim picture on a
+   Relax replay ([docs/aim.md](docs/aim.md)).
+7. **Records** — every object is written out with its rhythm snap, spacing, flow
    angle and strains (`out/<tag>_objects.json`): the schema later analyses read.
-6. **Tiers** — `report` renders a deterministic critique from the JSON;
+8. **Tiers** — `report` renders a deterministic critique from the JSON;
    `coach` upgrades it with one LLM API call (system prompt encodes the same
    critique framework; optional baseline + profile give it context).
 
@@ -297,8 +309,9 @@ surface it before anything else is concluded.
 
 ## Edge cases and limitations
 
-- **Relax replays**: the game auto-hits from cursor position, so aim data is
-  meaningless and timing reflects cursor arrival, not taps.
+- **Relax replays**: the game auto-hits from cursor position, so press-time aim,
+  whiffs and tapping are the game's, not the player's — read `aim_mode` (cursor
+  arrival) instead. Timing there is cursor arrival, not taps.
 - **Sliders are judged by their head**: the game also judges slider ticks and
   the follow path (the .osr counts themselves exclude ticks — the four counts sum
   to the map's object count). Presses consumed by a slider body rather than its
@@ -306,8 +319,8 @@ surface it before anything else is concluded.
   approximate.
 - **Mods**: Hard Rock (OD/AR ×1.4, CS ×1.3, playfield reflected vertically) and
   Easy are applied to windows and geometry; DT/HT go through the time scale.
-  HD/FL/NF change nothing measurable here. Relax/AutoPilot plays are flagged,
-  because their aim data is meaningless.
+  HD/FL/NF change nothing measurable here. Relax/AutoPilot plays are flagged and
+  judged from the cursor-arrival block.
 - **Lazer export time convention**: some exports store frames in map-time, not
   real-time; calibration handles it automatically.
 - **`map_version_mismatch`**: replay ends well before the map's last object —
@@ -319,25 +332,28 @@ surface it before anything else is concluded.
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 58 tests, no network needed
+pytest -q                     # 71 tests, no network needed
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
   edge-case fixtures (see `tests/fixtures/ATTRIBUTION.md`).
-- `scripts/autopsy.py` — cursor autopsy for one replay: what the hand did
-  (distance at the note, closest approach and when it peaks, the along/lateral
-  split, the speed-conditioned ceiling curve, shape classes, worst windows).
-  Works with or without Relax. Prints numbers and writes two figures.
-- `scripts/make_synthetic_fixtures.py` — regenerates the synthetic fixtures and
-  can anonymize `.osr` player names (`--anonymize`).
+- `src/osu_critique/metrics/aim.py` — the cursor-arrival ("aim mode") block and
+  its six-panel figure; the reference numbers live in `docs/aim.md`.
+- `scripts/autopsy.py` — the exploratory views that are not (yet) in the
+  pipeline: per-leg path efficiency, mid-travel "stutter" presses, 5-note shape
+  classes and the worst arrival stretches. Uses the library's aim block, so the
+  numbers cannot drift.
+- `scripts/make_synthetic_fixtures.py` — regenerates the synthetic fixtures
+  (including the Relax `synth_rx` pair) and can anonymize `.osr` player names
+  (`--anonymize`).
 - CI (`.github/workflows/test.yml`) runs the suite on Python 3.11 and 3.12.
 
 ## Roadmap
 
-What is planned and why (aim mode, miss autopsy, slider bodies, cross-attempt
-structure) lives in [docs/ROADMAP.md](docs/ROADMAP.md) — read it before
-changing the analysis; it also records the traps that have already bitten
-(the snap/divisor convention, the calibration override, population gates).
+What is planned and why (miss autopsy, slider bodies, cross-attempt structure)
+lives in [docs/ROADMAP.md](docs/ROADMAP.md) — read it before changing the
+analysis; it also records the traps that have already bitten (the snap/divisor
+convention, the calibration override, population gates).
 
 ## Privacy, attribution, and terms
 

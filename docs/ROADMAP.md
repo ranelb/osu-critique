@@ -5,8 +5,21 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.3.1**, `main` = `81fef6c`, 58 tests green, CI on every push, tag →
+State: **0.4.0**, `main` = `81fef6c`, 71 tests green, CI on every push, tag →
 wheel + GitHub release (`.github/workflows/release.yml`).
+
+## Shipped since the handoff
+
+- **0.4.0 — aim mode** (`metrics["aim_mode"]`, `docs/aim.md`): the cursor path is
+  re-derived from the frames for every run — distance at the note, closest
+  approach and when it peaks, the along/lateral split, reached-not-on-time and
+  the speed-conditioned ceiling curve — with a six-panel figure
+  (`out/<tag>_aim.png`) and `--no-aim` to skip it. Works with or without Relax,
+  so a Relax replay is now analysable: the old note said "aim data is
+  meaningless", which was only true of the press-time numbers.
+  `scripts/autopsy.py` keeps the exploratory views (path efficiency, stutter
+  presses, shape classes, worst stretches) and now reads the library's aim
+  block, so its numbers cannot drift.
 
 ---
 
@@ -23,11 +36,11 @@ Concretely, in order of leverage:
    `spacing_r`, `snap` (in **quarter-beats**), `bpm_eff`, `angle_deg`,
    `strain_aim`, `strain_speed`. Bucket it and you can answer almost anything
    without touching the replay again.
-2. When the question is about the **hand** rather than the taps, stop using the
-   metrics and re-derive from the frames: sample `cursor_at(t)` around each
-   object and measure distance at the note instant, closest approach and when it
-   happens, the along/lateral split, and the ceiling curve. `scripts/autopsy.py`
-   does exactly this for one replay (numbers + two figures).
+2. When the question is about the **hand** rather than the taps, use the
+   cursor-arrival block (`metrics.aim_mode`, docs/aim.md) — it is now computed
+   for every run — and re-derive from the frames for anything it does not cover
+   (path efficiency, stutter presses, shape-conditioned arrival).
+   `scripts/autopsy.py` does exactly this for one replay (numbers + two figures).
 3. The **trust block is what makes the output usable.** It states the per-count
    deltas against the game and refuses to let an untrustworthy judgement read as
    fact. Keep that discipline: every new block should carry its own sample size
@@ -56,7 +69,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 58 tests, no network
+.venv/bin/python -m pytest -q                       # 71 tests, no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
@@ -72,32 +85,33 @@ and keep personal coaching numbers in the vault, not in the public repo.
 
 ## Backlog, in the order I would do it
 
-### 1. Aim mode (highest value, ~1 session + a fixture)
+### 1. Aim mode — ✅ shipped in 0.4.0 (`docs/aim.md`, `metrics.aim`)
 
-**Why.** The tool cannot analyse a Relax replay at all today — its own trust note
-says "aim data is meaningless" — and RX is the cleanest aim measurement there is,
-because the game taps and only the cursor is left. It is also the missing half of
-every normal replay's diagnosis.
+**Why.** The tool could not analyse a Relax replay at all — its own trust note
+said "aim data is meaningless" — and RX is the cleanest aim measurement there
+is, because the game taps and only the cursor is left. It is also the missing
+half of every normal replay's diagnosis.
 
 **Spec.** A cursor-centric block that works with or without RX
-(`metrics.aim_mode`, or a `--aim` section in the metrics):
-`distance_at_note_r`, `closest_approach_r`, `peak_offset_ms`, `window_entry_ms`,
-`reached_not_on_time_pct`, `along_r` / `lateral_r`, and the ceiling curve
-(`distance_at_note_r` binned by required cursor speed) plus a 6-panel figure.
-`scripts/autopsy.py` is the reference implementation — lift it into
-`metrics/aim.py` + `charts.py` and make the CLI call it.
+(`metrics.aim_mode`, or `--no-aim` to skip): `distance_at_note_r`,
+`closest_approach_r`, `peak_offset_ms`, `window_entry_ms`,
+`reached_not_on_time`, `along_r` / `lateral_r`, and the ceiling curve plus a
+6-panel figure. `scripts/autopsy.py` was the reference implementation; it now
+calls the library instead of duplicating the maths.
 
-**Acceptance.** On the author's RX replay it reproduces (within rounding): 0.72 r
-mean at the note, 0.26 r median closest approach, median peak +10 ms, 16.8 %
-reached-not-on-time, ceiling 0.47 r at ≤1 px/ms rising to 1.19 r above 3 px/ms.
-Add an RX fixture to `tests/fixtures/` (ask the author to export + anonymize one)
-and a golden test over those numbers. Until then, test the helpers on synthetic
-frames.
+**Acceptance.** Met: on the author's RX replay the block reproduces 0.72 r mean
+at the note, 0.26 r median closest approach, median peak +10 ms, 16.8 %
+reached-not-on-time, ceiling 0.47 r at ≤1 px/ms rising to 1.19 r above
+3 px/ms. `tests/test_aim.py` pins a synthetic RX fixture (`synth_rx`) with a
+known cursor path exactly and checks these numbers when `OSU_TEST_RX_REPLAY` /
+`OSU_TEST_RX_MAP` are set (the replay itself is the author's, not committed).
 
-**Traps.** Do not derive aim from presses for RX (there are none, or they are
-irrelevant). The replay may still be in map time (see the calibration section) —
-convert before quoting ms. Keep `WINDOW_MS` (currently 320 ms) explicit in the
-output so the "reached at all" claim is auditable.
+**Traps (learned).** Do not derive aim from presses for RX. Convert ms to the
+player time base before quoting (the block inherits the calibrated rows). Keep
+`window_ms` explicit in the output. Row indices are *object* indices — the old
+autopsy indexed its non-spinner rows by object index, which silently mis-mapped
+every object after the first spinner; the shape/worst tables were off until
+this shipped as a dict keyed by object index.
 
 ### 2. Miss-autopsy block (~1 session)
 
@@ -146,7 +160,6 @@ roughly halve (25.3→13.3 %, 34.3→17.1 %) while 1/4 dense barely moves
 (27.7→22.8 %).
 
 ### 5. Dual-window reporting when calibration overrides a mod flag (~2 hours)
-
 **Why.** Some lazer exports store frames in map time while claiming DT (Bang
 Bang, 4ever). The calibration then picks scale 1.0 and every ms in the metrics is
 map time, which is a silent 1.5× factor for a reader. `profile.py` already
