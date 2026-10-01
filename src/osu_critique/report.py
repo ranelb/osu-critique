@@ -470,18 +470,21 @@ def console_summary(metrics, out_json=None, out_objects=None):
               f"err={q['mean_err'] and round(q['mean_err'], 1)}ms std={q['std_err'] and round(q['std_err'], 1)}ms")
     print(f"keys: {key_usage}  |  same-key adjacencies: {tap['same_key_pct']:.0%} (alt_ratio {tap['alt_ratio']:.0%})")
     st_sum = metrics["streams"]
-    print(f"streams: {len(stream_stats)} runs, {st_sum['notes']} notes, "
-          f"{st_sum['misses']} misses"
+    print(f"streams: {len(stream_stats)} runs, "
+          f"{st_sum.get('notes', sum(s['n'] for s in stream_stats))} notes, "
+          f"{st_sum.get('misses', sum(s['miss'] for s in stream_stats))} misses"
           + (f" | gap {st_sum['gap_ms_median']:.0f}ms, {st_sum['notes_per_s_p50']:.1f} n/s"
              f" at {st_sum['velocity_r_ms_p50']:.3f} r/ms (median run)"
-             if st_sum["gap_ms_median"] else ""))
+             if st_sum.get("gap_ms_median") else ""))
     for s in sorted(stream_stats, key=lambda s: -(s["std_err"] or 0))[:3]:
-        kinds = "+".join(f"{k[0]}{v}" for k, v in (s.get("kinds") or {}).items())
+        material = ""
+        if s.get("gap_ms"):
+            kinds = "+".join(f"{k[0]}{v}" for k, v in (s.get("kinds") or {}).items())
+            material = (f" {kinds} {round(s['gap_ms'])}ms "
+                        f"{round(s['notes_per_s'], 1) if s.get('notes_per_s') else '-'}n/s")
         print(f"  t={s['t_start']:.0f}-{s['t_end']:.0f}ms n={s['n']} miss={s['miss']} "
               f"std={s['std_err'] and round(s['std_err'], 1)}ms "
-              f"alt={s['alt_ratio']:.0%} {kinds} "
-              f"{s['gap_ms'] and round(s['gap_ms'])}ms "
-              f"{s['notes_per_s'] and round(s['notes_per_s'], 1)}n/s")
+              f"alt={s['alt_ratio']:.0%}{material}")
     prof = metrics.get("profile") or {}
     rate = prof.get("rate") or {}
     if rate.get("note_gap_ms", {}).get("p10"):

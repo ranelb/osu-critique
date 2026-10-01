@@ -7,6 +7,7 @@ Subcommands:
   paths             show resolved (auto-detected) paths
   prompt  [metrics] [--baseline] [--profile]   print the critique prompt (BYO AI)
   report  <metrics.json> [--baseline]    deterministic critique (no LLM, no keys)
+                                         (adds a rolling baseline vs your stored runs)
   attempts [metrics.json|dir]            cross-attempt structure for one map
   coach   <metrics.json|dir> [--all] [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
   profile <username>                     fetch osu! profile (BYO osu API creds)
@@ -135,8 +136,23 @@ def cmd_report(args):
             print(f"error: cannot read baseline {args.baseline!r}: {e}",
                   file=sys.stderr)
             return 2
-    print(render_report(metrics, baseline))
+    text = render_report(metrics, baseline)
+    rows = [] if args.no_history else _history_rows(args.history)
+    if rows:
+        from .metrics.baseline import history_report, describe as describe_history
+        block = history_report(metrics, rows)
+        text += "\n\n" + "\n".join(describe_history(block))
+    print(text)
     return 0
+
+
+def _history_rows(history):
+    """The stored runs to compare against: the given dir, or the output dir."""
+    from .coach import _load_metrics_dir
+    target = history if history else str(outdir())
+    if not os.path.isdir(target):
+        return []
+    return _load_metrics_dir(target)
 
 
 def cmd_coach(args):
@@ -523,20 +539,27 @@ def render_report(metrics, baseline=None):
     segs = metrics["streams"]["segments"]
     st_sum = metrics["streams"]
     if segs:
+        # metrics written before 0.9.0 have no material fields: degrade, never crash
+        notes = st_sum.get("notes", sum(s["n"] for s in segs))
+        detail = ""
+        if st_sum.get("gap_ms_median"):
+            detail = (f"; median run {st_sum['gap_ms_median']:.0f} ms = "
+                      f"{st_sum['notes_per_s_p50']:.1f} notes/s at "
+                      f"{st_sum['velocity_r_ms_p50']:.3f} r/ms, kinds "
+                      + ", ".join(f"{k} {v}" for k, v in (st_sum.get("kinds") or {}).items()))
         lines += ["", "## Streams",
-                  f"- {len(segs)} runs of sustained notes, {st_sum['notes']} notes "
-                  f"({st_sum['misses']} miss); median run {st_sum['gap_ms_median']:.0f} ms "
-                  f"= {st_sum['notes_per_s_p50']:.1f} notes/s at "
-                  f"{st_sum['velocity_r_ms_p50']:.3f} r/ms, kinds "
-                  + ", ".join(f"{k} {v}" for k, v in (st_sum["kinds"] or {}).items())]
+                  f"- {len(segs)} runs of sustained notes, {notes} notes "
+                  f"({st_sum.get('misses', sum(s['miss'] for s in segs))} miss)" + detail]
         for s in sorted(segs, key=lambda s: -(s["std_err"] or 0))[:3]:
-            lines.append(f"- t={s['t_start'] / 1000:.0f}s-{s['t_end'] / 1000:.0f}s "
-                         f"n={s['n']} miss={s['miss']} std={s['std_err'] and round(s['std_err'], 1)}ms "
-                         f"alt={s['alt_ratio'] * 100:.0f}% "
-                         f"({s['gap_ms'] and round(s['gap_ms'])} ms, "
-                         f"{s['notes_per_s'] and round(s['notes_per_s'], 1)} n/s, "
+            extra = ""
+            if s.get("gap_ms"):
+                extra = (f" ({round(s['gap_ms'])} ms, "
+                         f"{round(s['notes_per_s'], 1) if s.get('notes_per_s') else '-'} n/s, "
                          + "+".join(f"{k[0]}{v}" for k, v in (s.get("kinds") or {}).items())
                          + ")")
+            lines.append(f"- t={s['t_start'] / 1000:.0f}s-{s['t_end'] / 1000:.0f}s "
+                         f"n={s['n']} miss={s['miss']} std={s['std_err'] and round(s['std_err'], 1)}ms "
+                         f"alt={s['alt_ratio'] * 100:.0f}%" + extra)
 
     tap = metrics["tapping"]
     lines += ["", "## Tapping",
@@ -608,6 +631,11 @@ def main(argv=None):
     p = sub.add_parser("report", help="deterministic critique from a metrics JSON (no keys)")
     p.add_argument("metrics_json")
     p.add_argument("--baseline", default=None, help="optional baseline metrics JSON")
+    p.add_argument("--history", default=None,
+                   help="directory of stored runs to compare against "
+                        "(default: the configured output dir)")
+    p.add_argument("--no-history", action="store_true",
+                   help="skip the rolling-baseline comparison")
     p.set_defaults(func=cmd_report)
 
     p = sub.add_parser("coach", help="AI critique via LLM API (BYO OSU_LLM_KEY)")
