@@ -382,6 +382,10 @@ pytest -q                     # 100 tests, no network needed
 - `scripts/autopsy.py` — a thin printer over both blocks for one replay (plus the
   worst-arrival table). It used to be the reference implementation; the numbers
   now come from the library, so they cannot drift.
+- `scripts/judge_drift.py` — how far the judgement sits from the game's own
+  counts, per replay and in total, with `--guard-sweep` to see what alternative
+  window guards would do. This is the measurement every judgement change must be
+  re-run against (it is a development tool: it needs the author's replays).
 - `scripts/make_synthetic_fixtures.py` — regenerates the synthetic fixtures
   (including the Relax `synth_rx` pair) and can anonymize `.osr` player names
   (`--anonymize`).

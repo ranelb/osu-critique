@@ -245,6 +245,11 @@ and add a velocity-continuity term (`spacing / dt` within ±40 % across the run)
 - **Row keys differ by layer**: pipeline rows use `error` / `aim` / `end`;
   written records rename them to `error_ms` / `aim_px` / `end_t`. `profile.py`
   has tolerant accessors (`hit_error`, `aim_px`, `end_time`) — reuse them.
+- **The judgement is measured, not argued**: `scripts/judge_drift.py` reports
+  the drift against the game's recorded counts over every replay it can pair
+  (55 on the author's box) and can sweep alternative rules. Change `classify()`
+  or the calibration only with that number in hand — the guard sweep is how the
+  1 ms edge guard was chosen (1470 L1 / 14 exact, vs 1943 / 1 with no guard).
 - **Population gates** must scale down on short maps: `min(20, max(8, 3 % of
   objects))`. A fixed 20 hid the real target on a 174-object map.
 - **Never conclude from n<10**, and quote n with every rate.
