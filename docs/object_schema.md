@@ -51,6 +51,14 @@ all query these rows rather than re-deriving them. Skip it with `--no-objects`.
 | `angle_deg` | degrees | turn between the incoming and outgoing movement vectors: `0` = straight (flow), `180` = full reversal (anti-flow); null for the first two objects |
 | `strain_aim` | osu! strain | osu!'s own aim strain for this object, mod-aware; null if unavailable |
 | `strain_speed` | osu! strain | osu!'s own speed strain for this object, mod-aware; null if unavailable |
+| `slider_tail_off` | bool | slider only: the cursor was outside the follow circle (or the button was up) at the slider's last tick; null on circles |
+| `slider_missed_ticks` | — | slider only: how many of the slider's ticks the cursor missed; null on circles |
+| `slider_off_pct` | % | slider only: share of the slider body spent outside the follow circle; null on circles |
+
+The three `slider_*` fields are **measurements of the body**, not verdicts: the
+game does not degrade a slider whose body was cut on any of the author's replays
+(measured: degrading them makes 15 of 19 slider-heavy plays worse), so they are
+reported and never change the judgement. See `docs/ROADMAP.md` item 3.
 
 ## Rules
 

@@ -8,11 +8,11 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.5.0.** Presses are resolved the way the game resolves them (in
+> **Status: 0.6.0.** Presses are resolved the way the game resolves them (in
 > press order), hit windows and geometry follow the mods, and every run states
 > how far its own judgement can be trusted. Counts match the game exactly on the
 > golden fixtures and land within a few objects on the real replays used as a
-> gate — see [Validation](#validation-and-trust). 90 tests, CI on Python
+> gate — see [Validation](#validation-and-trust). 100 tests, CI on Python
 > 3.11/3.12. Every run also profiles the map (effective BPM, families, stamina,
 > chains — docs/profile.md), re-derives the cursor's arrival from the frames
 > (docs/aim.md) and autopsies the misses themselves (docs/autopsy.md), so a Relax
@@ -88,6 +88,10 @@ Per-play metrics include:
   margin, press vs arrival timing, per-leg heading error and path efficiency,
   mid-travel "stutter" presses, and each miss with its own press and geometry
   ([docs/autopsy.md](docs/autopsy.md))
+- **Slider bodies**: the curve (repeats included), ticks and tail of every
+  slider — how much of each body the cursor actually traced, how many ticks it
+  missed, and whether the tail was dropped (`metrics.sliders` and the
+  `slider_*` fields in the per-object records)
 - **Patterns**: miss rates by spacing bucket — dense (≤2r), stream (2–4r),
   jump (4–7r), bigjump (>7r)
 - **Streams**: every stream segment, with per-segment timing (std/UR) and
@@ -123,7 +127,7 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.5.0
+osu-critique --version   # → osu-critique 0.6.0
 ```
 
 The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
@@ -132,12 +136,12 @@ archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.5.0-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.6.0-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.5.0/osu_critique-0.5.0-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.6.0/osu_critique-0.6.0-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 
@@ -299,37 +303,57 @@ it always wins over detection.
    each miss with its own press and geometry (`metrics.autopsy`,
    [docs/autopsy.md](docs/autopsy.md)). Under Relax the tap-derived sections are
    reported as unavailable rather than as zero.
-8. **Records** — every object is written out with its rhythm snap, spacing, flow
-   angle and strains (`out/<tag>_objects.json`): the schema later analyses read.
-9. **Tiers** — `report` renders a deterministic critique from the JSON;
+8. **Slider bodies** — every slider's curve (repeats included), ticks and tail
+   are followed from the frames: how much of the body the cursor traced, which
+   ticks it missed, whether the tail was dropped (`metrics.sliders`, and the
+   `slider_*` fields in the per-object records).
+9. **Records** — every object is written out with its rhythm snap, spacing, flow
+   angle, strains and slider-body measurements (`out/<tag>_objects.json`): the
+   schema later analyses read.
+10. **Tiers** — `report` renders a deterministic critique from the JSON;
    `coach` upgrades it with one LLM API call (system prompt encodes the same
    critique framework; optional baseline + profile give it context).
 
 ## Validation and trust
 
-On every committed fixture, `counts_detected` matches the game's
-`counts_recorded` exactly (perfect-FC and synthetic fixtures included). On four
-real replays used as a gate the judged counts land within a few objects, with
-miss counts of 66 vs 62, 66 vs 55, 20 vs 21 and 5 vs 5 — the press-order judge
-replaced a nearest-press rule that reported 117 misses on the first of those.
+`counts_detected` is judged to match the game's own recorded counts. Across the
+author's 55 stored replays the judgement reproduces **14 plays exactly** and
+drifts by a handful of objects on most of the rest (weighted L1 1470 over 55
+plays).
 
-Every run also states its own trust: `trust.count_deltas` is the per-count
-difference, `trust.within_tolerance` applies the thresholds (miss within
-max(3, 2% of judged objects); the whole vector within max(5, 5%)), and
-`trust.notes` records why a play is not trustworthy (a failed play, a
-`map_version_mismatch`, relax). The console summary and the deterministic report
-surface it before anything else is concluded.
+The single biggest correction to the judgement was the **edge guard**
+(`assignment.EDGE_GUARD_MS`, 1 ms): a replay's frame clock is floored to the
+millisecond, so the stored press time can be up to 1 ms earlier than the time the
+game judged, and an error measured *at* the window edge belongs to a press the
+game saw outside it. Shrinking every window by that guard is the difference
+between 1 and 14 plays reproduced exactly and halves the total drift; a 0.5 ms
+guard reproduces 8, no guard 1. It is what made the slider-heavy plays agree: on
+`MONTAGEM BATCHI` and `4ever (cut ver.)` the 300/100 split used to drift by 5-6
+objects and now matches the game exactly.
+
+Even with it, a play can be honest about what it cannot know. `trust` carries
+`count_deltas` (the per-count difference), `within_tolerance` (miss within
+max(3, 2% of judged objects); the whole vector within max(5, 5%)), `notes` (why a
+play is not trustworthy: a failed play, a `map_version_mismatch`, relax) and the
+calibration that was chosen. The console summary and the deterministic report
+state it before anything else is concluded. On a small number of plays the miss
+count still drifts (a dropped slider end is the remaining suspect); those stay
+`trustworthy: false` rather than being smoothed over.
+
+## Edge cases and limitations
 
 ## Edge cases and limitations
 
 - **Relax replays**: the game auto-hits from cursor position, so press-time aim,
   whiffs and tapping are the game's, not the player's — read `aim_mode` (cursor
   arrival) instead. Timing there is cursor arrival, not taps.
-- **Sliders are judged by their head**: the game also judges slider ticks and
-  the follow path (the .osr counts themselves exclude ticks — the four counts sum
-  to the map's object count). Presses consumed by a slider body rather than its
-  head appear as `whiffs.slider_head`; treat slider-heavy miss counts as
-  approximate.
+- **Sliders are judged by their head**: the .osr counts themselves exclude ticks
+  (the four counts sum to the map's object count). The body, its ticks and its
+  tail are *measured* (`metrics.sliders`, the `slider_*` record fields) but do
+  not change the judgement: on these replays the game counts a slider the player
+  cut as a 300 anyway (degrading cut sliders makes 15 of 19 slider-heavy plays
+  worse). Presses consumed by a slider body rather than its head appear as
+  `whiffs.slider_head`.
 - **Mods**: Hard Rock (OD/AR ×1.4, CS ×1.3, playfield reflected vertically) and
   Easy are applied to windows and geometry; DT/HT go through the time scale.
   HD/FL/NF change nothing measurable here. Relax/AutoPilot plays are flagged and
@@ -345,7 +369,7 @@ surface it before anything else is concluded.
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 90 tests, no network needed
+pytest -q                     # 100 tests, no network needed
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

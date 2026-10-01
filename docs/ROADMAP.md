@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.5.0**, `main` = `81fef6c`, 90 tests green, CI on every push, tag →
+State: **0.6.0**, `main` = `81fef6c`, 100 tests green, CI on every push, tag →
 wheel + GitHub release (`.github/workflows/release.yml`).
 
 ## Shipped since the handoff
@@ -24,6 +24,10 @@ wheel + GitHub release (`.github/workflows/release.yml`).
   arrival timing, per-leg heading error and path efficiency, mid-travel
   ("stutter") press share, and each miss with its own press and geometry; plus the
   worst-stretch gallery (`out/<tag>_windows.png`) and `--no-autopsy` to skip it.
+- **0.6.0 — slider bodies and the edge guard** (`metrics.sliders`, the `slider_*`
+  record fields, `assignment.EDGE_GUARD_MS`): every slider's curve/ticks/tail are
+  measured, and the judgement windows gained the empirical 1 ms guard that makes
+  the 300/100 split agree with the game (14 plays exactly, total drift halved).
 
 ---
 
@@ -74,7 +78,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 90 tests, no network
+.venv/bin/python -m pytest -q                       # 100 tests, no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
@@ -144,21 +148,44 @@ cursor moved 2 px) — filter on the object gap *in radii*, not pixels. The turn
 list was also reading `objs[-1]` for the `i == 2` window (the last object of the
 map); guard `k - 2 >= 0`.
 
-### 3. Slider bodies, ends and ticks (~2 sessions)
+### 3. Slider bodies, ends and ticks — ✅ shipped in 0.6.0 (`metrics.sliders`, edge guard)
 
-**Why.** 36–55 % of the objects on the author's maps are sliders, they are judged
-by their head only, and that is almost certainly why trust fails on every
-slider-heavy play (5–10 objects per play where the game says 100 and we say 300,
-with the miss count exact). It also caps the accuracy of every per-family rate on
-those maps.
+**Why.** 36–55 % of the objects on the author's maps are sliders, judged by their
+head only, and the 300/100 split drifted on the slider-heavy plays (5–22 objects
+per play with the miss count exact).
 
-**Spec.** Model the head + ticks + end (slider library exposes the curve, length,
-repeat, duration; `slider`'s own `Replay.hits()` shows one strict implementation
-to borrow from — it over-detects misses, so take its mechanics, not its
-thresholds). Emit `slider_break` as a first-class result distinct from `miss`.
+**Spec.** Model the head + ticks + end (`slider` exposes the curve, length,
+repeat, duration and `true_tick_points`; its `Replay.hits()` is one strict
+implementation to borrow mechanics from). Emit `slider_break` as a first-class
+result distinct from `miss`.
 
-**Acceptance.** On the author's slider-heavy replays the 300/100 split stops
-drifting by ~10 objects and `trust.within_tolerance` goes true where it should.
+**Acceptance.** Met, but by a *different* mechanism than the plan assumed — see
+below. On `MONTAGEM BATCHI` and `4ever` the 300/100 split now matches the game
+exactly (`trust.within_tolerance` true); across the 55 stored replays the judged
+counts reproduce 14 plays exactly and the total weighted L1 fell from 1943 to
+1470.
+
+**What actually fixed the drift (measured, not assumed).** It was not the body —
+it was a **1 ms edge guard** on the hit windows (`assignment.EDGE_GUARD_MS`).
+A replay's frame clock is floored to the millisecond, so a stored press time can
+be up to 1 ms earlier than the time the game judged: an error measured at the
+window edge belongs to a press the game saw outside it. Ranking the candidate
+rules by total drift over all 55 replays: no guard 1943 L1 / 1 exact play, 0.5 ms
+1640 / 8, **1.0 ms 1470 / 14**, 1.5 ms 1998 / 6. Slider bodies were the wrong
+suspect: the excess 300s were objects sitting within ~1 ms of the window edge,
+circles included.
+
+**The slider body is measured, not judged.** `metrics/sliders` follows every
+slider's curve (repeats folded back), its ticks (`true_tick_points`) and its tail,
+and records `slider_tail_off` / `slider_missed_ticks` / `slider_off_pct` per
+object. Using that to degrade a slider whose tail was dropped (the plan's
+`slider_break`) was tested and **rejected**: over 19 slider-heavy replays it makes
+15 worse and 1 better (L1 729 -> 920), because the cursor is *allowed* to cut the
+body — RASPUTIN alone has 179 cut sliders and 21 "dropped tails" on a play whose
+counts match the game exactly. So the fields are descriptive (coaching: "you cut
+25 % of sliders on 4ever"), and the judgement stays head-based. A small residual
+miss drift remains on a few plays (FOOL MOON 66 vs 55, Hot N Cold 48 vs 42) and
+those stay `trustworthy: false`.
 
 ### 4. Tier 2a: cross-attempt structure (~1 session)
 
