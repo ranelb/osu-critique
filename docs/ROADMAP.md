@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.6.0**, `main` = `81fef6c`, 100 tests green, CI on every push, tag →
+State: **0.7.0**, `main` = `81fef6c`, 111 tests green, CI on every push, tag →
 wheel + GitHub release (`.github/workflows/release.yml`).
 
 ## Shipped since the handoff
@@ -28,6 +28,11 @@ wheel + GitHub release (`.github/workflows/release.yml`).
   record fields, `assignment.EDGE_GUARD_MS`): every slider's curve/ticks/tail are
   measured, and the judgement windows gained the empirical 1 ms guard that makes
   the 300/100 split agree with the game (14 plays exactly, total drift halved).
+- **0.7.0 — cross-attempt structure** (`attempts`, `metrics/attempts.py`):
+  metrics files grouped by `beatmap_md5` and ordered by the replay's `played_at`,
+  comparing family and shape rates across attempts into consistent weaknesses vs
+  swing ("one-off") buckets. New metrics fields `played_at` / `replay_md5` make
+  the grouping and de-duplication possible.
 
 ---
 
@@ -78,7 +83,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 100 tests, no network
+.venv/bin/python -m pytest -q                       # 111 tests, no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
@@ -187,18 +192,36 @@ counts match the game exactly. So the fields are descriptive (coaching: "you cut
 miss drift remains on a few plays (FOOL MOON 66 vs 55, Hot N Cold 48 vs 42) and
 those stay `trustworthy: false`.
 
-### 4. Tier 2a: cross-attempt structure (~1 session)
+### 4. Tier 2a: cross-attempt structure — ✅ shipped in 0.7.0 (`attempts`)
 
 **Why.** The strongest signal available is the same structure across attempts
-(the author has repeated plays of RASPUTIN, Passcode, overture), and the schema
-already carries `beatmap_md5` for grouping. Cheap version: group the
-`out/*_metrics.json` files by md5, aggregate family/shape rates, and report which
-structures are stable weaknesses vs one-off noise. Full version adds a sqlite of
-per-object rows — not needed until ~20–30 plays are analysed.
+(RASPUTIN, Passcode, overture, Domino are all repeated), and the schema already
+carried `beatmap_md5` for grouping.
 
-**Acceptance.** RASPUTIN 09-01 → 09-22 comparison reproduces: 1/2 jump buckets
-roughly halve (25.3→13.3 %, 34.3→17.1 %) while 1/4 dense barely moves
-(27.7→22.8 %).
+**Spec / what shipped.** `osu-critique attempts [dir|file]` groups the metrics
+files by beatmap md5, orders the attempts by the replay's `played_at` (a new
+metrics field, with `replay_md5` for de-duplicating re-exports of one play),
+drops nothing silently, and compares family and shape rates across attempts:
+
+- **consistent weakness** — worse than the play's own off-300 rate in *every*
+  attempt by ≥1.5×, from buckets that are populated everywhere (an adaptive gate,
+  min(20, max(10, 3 % of the objects)), so a 150-object map is read from
+  10-object buckets and a 1000-object one from 20-object buckets);
+- **swings** — the rate moves ≥10 points between attempts, i.e. one-off or
+  session noise until explained, *not* a stable weakness;
+- plus `--json` for the whole block, and `report <dir>` now points at it.
+
+**Acceptance.** The qualitative claim reproduces on RASPUTIN 09-01 → 09-22 (the
+duplicate 09-22 export is de-duplicated): `slider_1/2_jump` 29.3 % → 12.8 % and
+`slider_1/2_spaced` 43.0 % → 17.5 % (both roughly halve) while `slider_1/4_dense`
+22.8 % → 26.1 % (moves by 3 points — "barely moves"). The published figures
+(25.3→13.3, 34.3→17.1, 27.7→22.8) predate the 1 ms edge guard and the profile's
+current family bucketing, so the test pins today's numbers *and* the shape of the
+change.
+
+**Not done (deliberately).** The full version — a sqlite of per-object rows — is
+not needed at 22 stored runs over 9 repeated maps; the metrics files carry the
+family and shape rates already. Revisit when a single map has ~20-30 plays.
 
 ### 5. Dual-window reporting when calibration overrides a mod flag (~2 hours)
 **Why.** Some lazer exports store frames in map time while claiming DT (Bang
