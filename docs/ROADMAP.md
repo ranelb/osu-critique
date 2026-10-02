@@ -5,8 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.10.0**, `main` = `81fef6c`, 136 tests green, CI on every push, tag →
-wheel + GitHub release (`.github/workflows/release.yml`).
+State: **0.10.1** (tag `v0.10.1`, wheel published); 144 tests green (138 run anywhere, 6 opt-in), CI on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release (`.github/workflows/release.yml`).
 
 ## Shipped since the handoff
 
@@ -90,7 +89,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 136 tests, no network
+.venv/bin/python -m pytest -q                       # 144 tests (6 opt-in), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
@@ -362,4 +361,6 @@ shrinks the n behind each rate. Revisit with a question, not a hunch.
 - **Fixtures**: `tests/fixtures/` holds the author's anonymized replays and
   synthetic edge cases. New features need new fixtures — ask for an export +
   anonymize; do not commit unanonymized replays, and do not put personal
-  coaching numbers in the public repo.
+  coaching numbers in the public repo. `out/` (analysis JSON/PNG) and
+  `tmp_maps/` (extracted `.osu`) hold the author's real numbers; both are
+  gitignored (`.gitignore:12-13`) and must never be committed.
