@@ -8,12 +8,13 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.10.0.** Presses are resolved the way the game resolves them (in
+> **Status: 0.10.1.** Presses are resolved the way the game resolves them (in
 > press order), hit windows and geometry follow the mods, and every run states
 > how far its own judgement can be trusted. Counts match the game exactly on the
 > golden fixtures and land within a few objects on the real replays used as a
-> gate — see [Validation](#validation-and-trust). 136 tests, CI on Python
-> 3.11/3.12. Every run also profiles the map (effective BPM, families, stamina,
+> gate — see [Validation](#validation-and-trust). 144 tests (138 run anywhere;
+> 6 skip without the author's replays), CI on Python 3.10-3.14. Every run also
+> profiles the map (effective BPM, families, stamina,
 > chains — docs/profile.md), re-derives the cursor's arrival from the frames
 > (docs/aim.md) and autopsies the misses themselves (docs/autopsy.md), so a Relax
 > replay is analysable too.
@@ -145,7 +146,7 @@ pip install -e ".[charts]"  # + matplotlib, for --charts PNG output
 This installs the `osu-critique` command. Verify:
 
 ```sh
-osu-critique --version   # → osu-critique 0.10.0
+osu-critique --version   # → osu-critique 0.10.1
 ```
 
 The repo ships empty `replays/` and `maps/` folders: drop `.osr` replays and
@@ -154,12 +155,12 @@ archives are unpacked automatically).
 
 ### Install from a release (no git needed)
 
-Every release ships a wheel (`osu_critique-0.10.0-py3-none-any.whl`) that works
+Every release ships a wheel (`osu_critique-0.10.1-py3-none-any.whl`) that works
 on any OS — Python is required, git is not:
 
 ```sh
 python3 -m venv .venv && source .venv/bin/activate
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.10.0/osu_critique-0.10.0-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.10.1/osu_critique-0.10.1-py3-none-any.whl
 pip install matplotlib   # optional, for --charts
 ```
 
@@ -367,8 +368,6 @@ count still drifts (a dropped slider end is the remaining suspect); those stay
 
 ## Edge cases and limitations
 
-## Edge cases and limitations
-
 - **Relax replays**: the game auto-hits from cursor position, so press-time aim,
   whiffs and tapping are the game's, not the player's — read `aim_mode` (cursor
   arrival) instead. Timing there is cursor arrival, not taps.
@@ -396,7 +395,7 @@ count still drifts (a dropped slider end is the remaining suspect); those stay
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 136 tests, no network needed
+pytest -q                     # 144 tests (6 skip without the author's replays)
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
@@ -416,7 +415,7 @@ pytest -q                     # 136 tests, no network needed
 - `scripts/make_synthetic_fixtures.py` — regenerates the synthetic fixtures
   (including the Relax `synth_rx` pair) and can anonymize `.osr` player names
   (`--anonymize`).
-- CI (`.github/workflows/test.yml`) runs the suite on Python 3.11 and 3.12.
+- CI (`.github/workflows/test.yml`) runs the suite on Python 3.10, 3.12, and 3.14.
 
 ## Roadmap
 
