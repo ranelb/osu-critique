@@ -3,6 +3,16 @@
 Everything `osu-critique analyze` writes into `out/<tag>_metrics.json`, alongside
 the trust block and the per-object records (schema: [`object_schema.md`](object_schema.md)).
 
+## Output files
+
+`analyze` writes `out/<tag>_metrics.json` (this catalogue) and
+`out/<tag>_objects.json` (one record per hit object — skip it with `--no-objects`).
+With `--charts` it adds `out/<tag>_charts.png` (four panels: hit-error histogram,
+error over time, spatial result map, aim-error histogram), `out/<tag>_aim.png`
+(six cursor-arrival panels) and `out/<tag>_windows.png` (the worst arrival
+stretches). The cursor-arrival and miss-autopsy blocks are computed for every run;
+skip them with `--no-aim` / `--no-autopsy`.
+
 Per-play metrics include:
 
 - **Timing**: mean hit error (early/late bias), std → UR, distribution percentiles
