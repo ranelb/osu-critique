@@ -327,7 +327,11 @@ def cmd_profile(args):
         print(f"error: {e}", file=sys.stderr)
         return 2
     print(f"== {p['username']} ({p.get('country')}) ==")
-    print(f"rank #{p['global_rank']}  |  {p['pp']}pp  |  acc {p['accuracy_pct']}%")
+    acc, pp, rank = p.get("accuracy_pct"), p.get("pp"), p.get("global_rank")
+    acc_s = f"{acc:.2f}" if isinstance(acc, (int, float)) else "?"
+    pp_s = f"{pp:.0f}" if isinstance(pp, (int, float)) else "?"
+    rank_s = f"{rank:,}" if isinstance(rank, int) else "?"
+    print(f"rank #{rank_s}  |  {pp_s}pp  |  acc {acc_s}%")
     print(f"plays {p['play_count']}  |  playtime ~{p['play_time_hours']}h  |  level {p['level']}")
     g = p["grades"]
     print(f"grades: SS {g['ss']}  S {g['s']}  A {g['a']}")

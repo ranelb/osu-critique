@@ -54,7 +54,7 @@ def fetch_profile_api(username, client_id=None, client_secret=None):
         API_USER_URL.format(username=urllib.parse.quote(username)),
         headers={**UA, "Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.load(resp)
+        return _flatten(json.load(resp))
 
 
 # -------------------------------------------------------- HTML fallback ----
@@ -80,20 +80,25 @@ def _extract_user_json(page):
     return json.loads(s[start:end])
 
 
+def _flatten(data):
+    """Home the API's nested ``statistics`` block to the flat shape
+    ``summarize()`` expects, plus the identity fields. The API v2 user object
+    keeps pp / rank / play_count / counts / level / grades under
+    ``statistics``; the HTML page embeds them flat, so both paths must arrive
+    here looking the same."""
+    st = dict(data.get("statistics") or {})
+    for k in ("id", "username", "country_code", "join_date", "rank_highest"):
+        st[k] = data.get(k)
+    return st
+
+
 def fetch_profile_scrape(username):
     """Fetch a user's osu!standard stats by scraping the public profile page."""
     req = urllib.request.Request(WEB_USER_URL.format(username=username),
                                  headers={**UA, "Accept": "text/html"})
     with urllib.request.urlopen(req, timeout=30) as resp:
         page = resp.read().decode("utf-8", errors="ignore")
-    data = _extract_user_json(page)
-    st = data.get("statistics", {})
-    st["id"] = data.get("id")
-    st["username"] = data.get("username")
-    st["country_code"] = data.get("country_code")
-    st["join_date"] = data.get("join_date")
-    st["rank_highest"] = data.get("rank_highest")
-    return st
+    return _flatten(_extract_user_json(page))
 
 
 # -------------------------------------------------------------- summary ----
