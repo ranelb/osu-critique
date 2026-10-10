@@ -28,6 +28,9 @@ Per-play metrics include:
   margin, press vs arrival timing, per-leg heading error and path efficiency,
   mid-travel "stutter" presses, and each miss with its own press and geometry
   ([autopsy.md](autopsy.md))
+- **How it breaks down** (`breakdown`): the speed cliff (miss rate per required
+  cursor speed, recomputed from geometry), reversal x spacing buckets, runs of
+  consecutive misses (cascades) and the worst ramp ([breakdown.md](breakdown.md))
 - **Slider bodies**: the curve (repeats included), ticks and tail of every
   slider — how much of each body the cursor actually traced, how many ticks it
   missed, and whether the tail was dropped (`metrics.sliders` and the
@@ -74,6 +77,9 @@ Per-play metrics include:
 
 - [`aim.md`](aim.md) — the cursor-arrival block in full.
 - [`autopsy.md`](autopsy.md) — the miss autopsy in full.
+- [`breakdown.md`](breakdown.md) — the speed cliff, cascades and worst ramp.
+- [`difficulty.md`](difficulty.md) — stars and pp (optional extra).
+- [`status.md`](status.md) — ranked / leaderboard / unranked split.
 - [`profile.md`](profile.md) — the map profile in full.
 - [`trust.md`](trust.md) — how much to trust the judgement.
 - [`object_schema.md`](object_schema.md) — the per-object record schema.

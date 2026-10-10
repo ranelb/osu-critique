@@ -5,9 +5,34 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.10.1** (tag `v0.10.1`, wheel published); 144 tests green (138 run anywhere, 6 opt-in), CI on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release (`.github/workflows/release.yml`).
+State: **0.11.0** (tag `v0.10.1` is the last published release); 160 tests green
+(154 run anywhere, 6 opt-in), CI on Python 3.10/3.12/3.14 on every push, tag →
+wheel + GitHub release (`.github/workflows/release.yml`).
 
 ## Shipped since the handoff
+
+- **0.11.0 — breakdown, stars/pp, status** (the handoff's "DO NEXT, item B"):
+  - `metrics/breakdown.py` + `osu-critique breakdown` + a `## How it breaks
+    down` report section (`docs/breakdown.md`): the speed cliff (miss rate per
+    **recomputed** required cursor speed, never `objects[].cursor_speed`, which
+    is null on no-press misses), reversal x spacing buckets, miss cascades and
+    the worst ramp. Computed for every run into `metrics["breakdown"]`.
+  - `metrics/difficulty.py` + `osu-critique stars` / `osu-critique pp`
+    (optional extra `osu-critique[stars]`, `docs/difficulty.md`): rosu-pp star
+    ratings per SR mod family (NM always) and pp per play, with the lazer
+    SHA-256-store vs MD5-replay index gotcha handled.
+  - `io/status.py` + `osu-critique status` (`docs/status.md`): the ranked /
+    leaderboard-only / unranked split via osu! API v2, batched at 50 ids and
+    parsing the `{"beatmaps": [...]}` wrapper.
+  - `batch` no longer dies on one bad replay: the per-run analyze/call is
+    wrapped in try/except and skips with a message, and a stream block with a
+    median gap but a None velocity no longer crashes `console_summary` (the
+    crash that killed the sweep). Regression tests for both.
+  - the AI coach feeds itself: `coach`/`prompt` trim only the bulky redundant
+    metrics fields (the old 12k cap silently truncated streams/breakdown/tapping
+    off every real run) and auto-join `sr`/`pp`/`rank_status` from the
+    `stars`/`pp`/`status` caches into each run. The system prompt now covers
+    `breakdown` and the value fields.
 
 - **0.4.0 — aim mode** (`metrics["aim_mode"]`, `docs/aim.md`): the cursor path is
   re-derived from the frames for every run — distance at the note, closest
@@ -89,7 +114,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 144 tests (6 opt-in), no network
+.venv/bin/python -m pytest -q                       # 160 tests (6 opt-in), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy

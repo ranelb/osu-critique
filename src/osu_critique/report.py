@@ -23,6 +23,7 @@ from .io.replay import build_frames, cursor_at, find_presses, load_replay
 from .metrics.assignment import judge
 from .metrics.aim import build_aim
 from .metrics.autopsy import build as build_autopsy
+from .metrics.breakdown import build as build_breakdown
 from .metrics.patterns import add_pattern_labels, pattern_stats
 from .metrics.profile import build_profile, primary_target
 from .metrics.sliders import annotate as annotate_sliders
@@ -281,6 +282,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                                    aim_rows=aim_rows, presses=presses, w50=w50,
                                    is_relax=is_relax)
                      if write_autopsy else None)
+    records = object_records(results, radius)
 
     metrics = {
         "schema_version": SCHEMA_VERSION,
@@ -354,6 +356,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         "spinners": {"n": sum(1 for x in results if x["kind"] == "Spinner")},
         "streams": {"n_segments": len(segs), "segments": segs,
                     **summarise_streams(segs)},
+        "breakdown": build_breakdown(records),
         "tapping": tap,
     }
 
@@ -372,7 +375,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                        "beatmap_md5": beatmap_md5,
                        "mod_string": metrics["mod_string"],
                        "counts_recorded": recorded, "counts_detected": detected,
-                       "trust": trust, "objects": object_records(results, radius)},
+                       "trust": trust, "objects": records},
                       f, indent=1, allow_nan=False)
 
     if do_charts and len(errs):
@@ -475,7 +478,9 @@ def console_summary(metrics, out_json=None, out_objects=None):
           f"{st_sum.get('misses', sum(s['miss'] for s in stream_stats))} misses"
           + (f" | gap {st_sum['gap_ms_median']:.0f}ms, {st_sum['notes_per_s_p50']:.1f} n/s"
              f" at {st_sum['velocity_r_ms_p50']:.3f} r/ms (median run)"
-             if st_sum.get("gap_ms_median") else ""))
+             if st_sum.get("gap_ms_median") is not None
+             and st_sum.get("notes_per_s_p50") is not None
+             and st_sum.get("velocity_r_ms_p50") is not None else ""))
     for s in sorted(stream_stats, key=lambda s: -(s["std_err"] or 0))[:3]:
         material = ""
         if s.get("gap_ms"):

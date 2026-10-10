@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "osu-critique"
-version = "0.10.1"
+version = "0.11.0"
 description = "Data-driven osu! replay analysis: per-object hit/aim error, patterns, streams, tapping, UR — with deterministic reports and optional AI critique."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,6 +23,7 @@ dependencies = [
 
 [project.optional-dependencies]
 charts = ["matplotlib>=3.7"]
+stars = ["rosu-pp-py>=2.0"]
 dev = ["pytest>=7.0"]
 
 [project.scripts]

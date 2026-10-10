@@ -115,3 +115,25 @@ def test_both_readers_label_the_base(tmp_path, capsys):
     console_summary(ok)
     assert "time base:" not in capsys.readouterr().out
     assert "TIME BASE" not in render_report(ok)
+
+
+def test_stream_summary_survives_a_none_velocity(capsys):
+    """Regression for the batch crash: a run whose stream block has a median gap
+    but no meaningful velocity (velocity_r_ms_p50 is None) must not blow up
+    console_summary, because cmd_batch calls it after every replay."""
+    import json
+    from pathlib import Path
+    from osu_critique.report import console_summary
+
+    m = json.loads((Path(__file__).parent.parent / "examples"
+                    / "sample_metrics.json").read_text())
+    m["streams"] = {
+        "n_segments": 1,
+        "segments": [{"t_start": 1000.0, "t_end": 2000.0, "n": 8, "miss": 0,
+                      "std_err": 10.0, "alt_ratio": 0.5, "gap_ms": 100.0,
+                      "notes_per_s": 10.0, "kinds": {"Circle": 8}}],
+        "gap_ms_median": 100.0, "notes_per_s_p50": 10.0,
+        "velocity_r_ms_p50": None,
+    }
+    console_summary(m)                              # must not raise
+    assert "streams:" in capsys.readouterr().out

@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.10.1** — 144 tests (138 run anywhere), CI on Python 3.10-3.14. The
+> **Status: 0.11.0** — 160 tests (154 run anywhere), CI on Python 3.10-3.14. The
 > judgement is validated against the game's own recorded counts; see
 > [Validation and trust](#validation-and-trust).
 
@@ -64,15 +64,21 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 | Tier | Command | Needs keys? | What you get |
 |---|---|---|---|
 | **Core** | `analyze`, `pair`, `batch` | no | per-object metrics JSON + charts |
+| **Breakdown** | `breakdown` | no | speed cliff, cascades, worst ramp |
 | **Report** | `report` | no | deterministic, rule-based critique |
 | **Coach** | `coach` | LLM key (BYO) | full natural-language critique |
+| **Stars/pp** | `stars`, `pp` | optional extra (`[stars]`) | star ratings and pp per play |
 | **Profile** | `profile` | osu! API creds (BYO, optional) | player stats for context |
+| **Status** | `status` | osu! API creds (BYO, optional) | pp-eligible vs unranked split |
 
 The same metrics JSON becomes a critique three ways: `report` (rule-based,
 offline), `coach` (one LLM API call, streamed live), or `prompt` (the framework
 plus your data, to paste into any AI). `coach` and `prompt` take the same
 optional `--baseline` (an earlier run, for improvement/regression) and
-`--profile <username>` (player context).
+`--profile <username>` (player context). Both feed the model every analytic
+block (including `breakdown`) — the bulky, redundant parts are trimmed, never
+the analysis — and automatically join the `stars` / `pp` / `status` caches onto
+each run when those commands have been run in the output folder.
 
 Per-play metrics — timing, aim (press and cursor arrival), miss autopsy, slider
 bodies, two clocks, rolling baselines, cross-attempt structure, patterns,
@@ -101,6 +107,16 @@ osu-critique report out/<tag>_metrics.json [--baseline out/<other>_metrics.json]
 
 # cross-attempt structure: stable weakness vs one-off noise (same map, several plays)
 osu-critique attempts out/            # or a single metrics JSON; --json, --min-n, --all
+
+# how a play breaks down: speed cliff, reversal buckets, miss cascades, worst ramp
+osu-critique breakdown out/<tag>_metrics.json [--json]
+
+# star rating / pp via rosu-pp (optional extra: pip install 'osu-critique[stars]')
+osu-critique stars out/               # -> out/stars_by_md5.json
+osu-critique pp out/                  # -> out/pp_by_replay.json
+
+# ranked / leaderboard-only / unranked split (osu! API v2)
+osu-critique status out/
 
 # AI critique — one LLM API call
 osu-critique coach out/<tag>_metrics.json \
@@ -158,7 +174,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 144 tests (6 skip without the author's replays)
+pytest -q                     # 160 tests (6 skip without the author's replays)
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

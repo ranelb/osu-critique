@@ -23,6 +23,8 @@ import sys
 from . import __version__
 from .config import outdir
 from .io import pairing
+from .metrics.breakdown import build as build_breakdown
+from .metrics.breakdown import console_lines as breakdown_lines
 from .report import analyze, console_summary
 
 
@@ -53,12 +55,16 @@ def cmd_batch(args):
     tags = set()
     for source, rp, mp in pairs:
         tag = _tag_from_replay(rp, tags)
-        metrics = analyze(rp, mp, tag=tag, do_charts=args.charts,
-                          outdir=args.outdir, console=False,
-                          write_objects=not args.no_objects,
-                          write_aim=not args.no_aim,
-                          write_autopsy=not args.no_autopsy)
-        console_summary(metrics)
+        try:
+            metrics = analyze(rp, mp, tag=tag, do_charts=args.charts,
+                              outdir=args.outdir, console=False,
+                              write_objects=not args.no_objects,
+                              write_aim=not args.no_aim,
+                              write_autopsy=not args.no_autopsy)
+            console_summary(metrics)
+        except Exception as e:  # one bad replay must not lose the whole sweep
+            print(f"  !! skipped {tag} ({rp}): {type(e).__name__}: {e}", file=sys.stderr)
+            continue
         rows.append(metrics)
         print()
 
@@ -66,11 +72,145 @@ def cmd_batch(args):
     return 0
 
 
+def _load_objects(metrics_path):
+    """The sibling ``<tag>_objects.json`` for a metrics file, or None."""
+    base = os.path.basename(metrics_path)
+    if not base.endswith("_metrics.json"):
+        return None
+    obj_path = os.path.join(os.path.dirname(metrics_path),
+                            base[:-len("_metrics.json")] + "_objects.json")
+    if not os.path.isfile(obj_path):
+        return None
+    with open(obj_path) as f:
+        doc = json.load(f)
+    return doc.get("objects") if isinstance(doc, dict) else doc
+
+
+def cmd_breakdown(args):
+    """How a play breaks down: speed cliff, reversal buckets, cascades, ramp."""
+    try:
+        metrics = _load_metrics(args.metrics_json)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    block = metrics.get("breakdown")
+    if block is None:                      # older metrics: recompute from objects
+        objs = _load_objects(args.metrics_json)
+        if objs is None:
+            print(f"error: {args.metrics_json!r} has no breakdown block and no "
+                  "sibling _objects.json; re-run `analyze` without --no-objects",
+                  file=sys.stderr)
+            return 2
+        block = build_breakdown(objs)
+    if args.json:
+        print(json.dumps(block, indent=2, default=float))
+        return 0
+    print(f"=== {metrics.get('map')} ({metrics.get('tag')}) ===")
+    trust = (metrics.get("trust") or {}).get("trustworthy")
+    print("\n".join(breakdown_lines(block, trust)))
+    return 0
+
+
+def _rows_and_outdir(args):
+    """The metrics rows to operate on, and the outdir their caches live in."""
+    from .coach import _load_metrics_dir
+    from .config import outdir as _outdir
+    target = getattr(args, "path_or_dir", None) or str(_outdir())
+    if os.path.isfile(target):
+        rows = [_load_metrics(target)]
+        default = os.path.dirname(os.path.abspath(target))
+    else:
+        rows = [m for _, m in _load_metrics_dir(target)]
+        default = target
+    return rows, (args.outdir or default)
+
+
+def _stars_or_pp(args, kind):
+    from .metrics import difficulty as D
+    rows, outdir_path = _rows_and_outdir(args)
+    if not rows:
+        print("error: no *_metrics.json files to rate", file=sys.stderr)
+        return 2
+    index = D.load_index(outdir_path, getattr(args, "lazer_files", None))
+    try:
+        if kind == "stars":
+            cache_path = os.path.join(outdir_path, "stars_by_md5.json")
+            cache = D._load_json(cache_path)
+            cache = D.build_stars(rows, index, cache, player=args.player)
+        else:
+            cache_path = os.path.join(outdir_path, "pp_by_replay.json")
+            cache = D._load_json(cache_path)
+            cache = D.build_pp(rows, index, cache, player=args.player)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    with open(cache_path, "w") as f:
+        json.dump(cache, f)
+    print(f"{kind}: {len(cache)} entries -> {cache_path}")
+    return 0
+
+
+def cmd_stars(args):
+    return _stars_or_pp(args, "stars")
+
+
+def cmd_pp(args):
+    return _stars_or_pp(args, "pp")
+
+
+def cmd_status(args):
+    """Ranked / leaderboard-only / unranked split over the stored runs."""
+    from .io import status as S
+    from .metrics import difficulty as D
+    rows, outdir_path = _rows_and_outdir(args)
+    if not rows:
+        print("error: no *_metrics.json files to classify", file=sys.stderr)
+        return 2
+    index = D.load_index(outdir_path, None)
+    cache_path = os.path.join(outdir_path, "beatmap_status.json")
+    cache = S._load_json(cache_path)
+    try:
+        cache, md5_to_id = S.build_statuses(rows, index, cache=cache,
+                                            cache_path=cache_path,
+                                            player=args.player, log=print)
+    except RuntimeError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 2
+    print(f"status: {len(md5_to_id)}/{len({m.get('beatmap_md5') for m in rows})} "
+          "played maps carry an online BeatmapID")
+    s = S.summarise(rows, cache, md5_to_id, player=args.player)
+    known = max(1, s["known"])
+    print(f"\nplays: {s['plays']}  (status known for {s['known']});  "
+          f"{s['total_hours']:.1f} h in-game")
+    print(f"  {'status':<12} {'plays':>6} {'share':>6} {'hours':>7} {'h-share':>8}  bucket")
+    for status, c in sorted(s["counts"].items(), key=lambda kv: -kv[1]):
+        h = s["hours"].get(status, 0.0)
+        share = 100.0 * h / max(0.01, s["total_hours"])
+        print(f"  {status:<12} {c:6d} {100*c/known:5.1f}% {h:6.2f} {share:7.1f}%  "
+              f"{S.classify(status)}")
+    return 0
+
+
 def cmd_prompt(args):
-    """Print the critique-framework prompt; with a metrics JSON, print a full
-    ready-to-paste prompt (system + data) for use with any AI of your choice."""
-    from .coach import build_user_message, load_system_prompt
+    """Print the critique-framework prompt; with a metrics JSON (or a folder of
+    *_metrics.json), print a full ready-to-paste prompt (system + data)."""
+    from .coach import (build_multi_user_message, build_user_message,
+                        enrich_rows, load_system_prompt, _load_metrics_dir)
     system = load_system_prompt(args.prompt)
+    if args.metrics_json and os.path.isdir(args.metrics_json):
+        rows = _load_metrics_dir(args.metrics_json)
+        if not rows:
+            print(f"error: no *_metrics.json files in {args.metrics_json!r}",
+                  file=sys.stderr)
+            return 2
+        profile = None
+        if args.profile:
+            from .profile import fetch_profile
+            profile = fetch_profile(args.profile, allow_scrape=args.scrape or None)
+        enrich_rows(rows, args.metrics_json)
+        print(system)
+        print("\n\n" + build_multi_user_message(rows, profile))
+        return 0
     if args.metrics_json:
         try:
             metrics = _load_metrics(args.metrics_json)
@@ -85,6 +225,8 @@ def cmd_prompt(args):
         if args.profile:
             from .profile import fetch_profile
             profile = fetch_profile(args.profile, allow_scrape=args.scrape or None)
+        enrich_rows([(os.path.basename(args.metrics_json), metrics)],
+                    os.path.dirname(os.path.abspath(args.metrics_json)))
         print(system)
         print("\n\n" + build_user_message(metrics, baseline, profile))
     else:
@@ -581,6 +723,11 @@ def render_report(metrics, baseline=None):
                          f"n={s['n']} miss={s['miss']} std={s['std_err'] and round(s['std_err'], 1)}ms "
                          f"alt={s['alt_ratio'] * 100:.0f}%" + extra)
 
+    bd = metrics.get("breakdown")
+    if bd:
+        trust = (metrics.get("trust") or {}).get("trustworthy")
+        lines += [""] + breakdown_lines(bd, trust)
+
     tap = metrics["tapping"]
     lines += ["", "## Tapping",
               f"- alternation {tap['alt_ratio'] * 100:.0f}% (good > 90%), "
@@ -648,6 +795,37 @@ def main(argv=None):
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_batch)
 
+    p = sub.add_parser("breakdown", help="how a play breaks down: speed cliff, "
+                                         "reversal buckets, cascades, worst ramp")
+    p.add_argument("metrics_json", help="a metrics JSON (uses its stored breakdown, "
+                                         "or recomputes from the sibling _objects.json)")
+    p.add_argument("--json", action="store_true", help="print the block as JSON")
+    p.set_defaults(func=cmd_breakdown)
+
+    p = sub.add_parser("stars", help="star rating per beatmap via rosu-pp "
+                                      "(optional extra: osu-critique[stars])")
+    p.add_argument("path_or_dir", nargs="?", default=None,
+                   help="a metrics JSON or a directory of *_metrics.json (default: outdir)")
+    p.add_argument("--player", default=None, help="only rate this player's runs")
+    p.add_argument("--outdir", default=None,
+                   help="where stars_by_md5.json / the md5 index are cached")
+    p.add_argument("--lazer-files", default=None, help="override lazer's files/ store")
+    p.set_defaults(func=cmd_stars)
+
+    p = sub.add_parser("pp", help="pp + modded attributes per play via rosu-pp "
+                                   "(optional extra: osu-critique[stars])")
+    p.add_argument("path_or_dir", nargs="?", default=None)
+    p.add_argument("--player", default=None)
+    p.add_argument("--outdir", default=None)
+    p.set_defaults(func=cmd_pp)
+
+    p = sub.add_parser("status", help="ranked / leaderboard-only / unranked split "
+                                       "over the stored runs (osu! API v2)")
+    p.add_argument("path_or_dir", nargs="?", default=None)
+    p.add_argument("--player", default=None)
+    p.add_argument("--outdir", default=None)
+    p.set_defaults(func=cmd_status)
+
     p = sub.add_parser("report", help="deterministic critique from a metrics JSON (no keys)")
     p.add_argument("metrics_json")
     p.add_argument("--baseline", default=None, help="optional baseline metrics JSON")
@@ -676,7 +854,8 @@ def main(argv=None):
 
     p = sub.add_parser("prompt", help="print the critique-framework prompt (bring-your-own-AI)")
     p.add_argument("metrics_json", nargs="?", default=None,
-                   help="optional metrics JSON: print a full ready-to-paste prompt")
+                   help="optional metrics JSON or a folder of *_metrics.json: "
+                        "print a full ready-to-paste prompt")
     p.add_argument("--baseline", default=None, help="optional baseline metrics JSON")
     p.add_argument("--profile", default=None, help="optional osu! username for context")
     p.add_argument("--scrape", action="store_true",

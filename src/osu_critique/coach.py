@@ -96,6 +96,19 @@ Critique framework - use the numbers, don't invent others:
   alternation. std > 30 ms or alternation < 90% = rhythm collapse under sustained
   tapping; long segments failing while short ones hold = a sustain problem. Quote
   the rate and the material, not just "streams".
+- How it breaks down (metrics["breakdown"]): the mechanism under the misses.
+  speed_bins is miss rate per *required cursor speed* (recomputed from
+  geometry, so a bin with no misses is real), knee/cliff are the safe speed and
+  where misses explode; reversal is sharp turns (>=150deg) split at 6r spacing
+  vs flow; cascades are runs of consecutive misses (accumulation, not isolated
+  whiffs); ramp is the missiest 28-note window with its spacing/speed range. A
+  cliff with a low knee is a capacity problem; misses at every speed are a
+  reading/consistency one - say which.
+- Value, when joined: metrics.sr (base NM rating and effective rating with the
+  play's mods), metrics.pp ({pp, stars, aim, speed, mods}) and metrics.rank_status
+  (ranked/approved = pp-eligible, qualified/loved = leaderboard-only,
+  pending/wip/graveyard = unranked). Use them for context and to say whether a
+  play was worth pp; never compare raw pp across different SR without saying so.
 - Quarters: misses clustering in one quarter means section difficulty; std
   degrading toward Q4 looks like fatigue, but a map that ramps in difficulty
   looks identical - check the strain fields before blaming fatigue.
@@ -237,9 +250,76 @@ def _consume_sse(line: bytes, pieces: list[str]):
             sys.stdout.flush()
 
 
-def _compact(d, limit=12000):
-    s = json.dumps(d, indent=1, default=float)
+def _slim(metrics):
+    """Shrink the bulky, low-signal parts of a metrics dict for the prompt.
+
+    The analytic blocks (autopsy, aim_mode, breakdown, patterns, quarters,
+    sliders, tapping, trust) are what the model reasons over and are kept whole.
+    Only the fields that are long but redundant are capped: the 100+ stream
+    segments (keep the 8 worst by std), the per-3s stamina bins (the summary
+    keys stay) and the n<10 composition rows. Without this the raw JSON is
+    ~100k chars and the tail (streams, tapping, breakdown) is truncated away.
+    """
+    import copy
+    d = copy.deepcopy(metrics)
+    st = d.get("streams")
+    if isinstance(st, dict) and isinstance(st.get("segments"), list) \
+            and len(st["segments"]) > 8:
+        all_segs = st["segments"]
+        st["segments"] = sorted(all_segs, key=lambda s: -(s.get("std_err") or 0))[:8]
+        st["segments_shown"] = f"8 of {len(all_segs)} (worst by std)"
+    prof = d.get("profile")
+    if isinstance(prof, dict):
+        stam = prof.get("stamina")
+        if isinstance(stam, dict):
+            stam.pop("bins", None)
+        comp = prof.get("composition")
+        if isinstance(comp, list):
+            prof["composition"] = [c for c in comp if c.get("reported")]
+    return d
+
+
+def _compact(d, limit=48000):
+    s = json.dumps(_slim(d), indent=1, default=float)
     return s if len(s) <= limit else s[:limit] + "\n... [truncated]"
+
+
+def enrich_rows(rows, outdir):
+    """Join the optional corpus caches onto each metrics dict, in place.
+
+    When ``osu-critique stars`` / ``pp`` / ``status`` have run in ``outdir``,
+    every coached run gets its star rating (``sr``), pp (``pp``) and online
+    rank status (``rank_status``) without the caller asking. Missing caches are
+    simply skipped — the core critique never depends on them.
+    """
+    from .metrics.difficulty import _load_json, effective_sr_mods
+    if not outdir:
+        return rows
+    stars = _load_json(os.path.join(str(outdir), "stars_by_md5.json"))
+    pp = _load_json(os.path.join(str(outdir), "pp_by_replay.json"))
+    cache = _load_json(os.path.join(str(outdir), "beatmap_status.json"))
+    index = _load_json(os.path.join(str(outdir), "lazer_md5_index.json"))
+    ids = {}
+    if cache and index:
+        from .io import status as _status
+        needed = {m.get("beatmap_md5") for _, m in rows if m.get("beatmap_md5")}
+        ids = _status.beatmap_ids(index, needed)
+    for _, m in rows:
+        md5 = m.get("beatmap_md5")
+        st = stars.get(md5) if md5 else None
+        if st:
+            base = st.get("NM")
+            eff = st.get(effective_sr_mods(m.get("mod_string")) or "NM", base)
+            m["sr"] = {"base": base, "effective": eff}
+        rk = m.get("replay_md5")
+        if rk and rk in pp:
+            m["pp"] = pp[rk]
+        bid = ids.get(md5) if md5 else None
+        if bid is not None:
+            rec = cache.get(str(bid)) or cache.get(bid)
+            if rec:
+                m["rank_status"] = rec.get("status")
+    return rows
 
 
 def build_user_message(metrics, baseline=None, profile=None):
@@ -266,6 +346,11 @@ def _run_row(name, m):
     am = (m.get("aim_mode") or {}).get("distance_at_note_r") or {}
     classes = ((m.get("autopsy") or {}).get("shapes") or {}).get("classes") or []
     rev = next((c for c in classes if c["class"] == "near-reversal chain"), None)
+    bd = m.get("breakdown") or {}
+    casc = bd.get("cascades") or []
+    ramp = bd.get("ramp") or {}
+    sr = m.get("sr") or {}
+    pp = m.get("pp") or {}
     return {
         "map": name,
         "acc_pct": round(100 * m["accuracy"], 1),
@@ -282,6 +367,12 @@ def _run_row(name, m):
         "jump_miss_pct": pat("jump"),
         "bigjump_miss_pct": pat("bigjump"),
         "quarter_miss": [q_.get("miss", 0) for q_ in q],
+        "cliff_px_ms": (round(bd["cliff"], 2) if bd.get("cliff") is not None else "-"),
+        "cascade": (casc[0]["n"] if casc else "-"),
+        "ramp_miss": ramp.get("miss", "-"),
+        "eff_sr": (round(sr["effective"], 2) if sr.get("effective") is not None else "-"),
+        "pp": (round(pp["pp"], 1) if pp.get("pp") is not None else "-"),
+        "status": m.get("rank_status", "-") or "-",
         "flag": flag,
     }
 
@@ -293,8 +384,9 @@ def build_multi_user_message(rows, profile=None):
     per-run table instead of N full JSON blobs so any number of runs fits."""
     lines = ["## Runs — %d plays (compact per-run stats)" % len(rows)]
     lines.append("| map | acc | UR | mean_ms | aim_r | arrive_r | miss | whiffs | "
-                 "dense% | stream% | jump% | bigjump% | reversal% | Q1-Q4 miss | flag |")
-    lines.append("|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|")
+                 "dense% | stream% | jump% | bigjump% | reversal% | Q1-Q4 miss | "
+                 "effSR | pp | status | cliff | cascade | flag |")
+    lines.append("|" + "---|" * 21)
     for name, m in sorted(rows, key=lambda r: r[1]["accuracy"]):
         r = _run_row(name, m)
         q = ",".join(str(x) for x in r["quarter_miss"]) if r["quarter_miss"] else "-"
@@ -303,7 +395,8 @@ def build_multi_user_message(rows, profile=None):
             f"| {r['aim_r']:.2f} | {r['arrive_r']} | {r['miss']} | {r['whiffs']} "
             f"| {r['dense_miss_pct']} "
             f"| {r['stream_miss_pct']} | {r['jump_miss_pct']} | {r['bigjump_miss_pct']} "
-            f"| {r['reversal_pct']} | {q} | {r['flag']} |")
+            f"| {r['reversal_pct']} | {q} | {r['eff_sr']} | {r['pp']} "
+            f"| {r['status']} | {r['cliff_px_ms']} | {r['cascade']} | {r['flag']} |")
     lines.append("")
     lines.append("Analyze the player ACROSS these runs: per-skill verdicts, "
                  "recurring weaknesses (patterns, quarters, whiffs, timing bias), "
@@ -341,6 +434,7 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
             raise RuntimeError(
                 f"no *_metrics.json files found in directory {metrics_path!r} — "
                 "run `osu-critique batch` first")
+        enrich_rows(rows, metrics_path)
         user = build_multi_user_message(rows, profile)
     else:
         try:
@@ -353,6 +447,8 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
         except json.JSONDecodeError:
             raise RuntimeError(f"{metrics_path!r} is not valid metrics JSON — "
                                "run `osu-critique analyze` to generate it") from None
+        enrich_rows([(os.path.basename(metrics_path), metrics)],
+                    os.path.dirname(os.path.abspath(metrics_path)))
         user = build_user_message(metrics, baseline, profile)
     # the key is only needed for the API call: report a bad metrics path first,
     # so a missing file is never masked by "no LLM key configured"
