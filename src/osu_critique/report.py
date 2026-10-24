@@ -378,6 +378,12 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                        "trust": trust, "objects": records},
                       f, indent=1, allow_nan=False)
 
+    # derived index: a projection of what was just written. Best-effort by
+    # design -- a locked or read-only index must never lose an analysis.
+    from .index import index_run
+    index_run(metrics, out_json, objects_path=out_objects,
+              replay_path=replay_path, map_path=map_path, outdir=outdir)
+
     if do_charts and len(errs):
         from .charts import render_charts
         render_charts(results, errs, aims, w300, w100, w50, ur, radius, tag, outdir)

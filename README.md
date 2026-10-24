@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.11.0** — 160 tests (154 run anywhere), CI on Python 3.10-3.14. The
+> **Status: 0.12.0** — 188 tests (182 run anywhere), CI on Python 3.10-3.14. The
 > judgement is validated against the game's own recorded counts; see
 > [Validation and trust](#validation-and-trust).
 
@@ -98,6 +98,8 @@ osu-critique analyze <replay.osr> <map.osu> [tag] [--charts]
 osu-critique pair
 # pair + analyze every available replay + aggregate table
 osu-critique batch --charts
+# build / refresh the derived SQLite index of out/ (safe to delete; --check for drift)
+osu-critique index [--rebuild|--check]
 # show every resolved path (auto-detection diagnostics)
 osu-critique paths
 
@@ -174,7 +176,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 160 tests (6 skip without the author's replays)
+pytest -q                     # 188 tests (6 skip without the author's replays)
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

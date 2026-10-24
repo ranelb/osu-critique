@@ -12,6 +12,7 @@ Subcommands:
   coach   <metrics.json|dir> [--all] [--baseline] [--profile]   AI critique (BYO OSU_LLM_KEY)
   profile <username>                     fetch osu! profile (BYO osu API creds)
   setup   [--show]                       first-time configuration wizard
+  index   [--rebuild|--check]            build / refresh out/index.sqlite
 """
 from __future__ import annotations
 
@@ -39,6 +40,40 @@ def cmd_analyze(args):
                       write_autopsy=not args.no_autopsy)
     console_summary(metrics)
     return 0
+
+
+def cmd_index(args):
+    """Build or refresh the derived SQLite index over out/"""
+    from . import index
+
+    if args.check:
+        report = index.check(args.outdir)
+        if args.json:
+            print(json.dumps(report, indent=2))
+        elif report.get("note"):
+            print(f"index: {report['note']} ({report['index']})")
+        else:
+            print(f"index: {report['index']}")
+            print(f"  new     {len(report['new'])}")
+            print(f"  updated {len(report['updated'])}")
+            print(f"  missing {len(report['missing'])}")
+            for label in ("new", "updated", "missing"):
+                for name in report[label][:5]:
+                    print(f"    {label}: {name}")
+                if len(report[label]) > 5:
+                    print(f"    {label}: ... and {len(report[label]) - 5} more")
+        return 0 if report["ok"] else 1
+
+    stats = index.sweep(args.outdir, rebuild=args.rebuild, quiet=args.quiet)
+    if args.json:
+        print(json.dumps(stats, indent=2))
+    else:
+        print(f"index: {stats['runs']} runs, {stats['beatmaps']} beatmaps "
+              f"-> {index.db_path(args.outdir)}")
+        print(f"  added {stats['added']}, updated {stats['updated']}, "
+              f"unchanged {stats['unchanged']}, removed {stats['removed']}, "
+              f"failed {stats['failed']} ({stats['seconds']}s)")
+    return 1 if stats["failed"] else 0
 
 
 def cmd_pair(args):
@@ -891,6 +926,17 @@ def main(argv=None):
 
     p = sub.add_parser("paths", help="show resolved replay/map/output paths (auto-detected)")
     p.set_defaults(func=cmd_paths)
+
+    p = sub.add_parser("index", help="build / refresh the SQLite index of out/ "
+                                     "(derived; safe to delete and rebuild)")
+    p.add_argument("--rebuild", action="store_true",
+                   help="drop every row and re-read all artifacts")
+    p.add_argument("--check", action="store_true",
+                   help="report drift between out/ and the index; write nothing")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.add_argument("--quiet", action="store_true", help="no progress meter")
+    p.add_argument("--outdir", default=None)
+    p.set_defaults(func=cmd_index)
 
     args = parser.parse_args(argv)
     return args.func(args)

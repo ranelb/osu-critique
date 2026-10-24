@@ -5,8 +5,8 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.11.0** (tag `v0.11.0` is the last published release); 160 tests green
-(154 run anywhere, 6 opt-in), CI on Python 3.10/3.12/3.14 on every push, tag →
+State: **0.12.0** (tag `v0.11.0` is the last published release); 188 tests green
+(182 run anywhere, 6 opt-in), CI on Python 3.10/3.12/3.14 on every push, tag →
 wheel + GitHub release (`.github/workflows/release.yml`).
 
 ## In progress — web UI + per-map index (0.12.0 → 0.20.0)
@@ -21,6 +21,8 @@ osu! beatmap-listing idiom with covers from `assets.ppy.sh`, human annotations
 stored LLM critiques with staleness hashes, and an opt-in export + digest for
 new replays.
 
+Milestone **0.12.0 (the index) has landed** — see `docs/index.md`.
+
 **Not now, deliberately** — the fence, so scope cannot quietly grow: replay
 playback / cursor animation, auth or multi-user, public hosting, re-analysis
 from the browser, global osu! leaderboards, a mobile-specific layout, and
@@ -30,6 +32,19 @@ it does not need a schema change.
 
 ## Shipped since the handoff
 
+- **0.12.0 — the index** (`index.py`, `mapmeta.py`, `osu-critique index`,
+  `docs/index.md`): a SQLite **projection** of `out/` at `out/index.sqlite` —
+  one row per artifact plus a `beatmaps` row carrying `[Metadata]`/`[Events]`
+  parsed from the `.osu` (title, artist, creator, version, ids, background,
+  mode) and the three existing caches joined on (`sr`, `pp`, `rank_status`).
+  `analyze`/`batch` upsert their run; `--rebuild` drops and re-reads, `--check`
+  reports drift and writes nothing. Measured on the 3 171-run corpus: 4 s
+  cold, 0.1 s no-op sweep, 3.7 MB. Re-exports of one play are kept as separate
+  artifacts (36 of them) and de-duplicated at query time, never dropped.
+  Traps: `replay_md5` is the replay's internal hash, not the file's md5 (0/383
+  matched), so historical `replay_path` needs an explicit resolve pass;
+  `is_relax` must include `AP` and `aim_mode.is_relax`, not just `mods.RX`;
+  four pre-schema artifacts have `schema_version = NULL` and no beatmap md5.
 - **0.11.0 — breakdown, stars/pp, status** (the handoff's "DO NEXT, item B"):
   - `metrics/breakdown.py` + `osu-critique breakdown` + a `## How it breaks
     down` report section (`docs/breakdown.md`): the speed cliff (miss rate per
@@ -133,7 +148,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 160 tests (6 opt-in), no network
+.venv/bin/python -m pytest -q                       # 188 tests (6 opt-in), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
