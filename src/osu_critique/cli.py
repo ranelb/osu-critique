@@ -15,6 +15,8 @@ Subcommands:
   index   [--rebuild|--check]            build / refresh out/index.sqlite
   serve   [--host] [--port]              run the local web frontend (needs [web])
   annotate add|list|rm                   human notes the coach reads (map or run scoped)
+  export  [--install|--run]              opt-in replay export from the osu! database
+  digest  [--since] [--no-ingest]        what's new since your last digest (no LLM)
 """
 from __future__ import annotations
 
@@ -77,6 +79,75 @@ def cmd_serve(args):
         return 2
     except KeyboardInterrupt:
         pass
+    return 0
+
+
+def cmd_export(args):
+    """Opt-in replay export from osu!lazer's database (BeatmapExporter)."""
+    from . import export
+
+    if args.install:
+        try:
+            path = export.install(force=args.force)
+        except export.ExportError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        print(f"installed {path}")
+
+    statuses = None
+    if args.status is not None:
+        statuses = [s for s in args.status.replace(",", " ").split() if s]
+
+    if args.run:
+        try:
+            result = export.run(filter_statuses=statuses, timeout=args.timeout,
+                                prune_player=args.prune_player)
+        except export.ExportError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        if args.json:
+            print(json.dumps(result, indent=2))
+        else:
+            print(f"export: {result['exported']} new of {result['total']} score "
+                  f"replays ({result['beatmaps']} beatmaps) in {result['seconds']}s")
+            if result["pruned"]:
+                print(f"  pruned {len(result['pruned'])} replays from other players")
+            if result["dest"]:
+                print(f"  dest: {result['dest']}")
+        return 0 if result["ok"] else 2
+
+    status = export.status()
+    if args.json:
+        print(json.dumps(status, indent=2))
+        return 0
+    print(f"export: {'enabled' if status['enabled'] else 'disabled'}"
+          f"  (platform {status['platform']}, manifest {status['manifest_version']})")
+    print(f"  binary:   {status['binary'] or 'not installed — run --install'}")
+    print(f"  exports:  {status['exports_dir']}  ({status['replays_on_disk']} .osr)")
+    print(f"  statuses: {', '.join(status['statuses'])}")
+    if not status["enabled"]:
+        print("  disabled by default: set export.enabled = true (or "
+              "OSU_EXPORT_ENABLED=1) to let it touch the osu! database")
+    return 0
+
+
+def cmd_digest(args):
+    """What's new since the last digest — deterministic, no LLM."""
+    from . import digest
+
+    try:
+        doc = digest.build(outdir=args.outdir, since=args.since,
+                           ingest_first=not args.no_ingest,
+                           write=not args.stdout)
+    except Exception as exc:  # noqa: BLE001 - the CLI reports, never tracebacks
+        print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
+        return 2
+    if args.json:
+        print(json.dumps(doc, indent=2, default=str))
+        return 0
+    if doc.get("path"):
+        print(f"digest: {doc['path']}", file=sys.stderr)
+    print(doc["markdown"])
     return 0
 
 
@@ -1153,6 +1224,36 @@ def main(argv=None):
                    help="skip the search for the owning sidecar")
     a.add_argument("--outdir", default=None)
     a.set_defaults(func=cmd_annotate)
+
+    p = sub.add_parser("export", help="opt-in replay export from osu!lazer's "
+                                     "database (needs BeatmapExporter; disabled "
+                                     "unless export.enabled is true)")
+    p.add_argument("--install", action="store_true",
+                   help="download the pinned BeatmapExporter for this platform "
+                        "(sha256-verified) into ~/.local/share/osu-critique/bin")
+    p.add_argument("--force", action="store_true", help="re-download even if present")
+    p.add_argument("--run", action="store_true", help="actually export")
+    p.add_argument("--status", default=None, metavar="LIST",
+                   help="comma-separated status filter (ranked,loved,...); "
+                        "default: no filter, export everything")
+    p.add_argument("--prune-player", default=None, metavar="NAME",
+                   help="delete exported replays whose filename does not start "
+                        "with NAME (the Realm also holds other players' replays)")
+    p.add_argument("--timeout", type=float, default=None)
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_export)
+
+    p = sub.add_parser("digest", help="what happened since your last digest: "
+                                     "ingest new replays and summarise (no LLM)")
+    p.add_argument("--since", default=None, metavar="TIME",
+                   help="ISO timestamp (default: the previous digest)")
+    p.add_argument("--no-ingest", action="store_true",
+                   help="summarise only; do not analyse new exported replays")
+    p.add_argument("--stdout", action="store_true",
+                   help="print only; do not write out/digests/ or move the marker")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--outdir", default=None)
+    p.set_defaults(func=cmd_digest)
 
     args = parser.parse_args(argv)
     return args.func(args)

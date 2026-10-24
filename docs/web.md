@@ -23,6 +23,7 @@ skip), then serves until interrupted.
 | `/api/objects/<run_id>` | the per-object JSON, verbatim as `analyze` wrote it. |
 | `/api/map/<md5>`, `/api/runs` | the same data the pages render, for anything that wants JSON. |
 | `/api/cover/<md5>?size=card\|hero` | the cached cover, fetched once from `assets.ppy.sh`. |
+| `/feed` | the written digests, newest first (see [export.md](export.md)). |
 | `/run/<id>/frames` | **501** — reserved for replay playback, deliberately unimplemented. |
 
 `run_id` is the replay's md5, or `tag:<tag>` for the four pre-schema artifacts
@@ -89,5 +90,5 @@ Env overrides: `OSU_WEB_HOST`, `OSU_WEB_PORT`, `OSU_COVER_CACHE`.
 
 ## Not here yet
 
-Export/digest (0.16.0), and replay playback (fenced for now — the route and the
-data columns exist so it will not need a schema change).
+Replay playback (fenced for now — the route and the data columns exist so it
+will not need a schema change).

@@ -555,3 +555,28 @@ def test_llm_remote_false_refuses_non_loopback_clients(tmp_path, monkeypatch, ll
     local = TestClient(app, client=("127.0.0.1", 5000))
     r = local.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
     assert r.status_code == 303
+
+
+# ------------------------------------------------------------------- feed ----
+
+def test_feed_lists_digests(tmp_path):
+    out = build_corpus(tmp_path)
+    from osu_critique import digest
+    digest.build(outdir=out, since="2026-09-01T00:00:00", ingest_first=False)
+    app = create_app(outdir=out, index_on_boot=False)
+    client = TestClient(app)
+    r = client.get("/feed")
+    assert r.status_code == 200
+    assert "Digest —" in r.text
+    assert "no new runs" not in r.text.lower()
+    assert "New runs" not in r.text  # the header counts, it does not shout
+
+
+def test_feed_is_empty_before_the_first_digest(client):
+    r = client.get("/feed")
+    assert r.status_code == 200
+    assert "No digests yet" in r.text
+
+
+def test_nav_links_the_feed(client):
+    assert 'href="/feed"' in client.get("/").text

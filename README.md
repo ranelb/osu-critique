@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.15.0** — 252 tests (204 run anywhere without optional extras), CI on
+> **Status: 0.16.0** — 270 tests (219 run anywhere without optional extras), CI on
 > Python 3.10-3.14. The judgement is validated against the game's own recorded
 > counts; see [Validation and trust](#validation-and-trust).
 
@@ -76,6 +76,8 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 | **Status** | `status` | osu! API creds (BYO, optional) | pp-eligible vs unranked split |
 | **Web** | `serve` | optional extra (`[web]`) | local frontend: map showcase, run pages, deterministic report |
 | **Annotate** | `annotate` | no | notes the coach reads, in map time |
+| **Export** | `export` | optional binary + opt-in | replay export from the osu! database |
+| **Digest** | `digest` | no | what's new since your last visit; no LLM |
 
 The same metrics JSON becomes a critique three ways: `report` (rule-based,
 offline), `coach` (one LLM API call, streamed live), or `prompt` (the framework
@@ -92,7 +94,8 @@ streams, tapping, sections, whiffs, map profile, trust — are catalogued in
 [docs/metrics.md](docs/metrics.md). The SQLite projection the web frontend
 reads is [docs/index.md](docs/index.md); the frontend itself (pages, bind rules,
 testing) is [docs/web.md](docs/web.md), and annotations in [docs/annotations.md](docs/annotations.md), and stored critiques in
-[docs/critiques.md](docs/critiques.md).
+[docs/critiques.md](docs/critiques.md). Export and the digest are
+[docs/export.md](docs/export.md).
 
 The AI coach is tested with **one model: DeepSeek V4 Flash**
 (`deepseek-v4-flash`, `https://api.deepseek.com`) — the default. Other
@@ -116,6 +119,10 @@ osu-critique serve [--host 0.0.0.0] [--port 8765] [--no-index]
 osu-critique annotate add --map <md5> [--run <replay_md5>] [--t 2:14.312] "note"
 osu-critique annotate list [--map <md5>] [--json]
 osu-critique annotate rm <note_id>
+
+# opt-in: pull replays from the osu! database, then summarise what's new
+osu-critique export [--install|--run] [--status ranked,loved]
+osu-critique digest [--since TIME] [--no-ingest]
 # show every resolved path (auto-detection diagnostics)
 osu-critique paths
 
@@ -192,7 +199,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 252 tests (6 need the author's replays, 42 need [web])
+pytest -q                     # 270 tests (6 need the author's replays, 45 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

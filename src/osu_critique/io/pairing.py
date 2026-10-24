@@ -114,49 +114,60 @@ def _pair_by_md5(replays, index, label):
 
 # ------------------------------------------------------------- sources ------
 
-def pair_lazer(exports_dir=None, files_dir=None):
+def pair_lazer(exports_dir=None, files_dir=None, replay_filter=None):
     exports_dir = Path(exports_dir or lazer_exports())
     files_dir = Path(files_dir or lazer_files())
     replays = sorted(glob.glob(os.path.join(str(exports_dir), "*.osr")))
+    if replay_filter is not None:
+        replays = [r for r in replays if replay_filter(r)]
     if not replays:
         print(f"no lazer replays in {exports_dir}", file=sys.stderr)
         return []
     return _pair_by_md5(replays, build_lazer_index(files_dir), "lazer")
 
 
-def pair_stable(replays_dir=None, songs_dir=None):
+def pair_stable(replays_dir=None, songs_dir=None, replay_filter=None):
     root = stable_replays()
     if root is None:
         return []  # stable unsupported on this platform (Windows-only)
     replays_dir = Path(replays_dir or root)
     songs_dir = Path(songs_dir or stable_songs())
     replays = sorted(glob.glob(os.path.join(str(replays_dir), "*.osr")))
+    if replay_filter is not None:
+        replays = [r for r in replays if replay_filter(r)]
     if not replays:
         print(f"no stable replays in {replays_dir}", file=sys.stderr)
         return []
     return _pair_by_md5(replays, index_osu_dir(songs_dir), "stable")
 
 
-def pair_folders(replays_dir=None, maps_dir=None, cache=None):
+def pair_folders(replays_dir=None, maps_dir=None, cache=None, replay_filter=None):
     replays_dir = Path(replays_dir or _replays_dir())
     maps_dir = Path(maps_dir or _maps_dir())
     cache = Path(cache or cache_dir())
     cache.mkdir(parents=True, exist_ok=True)
     replays = sorted(glob.glob(os.path.join(str(replays_dir), "**", "*.osr"),
                                recursive=True))
+    if replay_filter is not None:
+        replays = [r for r in replays if replay_filter(r)]
     if not replays:
         print(f"no replays in ./{replays_dir}", file=sys.stderr)
         return []
     return _pair_by_md5(replays, index_maps_folder(maps_dir, cache), "folders")
 
 
-def pair_all():
-    """Pair from every available source: [(source, replay, map)]."""
+def pair_all(replay_filter=None):
+    """Pair from every available source: [(source, replay, map)].
+
+    ``replay_filter(path) -> bool`` runs before any replay is parsed, so a
+    caller that only cares about new files (the digest) never pays for the
+    whole corpus.
+    """
     seen = set()
     out = []
     for source, fn in (("lazer", pair_lazer), ("stable", pair_stable),
                        ("folders", pair_folders)):
-        for rp, mp in fn():
+        for rp, mp in fn(replay_filter=replay_filter):
             if rp in seen:
                 continue
             seen.add(rp)

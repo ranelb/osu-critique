@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}feed · osu-critique{% endblock %}
+{% block body %}
+<section class="page-head">
+  <h1>feed</h1>
+  <p class="muted">
+    {{ n_new }} new run{{ '' if n_new == 1 else 's' }} since
+    {{ marker | when if marker else 'the beginning' }} —
+    deterministic digests, no model called.
+  </p>
+  <p class="muted"><code>osu-critique digest</code> ingests new exported replays and
+    writes one; <code>osu-critique export --run</code> pulls them from osu! first
+    (opt-in).</p>
+</section>
+
+{% for item in items %}
+<section class="panel">
+  <h2>digest <span class="count">{{ item.mtime | ts }}</span></h2>
+  <pre class="report">{{ item.text }}</pre>
+</section>
+{% else %}
+<section class="panel">
+  <p class="muted">No digests yet. Run <code>osu-critique digest</code>.</p>
+</section>
+{% endfor %}
+{% endblock %}

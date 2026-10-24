@@ -5,8 +5,8 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.15.0** (tag `v0.14.0` is the last published release); 252 tests green
-(204 run anywhere: 42 need the `[web]` extra, 6 need the author's replays), CI
+State: **0.16.0** (tag `v0.15.0` is the last published release); 270 tests green
+(219 run anywhere: 45 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
 
@@ -23,8 +23,10 @@ stored LLM critiques with staleness hashes, and an opt-in export + digest for
 new replays.
 
 Milestones **0.12.0 (the index)**, **0.13.0 (the web read path)**,
-**0.14.0 (annotations)** and **0.15.0 (stored critiques)** have landed — see
-`docs/index.md`, `docs/web.md`, `docs/annotations.md`, `docs/critiques.md`.
+**0.14.0 (annotations)**, **0.15.0 (stored critiques)** and **0.16.0 (export +
+digest)** have landed — see `docs/index.md`, `docs/web.md`, `docs/annotations.md`,
+`docs/critiques.md`, `docs/export.md`. What remains is **0.20.0**, the polish
+release (covers, empty states, screenshots from the synthetic corpus, docs).
 
 **Not now, deliberately** — the fence, so scope cannot quietly grow: replay
 playback / cursor animation, auth or multi-user, public hosting, re-analysis
@@ -35,6 +37,23 @@ it does not need a schema change.
 
 ## Shipped since the handoff
 
+- **0.16.0 — export and the digest** (`export.py`, `digest.py`,
+  `export_assets.json`, `THIRD_PARTY.md`, `docs/export.md`): the opt-in
+  `osu-critique export` drives BeatmapExporter (MIT v2.8.0, sha256-pinned,
+  vendored in this project's releases for linux/win/mac, detected or
+  `--install`ed, disabled until `export.enabled`). Its menu is text-driven
+  (`status …` / `reset`), so no screen scraping; the filter is **reset** when no
+  status is configured, which is the bug that had been hiding loved/graveyard
+  plays (171 of the author's). `osu-critique digest` ingests exported `.osr`
+  newer than `out/digests/.last` (md5-checked, so a re-run is a no-op), then
+  writes a deterministic summary: the plays, timing spread and miss rate as
+  percentiles against prior history, and per-map consistent weaknesses vs
+  swings. `/feed` lists the digests. 7 export tests + 8 digest tests + 3 route
+  tests.
+  Traps: a fake exporter in a pty must not read stdin to EOF (``cat`` hangs);
+  `os.write` to a pty whose child already exited raises EIO and must be
+  swallowed; the digest marker is **naive local time** because it is compared
+  lexicographically with `played_at` from the replay.
 - **0.15.0 — stored critiques** (`critiques.py`, `coach --save`,
   `docs/critiques.md`): one canonical sidecar per run at
   `out/critiques/<run_id>.json`, mirrored into the index. A critique records
@@ -197,7 +216,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 252 tests (42 need [web]), no network
+.venv/bin/python -m pytest -q                       # 270 tests (45 need [web]), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy

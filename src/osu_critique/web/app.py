@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import __version__, annotations, covers, critiques, index
+from .. import __version__, annotations, covers, critiques, digest, index
 from ..config import outdir as default_outdir
 from . import data
 
@@ -63,6 +63,15 @@ def clock(seconds) -> str:
     return f"{total // 60}:{total % 60:02d}"
 
 
+def ts(epoch) -> str:
+    from datetime import datetime
+
+    try:
+        return datetime.fromtimestamp(float(epoch)).strftime("%Y-%m-%d %H:%M")
+    except (TypeError, ValueError, OSError):
+        return "—"
+
+
 def mmss(ms) -> str:
     """Milliseconds -> ``m:ss.mmm`` (object times, window edges)."""
     if ms is None:
@@ -90,7 +99,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
 
     templates = Jinja2Templates(directory=TEMPLATES)
     templates.env.filters.update(pct=pct, num=num, star=star, when=when,
-                                 clock=clock, mmss=mmss,
+                                 clock=clock, mmss=mmss, ts=ts,
                                  fmt_t=annotations.fmt_time)
     templates.env.globals.update(
         version=__version__,
@@ -122,6 +131,25 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         return render("index.html", request, **page, q=q or "",
                       status=status or "", trust=trust or "",
                       sorts=list(data.SORTS.items()))
+
+    @app.get("/feed", response_class=HTMLResponse)
+    def feed(request: Request):
+        items = digest.load_digests(out)
+        marker, _epoch = digest.last_digest(out)
+        conn = index.open_readonly(out)
+        n_new = 0
+        if conn is not None:
+            try:
+                sql = "SELECT COUNT(*) FROM runs"
+                args = ()
+                if marker:
+                    sql += " WHERE played_at > ?"
+                    args = (marker,)
+                n_new = conn.execute(sql, args).fetchone()[0]
+            finally:
+                conn.close()
+        return render("feed.html", request, items=items, marker=marker,
+                      n_new=n_new)
 
     @app.get("/map/{beatmap_md5}", response_class=HTMLResponse)
     def map_page(request: Request, beatmap_md5: str, sort: str = "played_at"):

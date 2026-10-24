@@ -20,11 +20,28 @@ jobs:
           pip install --upgrade pip
           pip install build
           python -m build --wheel
+      - name: Fetch the pinned BeatmapExporter binaries
+        # The opt-in exporter ships its realm reader here rather than in git:
+        # the wheel stays small, the binary stays MIT-licensed and verifiable.
+        run: |
+          python - <<'PY'
+          import hashlib, json, pathlib, urllib.request
+          manifest = json.loads(pathlib.Path("src/osu_critique/export_assets.json").read_text())
+          out = pathlib.Path("assets"); out.mkdir(exist_ok=True)
+          for key, asset in manifest["assets"].items():
+              url = f"https://github.com/kabiiQ/BeatmapExporter/releases/download/{manifest['version']}/{asset['name']}"
+              dest = out / asset["name"]
+              print(f"{key}: {url}")
+              urllib.request.urlretrieve(url, dest)
+              digest = hashlib.sha256(dest.read_bytes()).hexdigest()
+              if digest != asset["sha256"]:
+                  raise SystemExit(f"{asset['name']}: sha256 {digest} != {asset['sha256']}")
+          PY
       - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/*.whl \
+          gh release create "$GITHUB_REF_NAME" dist/*.whl assets/* \
             --title "$GITHUB_REF_NAME" \
             --generate-notes \
-            --notes "Automated release: wheel built from the tagged commit."
+            --notes "Automated release: wheel built from the tagged commit, plus the pinned BeatmapExporter binaries the opt-in \`osu-critique export\` verifies by sha256."

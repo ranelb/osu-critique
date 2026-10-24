@@ -6,10 +6,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```sh
 pip install -e ".[dev]"          # install (add ".[charts]" for matplotlib)
-pytest -q                        # full suite (~252; 42 need [web], 6 need the author's replays)
+pytest -q                        # full suite (~270; 45 need [web], 6 need the author's replays)
 osu-critique index [--rebuild|--check]   # rebuild/refresh out/index.sqlite (derived)
 osu-critique serve               # local web frontend on :8765 (needs .[web])
 osu-critique annotate add --map <md5> [--run <replay_md5>] [--t 2:14.312] "note"
+osu-critique export [--install|--run]   # opt-in; needs export.enabled
+osu-critique digest                     # ingest new replays + write the digest
 pytest tests/test_judge.py -q    # one file
 pytest tests/test_judge.py::test_name -q   # one test
 osu-critique batch --charts      # pair + analyze every replay in replays/ and the osu! install
@@ -30,6 +32,7 @@ The analysis core is fully local and deterministic; the LLM pieces are optional 
 - **Tiers** are separate entry points over the same JSON: `report.py` (rule-based, offline), `coach.py` (one LLM call, DeepSeek V4 Flash by default, OpenAI-compatible), and `prompt` (framework + data for pasting into any AI). `profile.py` fetches osu! player stats (API v2, HTML scrape only with `--scrape` / `allow_scrape`).
 - **Config and path discovery**: `config.py` resolves settings as env var (`OSU_*`) > config file > auto-detection > default. `io/pairing.py` finds replay↔map pairs across osu!lazer, osu!stable and the repo's `replays/` + `maps/`. `cli.py` is the `argparse` front end; `osu-critique paths` prints every resolved path.
 - **Index** (`index.py`, `mapmeta.py`, `docs/index.md`): `out/index.sqlite` is a **projection** of `out/*_metrics.json` for the web frontend — listing/filter scalars plus a `beatmaps` row parsed from the `.osu`. `analyze`/`batch` upsert; `index --rebuild`/`--check` are the maintenance commands. Heavy blocks and per-object records stay in the JSON.
+- **Export/digest** (`export.py`, `digest.py`, `docs/export.md`): opt-in only (`export.enabled`), never self-scheduled. Drives BeatmapExporter's text menu (`status …` / `reset`) through a pty; the pinned sha256 lives in `export_assets.json` and the release workflow attaches the binaries. `digest` ingests `.osr` newer than `out/digests/.last` and writes a deterministic markdown summary — no model in that path, ever.
 - **Critiques** (`critiques.py`, `docs/critiques.md`): canonical `out/critiques/<run_id>.json`, mirrored into the index. `run_hash` covers the metrics **and the notes**; `prompt_hash` covers the system prompt; a different model is not staleness. The web streams the call as SSE; the key never leaves the server; `web.llm_remote: false` gates non-loopback clients on the LLM routes only.
 - **Annotations** (`annotations.py`, `docs/annotations.md`): canonical sidecars `out/annotations/<beatmap_md5>.json`, mirrored into the index on every sweep. `t_map` is **seconds in map time**; object `t` is row-clock milliseconds — convert with `time_base.rows_scale` (`to_map_time`/`to_row_ms`). `coach`/`prompt` read them; `report` does not. The web forms need `python-multipart`.
 - **Web** (`web/app.py`, `web/data.py`, `covers.py`, `docs/web.md`): FastAPI + Jinja2 + htmx, optional extra `[web]`. Second frontend only — it imports the library and reads the index, never recomputes a metric. Pages live in `web/templates/`, the whole client script is `web/static/app.js` (two canvases + one lazy table), and `tests/test_web.py` drives every route through `TestClient`.
