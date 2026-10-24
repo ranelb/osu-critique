@@ -29,7 +29,11 @@ from . import mapmeta
 from .config import outdir as _default_outdir
 
 DB_FILENAME = "index.sqlite"
-SCHEMA_VERSION = 2  # v2: one row per artifact (json_path), not per replay md5
+
+
+class SchemaMismatch(RuntimeError):
+    """The DB was written by another build; it is derived, so rebuild it."""
+SCHEMA_VERSION = 3  # v3: annotations keyed by note_id (authored ids, not rowids)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -120,13 +124,13 @@ CREATE TABLE IF NOT EXISTS beatmaps (
 
 -- authored, canonical in out/annotations/<beatmap_md5>.json
 CREATE TABLE IF NOT EXISTS annotations (
-    id          INTEGER PRIMARY KEY,
+    note_id     TEXT PRIMARY KEY,   -- minted by the sidecar, not a rowid
     scope       TEXT NOT NULL CHECK (scope IN ('map', 'run')),
     beatmap_md5 TEXT NOT NULL,
     replay_md5  TEXT,
-    t_map       REAL,           -- NULL = general comment; map time otherwise
+    t_map       REAL,           -- NULL = general comment; map time (seconds)
     body        TEXT NOT NULL,
-    tags        TEXT,
+    tags        TEXT,           -- comma-separated
     created_at  TEXT NOT NULL,
     updated_at  TEXT,
     source_path TEXT            -- the sidecar it came from
@@ -180,7 +184,7 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
         conn.execute("INSERT INTO meta (key, value) VALUES ('schema_version', ?)",
                      (str(SCHEMA_VERSION),))
     elif int(row["value"]) != SCHEMA_VERSION:
-        raise RuntimeError(
+        raise SchemaMismatch(
             f"index schema is v{row['value']}, this build expects v{SCHEMA_VERSION}; "
             "run `osu-critique index --rebuild`")
     conn.commit()
@@ -497,10 +501,19 @@ def sweep(outdir=None, rebuild: bool = False, quiet: bool = False,
     path = root / DB_FILENAME
     started = time.time()
     files = _metrics_files(root)
+    if rebuild and path.exists():
+        # a schema from another build cannot be opened at all, so rebuilding
+        # has to start from the file, not from the connection
+        for suffix in ("", "-wal", "-shm"):
+            try:
+                Path(str(path) + suffix).unlink()
+            except FileNotFoundError:
+                pass
     conn = connect(path)
     try:
         if rebuild and not check:
-            conn.executescript("DELETE FROM runs; DELETE FROM beatmaps;")
+            conn.executescript("DELETE FROM runs; DELETE FROM beatmaps; "
+                               "DELETE FROM annotations;")
             conn.commit()
         known = {r["json_path"]: r for r in conn.execute(
             "SELECT json_path, run_id, mtime, size FROM runs")}
@@ -567,6 +580,7 @@ def sweep(outdir=None, rebuild: bool = False, quiet: bool = False,
             if not check:
                 conn.execute("DELETE FROM runs WHERE json_path = ?", (fp_str,))
         if not check:
+            sync_annotations(conn, root)
             conn.commit()
         stats["beatmaps"] = conn.execute("SELECT COUNT(*) FROM beatmaps").fetchone()[0]
         stats["runs"] = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
@@ -599,6 +613,29 @@ def _upsert_with(conn, metrics, fp, objects_path, resolver, joins, stats, prev):
         f"INSERT OR REPLACE INTO runs ({', '.join(cols)}) "
         f"VALUES ({', '.join('?' * len(cols))})",
         [row.get(c) for c in cols])
+
+
+def sync_annotations(conn: sqlite3.Connection, outdir) -> int:
+    """Replace the annotations mirror from the canonical sidecar files.
+
+    Annotations are authored data: the DB is a copy, the files are the truth.
+    Cheap enough (one file per annotated map) to redo on every sweep.
+    """
+    from . import annotations
+
+    notes = annotations.all_notes(outdir)
+    conn.execute("DELETE FROM annotations")
+    for note in notes:
+        conn.execute(
+            "INSERT OR REPLACE INTO annotations (note_id, scope, beatmap_md5, "
+            "replay_md5, t_map, body, tags, created_at, updated_at, source_path) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (note["note_id"], note["scope"], note["beatmap_md5"],
+             note.get("replay_md5"), note.get("t_map"), note["body"],
+             ",".join(note.get("tags") or []), note["created_at"],
+             note.get("updated_at"),
+             os.fspath(annotations.sidecar_path(outdir, note["beatmap_md5"]))))
+    return len(notes)
 
 
 def check(outdir=None) -> dict:

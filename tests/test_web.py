@@ -235,7 +235,7 @@ def test_run_page_makes_an_untrustworthy_run_look_different(client):
 def test_run_page_lists_the_interesting_objects(client):
     r = client.get("/run/" + "2" * 32)
     assert "objects worth looking at" in r.text
-    assert 'class="res-miss"' in r.text
+    assert "res-miss" in r.text
     assert "load the full object table" not in r.text  # 1 miss < the table limit
 
 
@@ -316,3 +316,113 @@ def test_core_imports_without_fastapi():
                           text=True)
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == "False"
+
+
+# ------------------------------------------------------------ annotations ----
+
+def post_note(client, path, **fields):
+    data = {"body": "", "t": "", "tag": ""}
+    data.update(fields)
+    return client.post(path, data=data, follow_redirects=False)
+
+
+def test_map_note_shows_on_the_map_and_on_every_attempt(client):
+    r = post_note(client, f"/map/{MAP_A}/annotations",
+                  body="the second kiai is the wall", t="2:14.312", tag="kiai jumps")
+    assert r.status_code == 303
+    assert r.headers["location"] == f"/map/{MAP_A}"
+
+    page = client.get(f"/map/{MAP_A}").text
+    assert "the second kiai is the wall" in page
+    assert "2:14.312" in page
+    assert ">kiai<" in page and ">jumps<" in page
+
+    # every attempt of that map sees it
+    for replay in ("1", "2", "3"):
+        run_page = client.get("/run/" + replay * 32).text
+        assert "the second kiai is the wall" in run_page
+    # another map does not
+    assert "the second kiai is the wall" not in client.get(f"/map/{MAP_B}").text
+
+
+def test_run_note_is_scoped_to_that_attempt(client):
+    post_note(client, "/run/" + "2" * 32 + "/annotations",
+              body="felt sloppy here", t_map="1.500", tag="feel")
+    assert "felt sloppy here" in client.get("/run/" + "2" * 32).text
+    assert "felt sloppy here" not in client.get("/run/" + "3" * 32).text
+    # it still counts as a note on the map (listed as run-scoped)
+    assert "run-scoped note" in client.get(f"/map/{MAP_A}").text
+
+
+def test_stamp_from_the_run_form_can_apply_to_the_whole_map(client):
+    post_note(client, "/run/" + "2" * 32 + "/annotations",
+              body="this jump is a wall", t_map="12.000", scope="map")
+    map_page = client.get(f"/map/{MAP_A}").text
+    assert "this jump is a wall" in map_page
+    assert "0:12.000" in map_page
+    # a map-scoped note shows on another attempt too
+    assert "this jump is a wall" in client.get("/run/" + "3" * 32).text
+
+
+def test_note_timestamp_is_rendered_as_a_chip(client):
+    post_note(client, f"/map/{MAP_A}/annotations", body="here", t="0:02.500")
+    page = client.get(f"/map/{MAP_A}").text
+    assert '<span class="chip">0:02.500</span>' in page
+
+
+def test_delete_note(client):
+    post_note(client, f"/map/{MAP_A}/annotations", body="temporary")
+    page = client.get(f"/map/{MAP_A}").text
+    note_id = page.split("/annotations/")[1].split("/delete")[0]
+    r = client.post(f"/annotations/{note_id}/delete",
+                    data={"next": f"/map/{MAP_A}"}, follow_redirects=False)
+    assert r.status_code == 303
+    assert "temporary" not in client.get(f"/map/{MAP_A}").text
+
+
+def test_empty_note_is_refused(client):
+    assert post_note(client, f"/map/{MAP_A}/annotations", body="  ").status_code == 400
+
+
+def test_bad_timestamp_is_refused(client):
+    assert post_note(client, f"/map/{MAP_A}/annotations",
+                     body="x", t="two minutes").status_code == 400
+
+
+def test_delete_refuses_an_open_redirect(client):
+    post_note(client, f"/map/{MAP_A}/annotations", body="temporary")
+    note_id = client.get(f"/map/{MAP_A}").text.split("/annotations/")[1].split("/delete")[0]
+    r = client.post(f"/annotations/{note_id}/delete",
+                    data={"next": "//evil.example/x"}, follow_redirects=False)
+    assert r.headers["location"] == "/"
+
+
+def test_note_body_is_escaped(client):
+    post_note(client, f"/map/{MAP_A}/annotations",
+              body="<script>alert(1)</script>")
+    page = client.get(f"/map/{MAP_A}").text
+    assert "<script>alert(1)</script>" not in page
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page
+
+
+def test_run_page_renders_the_playhead_for_dt_aware_stamping(client):
+    page = client.get("/run/" + "2" * 32).text
+    assert 'data-rows-scale="1.0"' in page
+    assert 'id="playhead"' in page
+    assert 'id="t-map"' in page
+    assert "obj-row" in page
+
+
+def test_boot_rebuilds_a_schema_from_another_build(tmp_path):
+    out = build_corpus(tmp_path)
+    import sqlite3
+    conn = sqlite3.connect(out / index.DB_FILENAME)
+    conn.execute("UPDATE meta SET value = '99' WHERE key = 'schema_version'")
+    conn.commit()
+    conn.close()
+    app = create_app(outdir=out, index_on_boot=True)
+    with TestClient(app) as c:
+        assert c.get("/").status_code == 200
+    conn = sqlite3.connect(out / index.DB_FILENAME)
+    assert conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0] == str(index.SCHEMA_VERSION)
+    conn.close()

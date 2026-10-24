@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "osu-critique"
-version = "0.13.0"
+version = "0.14.0"
 description = "Data-driven osu! replay analysis: per-object hit/aim error, patterns, streams, tapping, UR — with deterministic reports and optional AI critique."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -26,7 +26,8 @@ charts = ["matplotlib>=3.7"]
 stars = ["rosu-pp-py>=2.0"]
 # plain uvicorn on purpose: [standard] drags uvloop/httptools, which lag new
 # CPython releases, and a local single-user server does not need them.
-web = ["fastapi>=0.110", "uvicorn>=0.27", "jinja2>=3.1"]
+web = ["fastapi>=0.110", "uvicorn>=0.27", "jinja2>=3.1",
+       "python-multipart>=0.0.9"]  # Form() parsing for the annotation forms
 dev = ["pytest>=7.0", "httpx>=0.27"]  # httpx: fastapi's TestClient
 
 [project.scripts]

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/notes.html" import note_list with context %}
 {% block title %}{{ title_display }} · osu-critique{% endblock %}
 {% block body %}
 <article class="map">
@@ -60,10 +61,22 @@
   </section>
   {% endif %}
 
-  <section class="panel">
-    <h2>annotations</h2>
-    <p class="muted">Notes arrive in 0.14.0: a textbox above the run view with a timestamp chip,
-      stored per map so every attempt sees it and the coach prompt can read it.</p>
+  <section class="panel" id="annotations">
+    <h2>annotations <span class="count">{{ notes.map | length }}</span></h2>
+    {{ note_list(notes.map, "No map notes yet. Write one below — the coach reads these.") }}
+    <form method="post" action="/map/{{ md5 }}/annotations" class="note-form">
+      <textarea name="body" rows="2" required
+        placeholder="What you noticed about this map (e.g. “the second kiai is where I lose the rhythm”)"></textarea>
+      <div class="note-form-row">
+        <input name="t" placeholder="timestamp 2:14.312 (optional)">
+        <input name="tag" placeholder="tags (optional)">
+        <button type="submit">add map note</button>
+      </div>
+    </form>
+    {% if notes.run %}
+    <p class="fineprint">{{ notes.run | length }} run-scoped note{{ '' if notes.run | length == 1 else 's' }}
+      across attempts — open an attempt to read {{ 'it' if notes.run | length == 1 else 'them' }}.</p>
+    {% endif %}
   </section>
 </article>
 {% endblock %}

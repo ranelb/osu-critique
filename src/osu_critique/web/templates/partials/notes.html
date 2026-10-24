@@ -1,0 +1,20 @@
+{% macro note_list(notes, empty="") %}
+{% if notes %}
+<ul class="notes">
+  {% for n in notes %}
+  <li>
+    {% if n.t_map is not none %}<span class="chip">{{ n.t_map | fmt_t }}</span>{% endif %}
+    <span class="note-body">{{ n.body }}</span>
+    {% for tg in n.tags %}<span class="tag">{{ tg }}</span>{% endfor %}
+    <span class="note-meta">{{ n.created_at | when }}</span>
+    <form method="post" action="/annotations/{{ n.note_id }}/delete" class="inline">
+      <input type="hidden" name="next" value="{{ request.url.path }}">
+      <button class="link danger" type="submit" title="delete this note">delete</button>
+    </form>
+  </li>
+  {% endfor %}
+</ul>
+{% elif empty %}
+<p class="muted">{{ empty }}</p>
+{% endif %}
+{% endmacro %}

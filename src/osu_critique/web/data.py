@@ -197,11 +197,14 @@ def run_page(conn, run_id: str) -> dict | None:
     title = _title(beatmap) if beatmap else None
     if title and beatmap.get("version"):
         title = f"{title} [{beatmap['version']}]"
+    duration = max((o.get("t") or 0) for o in objects) if objects else 0
     return {
         "run": run,
         "metrics": metrics,
         "beatmap": beatmap,
         "title_display": title or run.get("map_name") or "run",
+        "rows_scale": float((metrics.get("time_base") or {}).get("rows_scale") or 1.0),
+        "duration_ms": duration,
         "report": report,
         "objects": objects,
         "interesting": interesting,

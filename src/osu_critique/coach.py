@@ -322,8 +322,13 @@ def enrich_rows(rows, outdir):
     return rows
 
 
-def build_user_message(metrics, baseline=None, profile=None):
+def build_user_message(metrics, baseline=None, profile=None, notes=None):
     parts = [f"## Metrics\n```json\n{_compact(metrics)}\n```"]
+    if notes:
+        from .annotations import prompt_block
+        block = prompt_block(notes)
+        if block:
+            parts.append(block)
     if baseline:
         parts.append(f"## Baseline (previous play)\n```json\n{_compact(baseline)}\n```")
     if profile:
@@ -377,7 +382,7 @@ def _run_row(name, m):
     }
 
 
-def build_multi_user_message(rows, profile=None):
+def build_multi_user_message(rows, profile=None, notes=None):
     """Build the prompt for a cross-run critique (a folder of metrics JSONs).
 
     ``rows`` is a list of (map_name, metrics_dict) pairs. Presents a compact
@@ -404,6 +409,11 @@ def build_multi_user_message(rows, profile=None):
                  "plan. Compare runs against each other — flag the worst and best "
                  "and explain the gap. Use the numbers; don't invent others.")
     parts = ["\n".join(lines)]
+    if notes:
+        from .annotations import prompt_block
+        block = prompt_block(notes)
+        if block:
+            parts.append(block)
     if profile:
         parts.append(f"## Player profile\n{json.dumps(profile, indent=1)}")
     return "\n\n".join(parts)
@@ -435,7 +445,10 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
                 f"no *_metrics.json files found in directory {metrics_path!r} — "
                 "run `osu-critique batch` first")
         enrich_rows(rows, metrics_path)
-        user = build_multi_user_message(rows, profile)
+        from .annotations import all_notes
+        wanted = {m.get("beatmap_md5") for _n, m in rows if m.get("beatmap_md5")}
+        notes = [n for n in all_notes(metrics_path) if n["beatmap_md5"] in wanted]
+        user = build_multi_user_message(rows, profile, notes=notes)
     else:
         try:
             with open(metrics_path) as f:
@@ -447,9 +460,11 @@ def coach(metrics_path, baseline_path=None, profile=None, model=None,
         except json.JSONDecodeError:
             raise RuntimeError(f"{metrics_path!r} is not valid metrics JSON — "
                                "run `osu-critique analyze` to generate it") from None
-        enrich_rows([(os.path.basename(metrics_path), metrics)],
-                    os.path.dirname(os.path.abspath(metrics_path)))
-        user = build_user_message(metrics, baseline, profile)
+        run_outdir = os.path.dirname(os.path.abspath(metrics_path))
+        enrich_rows([(os.path.basename(metrics_path), metrics)], run_outdir)
+        from .annotations import for_metrics
+        notes = for_metrics(metrics, run_outdir)
+        user = build_user_message(metrics, baseline, profile, notes=notes)
     # the key is only needed for the API call: report a bad metrics path first,
     # so a missing file is never masked by "no LLM key configured"
     key = llm_key()

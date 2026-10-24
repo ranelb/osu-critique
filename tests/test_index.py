@@ -339,3 +339,17 @@ def test_runs_for_map_orders_by_played_at(tmp_path):
     rows = index.runs_for_map(conn, "m" * 32)
     assert [r["tag"] for r in rows] == ["new", "old"]
     conn.close()
+
+
+def test_rebuild_recovers_from_another_build(tmp_path):
+    out = tmp_path / "out"
+    write_run(out, metrics(tag="a"))
+    index.sweep(out)
+    conn = sqlite3.connect(out / index.DB_FILENAME)
+    conn.execute("UPDATE meta SET value = '99' WHERE key = 'schema_version'")
+    conn.commit()
+    conn.close()
+    with pytest.raises(index.SchemaMismatch):
+        index.connect(out / index.DB_FILENAME)
+    stats = index.sweep(out, rebuild=True)   # must delete the file, not the rows
+    assert stats["runs"] == 1

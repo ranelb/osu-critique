@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "partials/notes.html" import note_list with context %}
 {% set acc = metrics.get('accuracy') %}
 {% set he = metrics.get('hit_error_ms') or {} %}
 {% set aim = metrics.get('aim_px') or {} %}
@@ -7,7 +8,7 @@
 {% set tr = metrics.get('trust') or {} %}
 {% block title %}{{ title_display }} · {{ run.mod_string }} · osu-critique{% endblock %}
 {% block body %}
-<article class="run" data-run-id="{{ run.run_id }}">
+<article class="run" data-run-id="{{ run.run_id }}" data-rows-scale="{{ rows_scale }}">
   <div class="crumbs">
     <a href="/">maps</a><span>/</span>
     {% if run.beatmap_md5 %}<a href="/map/{{ run.beatmap_md5 }}">{{ title_display }}</a>{% else %}{{ title_display }}{% endif %}
@@ -78,7 +79,7 @@
         <th class="num">snap</th><th class="num">angle</th></tr></thead>
       <tbody>
       {% for o in interesting[:table_limit] %}
-        <tr class="res-{{ o.result }}">
+        <tr class="res-{{ o.result }} obj-row" data-t="{{ o.t }}">
           <td class="num muted">{{ o.i }}</td>
           <td class="num">{{ o.t | mmss }}</td>
           <td>{{ o.kind }}</td>
@@ -110,9 +111,33 @@
     <p class="fineprint">Rule-based, offline, no keys. The LLM critique arrives in 0.15.0.</p>
   </section>
 
-  <section class="panel">
+  <section class="panel" id="annotations">
     <h2>annotations</h2>
-    <p class="muted">Run-scoped notes arrive in 0.14.0.</p>
+    <h3>map notes</h3>
+    {{ note_list(notes.map, "No map notes yet — add one on the map page.") }}
+    <h3>this run</h3>
+    {{ note_list(notes.run, "No notes for this run yet.") }}
+
+    <form method="post" action="/run/{{ run.run_id }}/annotations" class="note-form" id="note-form">
+      <textarea name="body" rows="2" required
+        placeholder="What happened here — and is it the map or this attempt?"></textarea>
+      <div class="playhead">
+        <input type="range" id="playhead" min="0" max="{{ duration_ms }}" step="10" value="0"
+               {% if not duration_ms %}disabled{% endif %} aria-label="playhead">
+        <span class="chip" id="playhead-label">0:00.000</span>
+        <button type="button" class="ghost" id="stamp" {% if not duration_ms %}disabled{% endif %}>stamp timestamp</button>
+        <button type="button" class="link" id="clear-stamp">clear</button>
+      </div>
+      <input type="hidden" name="t_map" id="t-map">
+      <div class="note-form-row">
+        <input name="tag" placeholder="tags (optional)">
+        <label class="check"><input type="checkbox" name="scope" value="map"> applies to the whole map</label>
+        <button type="submit">save note</button>
+      </div>
+    </form>
+    <p class="fineprint">Times are <b>map time</b>, so a note lands in the same place on every
+      attempt (a DT run's rows are in player time; the chip shows the map's clock).
+      Click an object row to move the playhead there.</p>
   </section>
 </article>
 {% endblock %}

@@ -5,8 +5,8 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.13.0** (tag `v0.12.0` is the last published release); 212 tests green
-(182 run anywhere: 24 need the `[web]` extra, 6 need the author's replays), CI
+State: **0.14.0** (tag `v0.13.0` is the last published release); 239 tests green
+(199 run anywhere: 34 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
 
@@ -22,8 +22,9 @@ osu! beatmap-listing idiom with covers from `assets.ppy.sh`, human annotations
 stored LLM critiques with staleness hashes, and an opt-in export + digest for
 new replays.
 
-Milestone **0.12.0 (the index)** and **0.13.0 (the web read path)** have landed —
-see `docs/index.md` and `docs/web.md`.
+Milestones **0.12.0 (the index)**, **0.13.0 (the web read path)** and
+**0.14.0 (annotations)** have landed — see `docs/index.md`, `docs/web.md` and
+`docs/annotations.md`.
 
 **Not now, deliberately** — the fence, so scope cannot quietly grow: replay
 playback / cursor animation, auth or multi-user, public hosting, re-analysis
@@ -34,6 +35,20 @@ it does not need a schema change.
 
 ## Shipped since the handoff
 
+- **0.14.0 — annotations** (`annotations.py`, `osu-critique annotate`,
+  `docs/annotations.md`): notes scoped to a **map** (every attempt) or a **run**
+  (one attempt), optionally timestamped in **map time** and written from the CLI
+  or the web form (playhead + stamp button, click an object row to move it).
+  Canonical sidecars at `out/annotations/<beatmap_md5>.json` — annotations are
+  authored, so the index mirror is rebuilt from the files on every sweep and
+  deleting the DB loses nothing. `coach`/`prompt` (single and directory) gain a
+  "player's own notes" block before the metrics; `report` deliberately ignores
+  them. 15 unit tests + 10 route tests.
+  Traps: `Form()` needs `python-multipart` (now in `[web]`); `t_map` is seconds in
+  map time while object times are row-clock milliseconds — convert with
+  `rows_scale`, never by hand; `sweep --rebuild` must delete the DB *file*
+  because a schema from another build refuses to open at all (the server
+  auto-rebuilds instead of failing to start).
 - **0.13.0 — the web read path** (`web/`, `covers.py`, `osu-critique serve`,
   `docs/web.md`): FastAPI + Jinja2 + htmx as the optional `[web]` extra. `/` is a
   cover-card listing (search, sort by recency/accuracy/SR/attempts/pp, status +
@@ -166,7 +181,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 212 tests (24 need [web]), no network
+.venv/bin/python -m pytest -q                       # 239 tests (34 need [web]), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy

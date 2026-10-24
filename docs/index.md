@@ -36,7 +36,7 @@ so later sweeps never pay it.
 |---|---|---|
 | `runs` | `json_path` | one row per **artifact**. `run_id` is the replay md5 (or `tag:<tag>` for pre-schema files) and is **not** unique: 36 artifacts in the author's corpus are re-exports of 32 plays. |
 | `beatmaps` | `beatmap_md5` | `[Metadata]` + `[Events]` parsed from the `.osu` (title, artist, creator, version, ids, background, audio, mode) and the cover cache path. |
-| `annotations` | `id` | mirror of `out/annotations/<beatmap_md5>.json` (authored, canonical there). |
+| `annotations` | `note_id` | mirror of `out/annotations/<beatmap_md5>.json` (authored, canonical there; re-mirrored on every sweep). |
 | `critiques` | `replay_md5` | mirror of `out/critiques/<replay_md5>.json` (authored, canonical there). |
 
 Authored data is the one thing that is not derived. Deleting the database does
@@ -59,7 +59,10 @@ sidecar files.
   including for unchanged files, so running `stars` later fills `sr` on rows
   that were already indexed.
 - **Schema drift is refused, not migrated.** `meta.schema_version` mismatch
-  makes `connect()` raise with "run `osu-critique index --rebuild`".
+  makes `connect()` raise `index.SchemaMismatch` with "run
+  `osu-critique index --rebuild`". `index --rebuild` deletes the DB *file*
+  first, because an unopenable schema cannot be dropped through a connection;
+  `serve` rebuilds on boot rather than refusing to start.
 
 ## What is not here yet
 

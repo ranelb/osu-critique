@@ -33,6 +33,10 @@ that carry no md5. Re-exports of one play share an id; the newest artifact wins.
 - **Server-rendered.** Jinja templates and one 180-line `app.js` (two canvases
   and a lazy table). htmx handles the one partial (attempt sorting). No npm, no
   bundler, no serialising the corpus into the client.
+- **Annotations are written here, in map time.** The run page's playhead stamps
+  `t_map` (seconds on the `.osu` clock) so a note lands on the same objects on
+  every attempt, even when the run's own rows are in another clock. See
+  [annotations.md](annotations.md).
 - **The trust banner comes first and is not a footnote.** A run whose judgement
   disagrees with the game's own counts gets a red banner and a different
   sentence, not just a different colour: `tests/test_web.py` asserts both.
@@ -82,6 +86,6 @@ Env overrides: `OSU_WEB_HOST`, `OSU_WEB_PORT`, `OSU_COVER_CACHE`.
 
 ## Not here yet
 
-Annotations (0.14.0), LLM critiques with stored output (0.15.0), export/digest
-(0.16.0), and replay playback (fenced for now — the route and the data columns
-exist so it will not need a schema change).
+LLM critiques with stored output (0.15.0), export/digest (0.16.0), and replay
+playback (fenced for now — the route and the data columns exist so it will not
+need a schema change).

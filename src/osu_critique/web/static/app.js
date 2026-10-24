@@ -150,6 +150,53 @@
     }
   }
 
+  /* -------------------------------------------------------- annotations -- */
+
+  function mapClock(ms, scale) {
+    const total = Math.max(0, ms) / 1000 / (scale || 1);
+    const m = Math.floor(total / 60);
+    const sec = total - m * 60;
+    return m + ":" + (sec < 10 ? "0" : "") + sec.toFixed(3);
+  }
+
+  function initAnnotations(runEl) {
+    const scale = Number(runEl.dataset.rowsScale) || 1;
+    const slider = document.getElementById("playhead");
+    const label = document.getElementById("playhead-label");
+    const hidden = document.getElementById("t-map");
+    const stamp = document.getElementById("stamp");
+    const clear = document.getElementById("clear-stamp");
+    if (!slider || !label || !hidden) return;
+
+    const show = () => {
+      label.textContent = mapClock(Number(slider.value), scale);
+    };
+    slider.addEventListener("input", show);
+
+    if (stamp) {
+      stamp.addEventListener("click", () => {
+        hidden.value = (Number(slider.value) / 1000 / scale).toFixed(3);
+        label.classList.add("stamped");
+        show();
+      });
+    }
+    if (clear) {
+      clear.addEventListener("click", () => {
+        hidden.value = "";
+        label.classList.remove("stamped");
+      });
+    }
+
+    // clicking an object row parks the playhead there (row clock -> slider)
+    document.querySelectorAll(".obj-row[data-t]").forEach((row) => {
+      row.addEventListener("click", () => {
+        slider.value = row.dataset.t;
+        show();
+      });
+    });
+    show();
+  }
+
   /* --------------------------------------------------------------- init -- */
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -173,6 +220,7 @@
           }, 200);
         });
       }
+      initAnnotations(run);
       const button = document.getElementById("all-objects");
       if (button) {
         button.addEventListener("click", () =>

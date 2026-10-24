@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.13.0** — 212 tests (182 run anywhere without optional extras), CI on
+> **Status: 0.14.0** — 239 tests (199 run anywhere without optional extras), CI on
 > Python 3.10-3.14. The judgement is validated against the game's own recorded
 > counts; see [Validation and trust](#validation-and-trust).
 
@@ -46,6 +46,7 @@ osu-critique batch --charts         # pair + analyze every replay
 osu-critique index                  # build the SQLite view over out/
 osu-critique report out/            # deterministic critique — no keys, no network
 osu-critique serve                  # local web frontend on :8765 ([web] extra)
+osu-critique annotate add --map <md5> --t 2:14.312 "the kiai is the wall"
 ```
 
 That is the core loop. Optional extras, all bring-your-own-key:
@@ -74,6 +75,7 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 | **Profile** | `profile` | osu! API creds (BYO, optional) | player stats for context |
 | **Status** | `status` | osu! API creds (BYO, optional) | pp-eligible vs unranked split |
 | **Web** | `serve` | optional extra (`[web]`) | local frontend: map showcase, run pages, deterministic report |
+| **Annotate** | `annotate` | no | notes the coach reads, in map time |
 
 The same metrics JSON becomes a critique three ways: `report` (rule-based,
 offline), `coach` (one LLM API call, streamed live), or `prompt` (the framework
@@ -89,7 +91,7 @@ bodies, two clocks, rolling baselines, cross-attempt structure, patterns,
 streams, tapping, sections, whiffs, map profile, trust — are catalogued in
 [docs/metrics.md](docs/metrics.md). The SQLite projection the web frontend
 reads is [docs/index.md](docs/index.md); the frontend itself (pages, bind rules,
-testing) is [docs/web.md](docs/web.md).
+testing) is [docs/web.md](docs/web.md), and annotations in [docs/annotations.md](docs/annotations.md).
 
 The AI coach is tested with **one model: DeepSeek V4 Flash**
 (`deepseek-v4-flash`, `https://api.deepseek.com`) — the default. Other
@@ -108,6 +110,11 @@ osu-critique batch --charts
 osu-critique index [--rebuild|--check]
 # local web frontend: map listing, per-map attempts, per-run detail ([web] extra)
 osu-critique serve [--host 0.0.0.0] [--port 8765] [--no-index]
+
+# human annotations the coach reads (scope map or run; timestamps in map time)
+osu-critique annotate add --map <md5> [--run <replay_md5>] [--t 2:14.312] "note"
+osu-critique annotate list [--map <md5>] [--json]
+osu-critique annotate rm <note_id>
 # show every resolved path (auto-detection diagnostics)
 osu-critique paths
 
@@ -184,7 +191,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 212 tests (6 need the author's replays, 24 need [web])
+pytest -q                     # 239 tests (6 need the author's replays, 34 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

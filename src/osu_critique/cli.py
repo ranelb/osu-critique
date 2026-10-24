@@ -14,6 +14,7 @@ Subcommands:
   setup   [--show]                       first-time configuration wizard
   index   [--rebuild|--check]            build / refresh out/index.sqlite
   serve   [--host] [--port]              run the local web frontend (needs [web])
+  annotate add|list|rm                   human notes the coach reads (map or run scoped)
 """
 from __future__ import annotations
 
@@ -79,6 +80,87 @@ def cmd_serve(args):
     return 0
 
 
+def cmd_annotate(args):
+    """Add, list or remove human annotations (canonical sidecars under out/)."""
+    from . import annotations, index
+
+    root = args.outdir or outdir()
+
+    if args.action == "add":
+        body = " ".join(args.text).strip()
+        if not body:
+            print("error: empty note", file=sys.stderr)
+            return 2
+        try:
+            t_map = annotations.parse_time(args.t)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        scope = "run" if args.run else "map"
+        try:
+            note = annotations.add(root, args.map, body, scope=scope,
+                                   replay_md5=args.run, t_map=t_map,
+                                   tags=args.tag)
+        except ValueError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        # keep the index in step immediately: the web server may be running
+        try:
+            conn = index.connect(index.db_path(root))
+            try:
+                index.sync_annotations(conn, root)
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as exc:  # annotations saved; the mirror can wait
+            print(f"  ! index not updated: {exc}", file=sys.stderr)
+        where = f"run {args.run[:8]}" if args.run else "map"
+        print(f"added note {note['note_id']} ({where}) to {args.map}")
+        return 0
+
+    if args.action == "rm":
+        md5 = args.map or annotations.find_owner(root, args.id)
+        if not md5:
+            print(f"error: no note {args.id!r} in {root}/annotations", file=sys.stderr)
+            return 2
+        if not annotations.remove(root, md5, args.id):
+            print(f"error: note {args.id!r} not found under {md5}", file=sys.stderr)
+            return 2
+        try:
+            conn = index.connect(index.db_path(root))
+            try:
+                index.sync_annotations(conn, root)
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:
+            pass
+        print(f"removed note {args.id} from {md5}")
+        return 0
+
+    # list
+    if args.map:
+        groups = annotations.for_map(root, args.map, args.run)
+        notes = [*groups["map"], *groups["run"]]
+    else:
+        notes = annotations.all_notes(root)
+        if args.run:
+            notes = [n for n in notes if n["replay_md5"] == args.run]
+    if args.json:
+        print(json.dumps(notes, indent=2, ensure_ascii=False))
+        return 0
+    if not notes:
+        print("no annotations")
+        return 0
+    for n in notes:
+        stamp = annotations.fmt_time(n["t_map"]) or "          "
+        where = "run " if n["scope"] == "run" else "map "
+        tags = f"  [{', '.join(n['tags'])}]" if n.get("tags") else ""
+        md5 = n.get("beatmap_md5") or args.map or "?"
+        print(f"{n['note_id']}  {where} {stamp}  {md5[:12]}  {n['body']}{tags}")
+    return 0
+
+
 def cmd_index(args):
     """Build or refresh the derived SQLite index over out/"""
     from . import index
@@ -101,7 +183,11 @@ def cmd_index(args):
                     print(f"    {label}: ... and {len(report[label]) - 5} more")
         return 0 if report["ok"] else 1
 
-    stats = index.sweep(args.outdir, rebuild=args.rebuild, quiet=args.quiet)
+    try:
+        stats = index.sweep(args.outdir, rebuild=args.rebuild, quiet=args.quiet)
+    except index.SchemaMismatch as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     if args.json:
         print(json.dumps(stats, indent=2))
     else:
@@ -280,8 +366,12 @@ def cmd_prompt(args):
             from .profile import fetch_profile
             profile = fetch_profile(args.profile, allow_scrape=args.scrape or None)
         enrich_rows(rows, args.metrics_json)
+        from .annotations import all_notes
+        wanted = {m.get("beatmap_md5") for _n, m in rows if m.get("beatmap_md5")}
+        notes = [n for n in all_notes(args.metrics_json)
+                 if n["beatmap_md5"] in wanted]
         print(system)
-        print("\n\n" + build_multi_user_message(rows, profile))
+        print("\n\n" + build_multi_user_message(rows, profile, notes=notes))
         return 0
     if args.metrics_json:
         try:
@@ -299,8 +389,11 @@ def cmd_prompt(args):
             profile = fetch_profile(args.profile, allow_scrape=args.scrape or None)
         enrich_rows([(os.path.basename(args.metrics_json), metrics)],
                     os.path.dirname(os.path.abspath(args.metrics_json)))
+        from .annotations import for_metrics
+        notes = for_metrics(metrics,
+                            os.path.dirname(os.path.abspath(args.metrics_json)))
         print(system)
-        print("\n\n" + build_user_message(metrics, baseline, profile))
+        print("\n\n" + build_user_message(metrics, baseline, profile, notes=notes))
     else:
         print(system)
     return 0
@@ -985,6 +1078,36 @@ def main(argv=None):
                    help="do not sweep the index on boot")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_serve)
+
+    p = sub.add_parser("annotate", help="human annotations (map- or run-scoped) "
+                                        "that the coach prompt reads")
+    sub_ann = p.add_subparsers(dest="action", required=True)
+    a = sub_ann.add_parser("add", help="add a note")
+    a.add_argument("text", nargs="+", help="the note body")
+    a.add_argument("--map", required=True, metavar="MD5",
+                   help="beatmap md5 (the folder under out/annotations/)")
+    a.add_argument("--run", metavar="REPLAY_MD5", default=None,
+                   help="scope the note to one attempt")
+    a.add_argument("--t", default=None, metavar="TIME",
+                   help="timestamp in map time: 134.312 or 2:14.312")
+    a.add_argument("--tag", action="append", default=[],
+                   help="tag (repeatable)")
+    a.add_argument("--outdir", default=None)
+    a.set_defaults(func=cmd_annotate)
+
+    a = sub_ann.add_parser("list", help="list notes")
+    a.add_argument("--map", default=None, metavar="MD5")
+    a.add_argument("--run", default=None, metavar="REPLAY_MD5")
+    a.add_argument("--json", action="store_true")
+    a.add_argument("--outdir", default=None)
+    a.set_defaults(func=cmd_annotate)
+
+    a = sub_ann.add_parser("rm", help="remove a note by id")
+    a.add_argument("id")
+    a.add_argument("--map", default=None, metavar="MD5",
+                   help="skip the search for the owning sidecar")
+    a.add_argument("--outdir", default=None)
+    a.set_defaults(func=cmd_annotate)
 
     args = parser.parse_args(argv)
     return args.func(args)

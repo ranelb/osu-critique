@@ -14,13 +14,14 @@ import json
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
+from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
+                               PlainTextResponse, RedirectResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import __version__, covers, index
+from .. import __version__, annotations, covers, index
 from ..config import outdir as default_outdir
 from . import data
 
@@ -86,7 +87,8 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
 
     templates = Jinja2Templates(directory=TEMPLATES)
     templates.env.filters.update(pct=pct, num=num, star=star, when=when,
-                                 clock=clock, mmss=mmss)
+                                 clock=clock, mmss=mmss,
+                                 fmt_t=annotations.fmt_time)
     templates.env.globals.update(
         version=__version__,
         table_limit=TABLE_LIMIT,
@@ -129,6 +131,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             conn.close()
         if page is None:
             raise HTTPException(status_code=404, detail="no such beatmap")
+        page["notes"] = annotations.for_map(out, beatmap_md5)
         return render("map.html", request, **page)
 
     @app.get("/map/{beatmap_md5}/attempts", response_class=HTMLResponse)
@@ -155,6 +158,8 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             conn.close()
         if page is None:
             raise HTTPException(status_code=404, detail="no such run")
+        page["notes"] = annotations.for_map(out, page["run"]["beatmap_md5"],
+                                            page["run"]["replay_md5"])
         return render("run.html", request, **page)
 
     # -------------------------------------------------------------- json --
@@ -228,6 +233,77 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         return FileResponse(path, media_type="image/jpeg",
                             headers={"Cache-Control": "public, max-age=604800"})
 
+    # -------------------------------------------------------- annotations --
+
+    def _sync_notes():
+        """Mirror the sidecars into the index (best-effort: files are truth)."""
+        try:
+            conn = index.connect(index.db_path(out))
+            try:
+                index.sync_annotations(conn, out)
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception:  # a locked index must not lose the note
+            pass
+
+    def _tags(raw: str) -> list[str]:
+        return [t for t in str(raw or "").replace(",", " ").split() if t]
+
+    def _redirect(url: str) -> RedirectResponse:
+        # only same-site paths: a form field must not become an open redirect
+        if not url.startswith("/") or url.startswith("//"):
+            url = "/"
+        return RedirectResponse(url, status_code=303)
+
+    @app.post("/map/{beatmap_md5}/annotations")
+    def add_map_note(beatmap_md5: str, body: str = Form(""),
+                     t: str = Form(""), tag: str = Form("")):
+        text = body.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="an empty note is not a note")
+        try:
+            t_map = annotations.parse_time(t)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        annotations.add(out, beatmap_md5, text, scope="map", t_map=t_map,
+                        tags=_tags(tag))
+        _sync_notes()
+        return _redirect(f"/map/{beatmap_md5}")
+
+    @app.post("/run/{run_id}/annotations")
+    def add_run_note(run_id: str, body: str = Form(""), t_map: str = Form(""),
+                     tag: str = Form(""), scope: str = Form("run")):
+        conn = index.open_readonly(out)
+        if conn is None:
+            raise HTTPException(status_code=404, detail="no index")
+        try:
+            run = index.get_run(conn, run_id)
+        finally:
+            conn.close()
+        if run is None:
+            raise HTTPException(status_code=404, detail="no such run")
+        text = body.strip()
+        if not text:
+            raise HTTPException(status_code=400, detail="an empty note is not a note")
+        try:
+            t = annotations.parse_time(t_map)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        scoped = "map" if scope == "map" else "run"
+        annotations.add(out, run["beatmap_md5"], text, scope=scoped,
+                        replay_md5=run["replay_md5"], t_map=t, tags=_tags(tag))
+        _sync_notes()
+        return _redirect(f"/run/{run_id}")
+
+    @app.post("/annotations/{note_id}/delete")
+    def delete_note(note_id: str, next: str = Form("/")):
+        md5 = annotations.find_owner(out, note_id)
+        if md5:
+            annotations.remove(out, md5, note_id)
+            _sync_notes()
+        return _redirect(next)
+
     @app.get("/run/{run_id}/frames")
     def frames(run_id: str):
         """Reserved for replay playback: the seam exists, the renderer does not."""
@@ -252,10 +328,17 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
 # ------------------------------------------------------------------ startup --
 
 def _ensure_index(out: Path) -> dict:
-    """Sweep on boot when the index is missing or has drifted from ``out/``."""
+    """Sweep on boot when the index is missing, stale, or from another build.
+
+    A derived DB written by an older release is rebuilt without asking: the
+    server refusing to start after an upgrade would be worse than the rebuild.
+    """
     if not (out / index.DB_FILENAME).exists():
         return index.sweep(out, quiet=True)
-    drift = index.check(out)
+    try:
+        drift = index.check(out)
+    except index.SchemaMismatch:
+        return index.sweep(out, rebuild=True, quiet=True)
     if drift.get("ok"):
         return {"runs": 0, "skipped": True}
     return index.sweep(out, quiet=True)
