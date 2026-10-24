@@ -128,6 +128,9 @@ button.link { background: none; color: var(--pink); padding: 0; border: 0;
 .pill.mods { background: var(--pink-soft); border-color: #ff66aa55; color: #ffb3d2; }
 .pill.bad-pill { background: #ff5f6d22; border-color: #ff5f6d55; color: #ffb0b6; }
 .pill.good-pill { background: #4ade8022; border-color: #4ade8055; color: #a8f0c4; }
+.pill.warn-pill { background: #ffd16618; border-color: #ffd16655; color: #f0dca8; }
+.critique-meta { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap;
+  margin: 0 0 .6rem; font-size: .8rem; }
 
 .card-body { padding: .7rem .85rem .8rem; }
 .card .title { font-weight: 600; font-size: .95rem; line-height: 1.3;

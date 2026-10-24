@@ -197,6 +197,57 @@
     show();
   }
 
+  /* ---------------------------------------------------------- critiques -- */
+
+  async function streamCritique(form, body, button) {
+    const empty = document.getElementById("critique-empty");
+    if (empty) empty.hidden = true;
+    body.hidden = false;
+    if (!body.dataset.kept) body.textContent = "";
+    body.dataset.kept = "1";
+    button.disabled = true;
+    const label = button.textContent;
+    button.textContent = "thinking…";
+    try {
+      const res = await fetch(form.action, {
+        method: "POST",
+        headers: { Accept: "text/event-stream" },
+      });
+      if (!res.ok || !res.body) {
+        const detail = await res.text();
+        if (empty) { empty.hidden = false; empty.textContent = "the critique failed:"; }
+        body.textContent = detail || String(res.status);
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let cut;
+        while ((cut = buf.indexOf("\n\n")) >= 0) {
+          const frame = buf.slice(0, cut);
+          buf = buf.slice(cut + 2);
+          if (!frame.startsWith("data: ")) continue;
+          const payload = frame.slice(6).trim();
+          if (payload === "[DONE]") continue;
+          let obj;
+          try { obj = JSON.parse(payload); } catch (e) { continue; }
+          if (obj.delta) body.textContent += obj.delta;
+          else if (obj.error) body.textContent += "\n\n[error] " + obj.error;
+          else if (obj.done) button.textContent = "regenerate";
+        }
+      }
+    } catch (err) {
+      body.textContent += "\n\n[network error] " + err.message;
+    } finally {
+      button.disabled = false;
+      if (button.textContent === "thinking…") button.textContent = label;
+    }
+  }
+
   /* --------------------------------------------------------------- init -- */
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -221,6 +272,15 @@
         });
       }
       initAnnotations(run);
+      const critiqueForm = document.getElementById("critique-form");
+      if (critiqueForm) {
+        critiqueForm.addEventListener("submit", (ev) => {
+          ev.preventDefault();
+          streamCritique(critiqueForm,
+                         document.getElementById("critique-body"),
+                         critiqueForm.querySelector("button[type=submit]"));
+        });
+      }
       const button = document.getElementById("all-objects");
       if (button) {
         button.addEventListener("click", () =>

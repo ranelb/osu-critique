@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.14.0** — 239 tests (199 run anywhere without optional extras), CI on
+> **Status: 0.15.0** — 252 tests (204 run anywhere without optional extras), CI on
 > Python 3.10-3.14. The judgement is validated against the game's own recorded
 > counts; see [Validation and trust](#validation-and-trust).
 
@@ -91,7 +91,8 @@ bodies, two clocks, rolling baselines, cross-attempt structure, patterns,
 streams, tapping, sections, whiffs, map profile, trust — are catalogued in
 [docs/metrics.md](docs/metrics.md). The SQLite projection the web frontend
 reads is [docs/index.md](docs/index.md); the frontend itself (pages, bind rules,
-testing) is [docs/web.md](docs/web.md), and annotations in [docs/annotations.md](docs/annotations.md).
+testing) is [docs/web.md](docs/web.md), and annotations in [docs/annotations.md](docs/annotations.md), and stored critiques in
+[docs/critiques.md](docs/critiques.md).
 
 The AI coach is tested with **one model: DeepSeek V4 Flash**
 (`deepseek-v4-flash`, `https://api.deepseek.com`) — the default. Other
@@ -138,7 +139,7 @@ osu-critique status out/
 # AI critique — one LLM API call
 osu-critique coach out/<tag>_metrics.json \
     [--baseline out/<other>_metrics.json] [--profile <username>] \
-    [--model <any-model-name>] [--prompt <custom-prompt-file>]
+    [--model <any-model-name>] [--prompt <custom-prompt-file>] [--save]
 
 # bring your own AI: the framework prompt, or framework + your metrics
 osu-critique prompt
@@ -191,7 +192,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 239 tests (6 need the author's replays, 34 need [web])
+pytest -q                     # 252 tests (6 need the author's replays, 42 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

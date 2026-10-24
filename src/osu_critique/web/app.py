@@ -11,17 +11,20 @@ the history. See ``docs/web.md``.
 from __future__ import annotations
 
 import json
+import queue
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
-                               PlainTextResponse, RedirectResponse)
+                               PlainTextResponse, RedirectResponse,
+                               StreamingResponse)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import __version__, annotations, covers, index
+from .. import __version__, annotations, covers, critiques, index
 from ..config import outdir as default_outdir
 from . import data
 
@@ -160,6 +163,14 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             raise HTTPException(status_code=404, detail="no such run")
         page["notes"] = annotations.for_map(out, page["run"]["beatmap_md5"],
                                             page["run"]["replay_md5"])
+        from ..coach import load_system_prompt
+        flat = page["notes"]["map"] + page["notes"]["run"]
+        stored = critiques.load(out, run_id)
+        page["critique"] = stored
+        page["critique_stale"] = critiques.is_stale(
+            stored, page["metrics"], flat, load_system_prompt())
+        page["llm_available"] = bool(_llm_key())
+        page["llm_allowed"] = _llm_allowed(request)
         return render("run.html", request, **page)
 
     # -------------------------------------------------------------- json --
@@ -241,6 +252,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             conn = index.connect(index.db_path(out))
             try:
                 index.sync_annotations(conn, out)
+                index.sync_critiques(conn, out)
                 conn.commit()
             finally:
                 conn.close()
@@ -304,6 +316,113 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             _sync_notes()
         return _redirect(next)
 
+    # ---------------------------------------------------------- critiques --
+
+    def _llm_key():
+        from ..config import llm_key
+        return llm_key()
+
+    def _llm_allowed(request: Request) -> bool:
+        """``web.llm_remote`` gates the routes that spend money.
+
+        Default true (the owner's choice); when false, only a loopback client
+        may ask for a critique — reading the pages stays open either way.
+        """
+        from ..config import get
+        value = get("web.llm_remote", "OSU_WEB_LLM_REMOTE", True)
+        if isinstance(value, str):
+            allowed = value.strip().lower() not in ("0", "false", "no", "off")
+        else:
+            allowed = bool(value)
+        if allowed:
+            return True
+        host = request.client.host if request.client else ""
+        return host in ("127.0.0.1", "::1", "localhost")
+
+    def _critique_inputs(run_id: str):
+        conn = index.open_readonly(out)
+        if conn is None:
+            raise HTTPException(status_code=404, detail="no index")
+        try:
+            run = index.get_run(conn, run_id)
+        finally:
+            conn.close()
+        if run is None:
+            raise HTTPException(status_code=404, detail="no such run")
+        metrics = data._metrics_at(run["json_path"]) or {}
+        if not metrics:
+            raise HTTPException(status_code=409, detail="the metrics artifact is missing")
+        notes = annotations.for_map(out, run["beatmap_md5"], run["replay_md5"])
+        return run, metrics, notes["map"] + notes["run"]
+
+    @app.post("/run/{run_id}/critique")
+    def make_critique(request: Request, run_id: str):
+        if not _llm_allowed(request):
+            raise HTTPException(status_code=403,
+                                detail="LLM routes are local-only (web.llm_remote = false)")
+        if not _llm_key():
+            raise HTTPException(status_code=400, detail=(
+                "no LLM key configured: run `osu-critique setup` or set OSU_LLM_KEY"))
+        _run, metrics, notes = _critique_inputs(run_id)
+
+        from ..coach import generate_critique, load_system_prompt, prepare_critique
+        system, user, _notes = prepare_critique(metrics, out)
+
+        if "text/event-stream" in request.headers.get("accept", ""):
+            return StreamingResponse(
+                _stream_critique(run_id, metrics, notes, system, user),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+        try:
+            text, model = generate_critique(system, user)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+        doc = critiques.build(metrics, notes, system, model, text, run_id=run_id)
+        critiques.save(out, doc)
+        _sync_notes()
+        return _redirect(f"/run/{run_id}")
+
+    def _stream_critique(run_id, metrics, notes, system, user):
+        """SSE: deltas as they arrive, then the saved sidecar's metadata."""
+        q: queue.Queue = queue.Queue()
+        result: dict = {}
+
+        def worker():
+            try:
+                from ..coach import generate_critique
+                text, model = generate_critique(system, user, on_delta=q.put)
+                result["text"] = text
+                result["model"] = model
+            except Exception as exc:  # surfaced to the browser, never silent
+                result["error"] = f"{type(exc).__name__}: {exc}"
+            finally:
+                q.put(None)
+
+        threading.Thread(target=worker, daemon=True).start()
+        while True:
+            chunk = q.get()
+            if chunk is None:
+                break
+            yield "data: " + json.dumps({"delta": chunk}) + "\n\n"
+        if result.get("error"):
+            yield "data: " + json.dumps({"error": result["error"]}) + "\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        doc = critiques.build(metrics, notes, system, result.get("model"), 
+                              result.get("text") or "", run_id=run_id)
+        critiques.save(out, doc)
+        _sync_notes()
+        yield "data: " + json.dumps({"done": True, "model": doc["model"],
+                                     "created": doc["created"]}) + "\n\n"
+        yield "data: [DONE]\n\n"
+
+    @app.post("/run/{run_id}/critique/delete")
+    def delete_critique(run_id: str, next: str = Form("/")):
+        critiques.remove(out, run_id)
+        _sync_notes()
+        return _redirect(next)
+
     @app.get("/run/{run_id}/frames")
     def frames(run_id: str):
         """Reserved for replay playback: the seam exists, the renderer does not."""
@@ -317,7 +436,11 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
 
     @app.exception_handler(StarletteHTTPException)
     def http_error(request: Request, exc: StarletteHTTPException):
-        if request.url.path.startswith("/api/"):
+        # API routes and the streaming client get JSON; a plain form POST gets
+        # a readable page
+        wants_json = (request.url.path.startswith("/api/")
+                      or "text/event-stream" in request.headers.get("accept", ""))
+        if wants_json:
             return JSONResponse({"detail": exc.detail}, status_code=exc.status_code)
         return render("error.html", request, status_code=exc.status_code,
                       code=exc.status_code, detail=exc.detail)

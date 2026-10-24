@@ -33,6 +33,9 @@ that carry no md5. Re-exports of one play share an id; the newest artifact wins.
 - **Server-rendered.** Jinja templates and one 180-line `app.js` (two canvases
   and a lazy table). htmx handles the one partial (attempt sorting). No npm, no
   bundler, no serialising the corpus into the client.
+- **Critiques are stored, not recomputed.** The run page streams one LLM call
+  and keeps the answer in `out/critiques/` with the hashes that say what it was
+  made from; see [critiques.md](critiques.md).
 - **Annotations are written here, in map time.** The run page's playhead stamps
   `t_map` (seconds on the `.osu` clock) so a note lands on the same objects on
   every attempt, even when the run's own rows are in another clock. See
@@ -86,6 +89,5 @@ Env overrides: `OSU_WEB_HOST`, `OSU_WEB_PORT`, `OSU_COVER_CACHE`.
 
 ## Not here yet
 
-LLM critiques with stored output (0.15.0), export/digest (0.16.0), and replay
-playback (fenced for now — the route and the data columns exist so it will not
-need a schema change).
+Export/digest (0.16.0), and replay playback (fenced for now — the route and the
+data columns exist so it will not need a schema change).

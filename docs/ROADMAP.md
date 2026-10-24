@@ -5,8 +5,8 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.14.0** (tag `v0.13.0` is the last published release); 239 tests green
-(199 run anywhere: 34 need the `[web]` extra, 6 need the author's replays), CI
+State: **0.15.0** (tag `v0.14.0` is the last published release); 252 tests green
+(204 run anywhere: 42 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
 
@@ -22,9 +22,9 @@ osu! beatmap-listing idiom with covers from `assets.ppy.sh`, human annotations
 stored LLM critiques with staleness hashes, and an opt-in export + digest for
 new replays.
 
-Milestones **0.12.0 (the index)**, **0.13.0 (the web read path)** and
-**0.14.0 (annotations)** have landed — see `docs/index.md`, `docs/web.md` and
-`docs/annotations.md`.
+Milestones **0.12.0 (the index)**, **0.13.0 (the web read path)**,
+**0.14.0 (annotations)** and **0.15.0 (stored critiques)** have landed — see
+`docs/index.md`, `docs/web.md`, `docs/annotations.md`, `docs/critiques.md`.
 
 **Not now, deliberately** — the fence, so scope cannot quietly grow: replay
 playback / cursor animation, auth or multi-user, public hosting, re-analysis
@@ -35,6 +35,22 @@ it does not need a schema change.
 
 ## Shipped since the handoff
 
+- **0.15.0 — stored critiques** (`critiques.py`, `coach --save`,
+  `docs/critiques.md`): one canonical sidecar per run at
+  `out/critiques/<run_id>.json`, mirrored into the index. A critique records
+  `run_hash` (the metrics **plus the player's notes**) and `prompt_hash` (the
+  framework), so re-analysing the play, adding a note, or changing the prompt
+  marks it **stale** with a badge instead of silently lying; a different model
+  is not staleness. The run page streams the call as SSE (`delta` frames, then
+  `done`), stores it and shows model + date; a no-JS form post does the same
+  blocking and redirects. The key stays server-side; `web.llm_remote: false`
+  answers 403 to non-loopback clients on the LLM routes only. 6 unit tests + 8
+  route tests.
+  Traps: a `<form>` inside `<p>` gets hoisted by the browser (the delete button
+  vanished from `.critique-meta`), the empty-state element must be hidden when
+  streaming starts or the panel shows "no critique" above the critique, and the
+  JSON-vs-HTML error branch has to key off `Accept: text/event-stream` so the
+  streaming client gets `{"detail"}` while a plain form gets a page.
 - **0.14.0 — annotations** (`annotations.py`, `osu-critique annotate`,
   `docs/annotations.md`): notes scoped to a **map** (every attempt) or a **run**
   (one attempt), optionally timestamped in **map time** and written from the CLI
@@ -181,7 +197,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 239 tests (34 need [web]), no network
+.venv/bin/python -m pytest -q                       # 252 tests (42 need [web]), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy

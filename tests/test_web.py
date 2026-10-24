@@ -426,3 +426,132 @@ def test_boot_rebuilds_a_schema_from_another_build(tmp_path):
     conn = sqlite3.connect(out / index.DB_FILENAME)
     assert conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()[0] == str(index.SCHEMA_VERSION)
     conn.close()
+
+
+# -------------------------------------------------------------- critiques ----
+
+FAKE_TEXT = "Your timing spread widens after the first kiai."
+
+
+def fake_generate(system, user, on_delta=None, model=None, key=None):
+    for chunk in ("Your timing ", "spread widens ", "after the first kiai."):
+        if on_delta:
+            on_delta(chunk)
+    return FAKE_TEXT, "test-model"
+
+
+@pytest.fixture
+def llm(monkeypatch):
+    """A key that exists and a model that answers without touching the network."""
+    import osu_critique.coach as coach_mod
+    import osu_critique.config as config_mod
+
+    monkeypatch.setattr(config_mod, "llm_key", lambda: "test-key")
+    monkeypatch.setattr(coach_mod, "generate_critique", fake_generate)
+    return monkeypatch
+
+
+def test_without_a_key_the_button_says_why_and_the_route_refuses(client, monkeypatch):
+    import osu_critique.config as config_mod
+    monkeypatch.setattr(config_mod, "llm_key", lambda: None)
+    page = client.get("/run/" + "2" * 32)
+    assert "No LLM key configured" in page.text
+    assert 'id="critique-form"' not in page.text
+    r = client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+    assert r.status_code == 400
+    assert "OSU_LLM_KEY" in r.text
+    # the streaming client (the browser's fetch) gets JSON
+    r = client.post("/run/" + "2" * 32 + "/critique",
+                    headers={"accept": "text/event-stream"}, follow_redirects=False)
+    assert r.status_code == 400 and "OSU_LLM_KEY" in r.json()["detail"]
+
+
+def test_a_blocking_critique_is_stored_and_shown(client, llm):
+    r = client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+    assert r.status_code == 303
+    page = client.get("/run/" + "2" * 32).text
+    assert FAKE_TEXT in page
+    assert "test-model" in page
+    assert "No stored critique" not in page
+
+    sidecar = Path(client.app.state.outdir) / "critiques" / ("2" * 32 + ".json")
+    assert json.loads(sidecar.read_text())["body"] == FAKE_TEXT
+
+    conn = index.connect(Path(client.app.state.outdir) / index.DB_FILENAME)
+    try:
+        assert conn.execute("SELECT COUNT(*) FROM critiques").fetchone()[0] == 1
+    finally:
+        conn.close()
+
+
+def test_the_streaming_path_emits_sse_and_stores_the_result(client, llm):
+    r = client.post("/run/" + "3" * 32 + "/critique",
+                    headers={"accept": "text/event-stream"},
+                    follow_redirects=False)
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/event-stream")
+    body = r.text
+    assert '"delta": "Your timing "' in body
+    assert '"done": true' in body
+    assert body.rstrip().endswith("data: [DONE]")
+    assert FAKE_TEXT in client.get("/run/" + "3" * 32).text
+
+
+def test_a_changed_run_marks_the_critique_stale(client, llm):
+    client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+    assert "stale — the run" not in client.get("/run/" + "2" * 32).text
+
+    # edit the artifact: the stored critique no longer describes this play
+    out = Path(client.app.state.outdir)
+    doc = json.loads((out / "a2_metrics.json").read_text())
+    doc["accuracy"] = 0.71
+    (out / "a2_metrics.json").write_text(json.dumps(doc))
+
+    page = client.get("/run/" + "2" * 32).text
+    assert "stale — the run or its notes changed" in page
+
+
+def test_adding_a_note_marks_the_critique_stale(client, llm):
+    client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+    assert "stale — the run" not in client.get("/run/" + "2" * 32).text
+    post_note(client, f"/map/{MAP_A}/annotations", body="this is the hard part")
+    assert "stale — the run or its notes changed" in client.get("/run/" + "2" * 32).text
+
+
+def test_deleting_a_critique(client, llm):
+    client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+    sidecar = Path(client.app.state.outdir) / "critiques" / ("2" * 32 + ".json")
+    assert sidecar.exists()
+    r = client.post("/run/" + "2" * 32 + "/critique/delete",
+                    data={"next": "/run/" + "2" * 32}, follow_redirects=False)
+    assert r.status_code == 303
+    assert not sidecar.exists()
+    assert "No stored critique" in client.get("/run/" + "2" * 32).text
+
+
+def test_llm_remote_false_refuses_non_loopback_clients(tmp_path, monkeypatch, llm):
+    import osu_critique.config as config_mod
+    real_get = config_mod.get
+
+    def gated(name, env=None, default=None):
+        if name == "web.llm_remote":
+            return False
+        return real_get(name, env, default)
+
+    monkeypatch.setattr(config_mod, "get", gated)
+    out = build_corpus(tmp_path)
+    app = create_app(outdir=out, index_on_boot=False)
+
+    remote = TestClient(app)                      # host "testclient"
+    r = remote.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+    assert r.status_code == 403
+    assert "local-only" in r.text
+    r = remote.post("/run/" + "2" * 32 + "/critique",
+                    headers={"accept": "text/event-stream"}, follow_redirects=False)
+    assert r.status_code == 403 and "local-only" in r.json()["detail"]
+    # reading is still open
+    assert remote.get("/run/" + "2" * 32).status_code == 200
+
+    local = TestClient(app, client=("127.0.0.1", 5000))
+    r = local.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+    assert r.status_code == 303

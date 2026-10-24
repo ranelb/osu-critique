@@ -137,7 +137,7 @@ def load_system_prompt(prompt_file=None) -> str:
 
 
 def _call_chat(system: str, user: str, key: str, base_url: str, model: str,
-               timeout: float | None = None) -> str:
+               timeout: float | None = None, on_delta=None) -> str:
     """Single chat-completions call with a TOTAL deadline (not per-read).
 
     urllib's ``timeout`` is per socket operation — a stalled or trickling
@@ -167,7 +167,7 @@ def _call_chat(system: str, user: str, key: str, base_url: str, model: str,
           file=sys.stderr)
     try:
         with urllib.request.urlopen(req, timeout=sock_timeout) as resp:
-            return _read_stream(resp, deadline, total)
+            return _read_stream(resp, deadline, total, on_delta=on_delta)
     except urllib.error.HTTPError as e:
         # some OpenAI-compatible endpoints reject "stream": fall back once
         if e.code in (400, 404, 422) and b"stream" in (e.read() or b"").lower():
@@ -177,11 +177,12 @@ def _call_chat(system: str, user: str, key: str, base_url: str, model: str,
                 headers={"Content-Type": "application/json",
                          "Authorization": f"Bearer {key}"})
             with urllib.request.urlopen(req2, timeout=sock_timeout) as resp2:
-                return _read_stream(resp2, deadline, total, stream=False)
+                return _read_stream(resp2, deadline, total, stream=False,
+                                    on_delta=on_delta)
         raise
 
 
-def _read_stream(resp, deadline, total, stream=True):
+def _read_stream(resp, deadline, total, stream=True, on_delta=None):
     """Read a chat-completions response. Streaming mode prints tokens live and
     returns the assembled text; non-streaming returns the parsed content."""
     import time
@@ -215,7 +216,7 @@ def _read_stream(resp, deadline, total, stream=True):
                                    "line — endpoint behaving abnormally")
             while b"\n" in buf:
                 line, buf = buf.split(b"\n", 1)
-                _consume_sse(line, pieces)
+                _consume_sse(line, pieces, on_delta)
             if sum(len(p) for p in pieces) > max_total:
                 raise RuntimeError(f"LLM response exceeded {max_total//2**20} MiB — "
                                    "aborting (endpoint runaway?)")
@@ -223,14 +224,18 @@ def _read_stream(resp, deadline, total, stream=True):
             buf += chunk
     if stream:
         if buf.strip():
-            _consume_sse(buf, pieces)
+            _consume_sse(buf, pieces, on_delta)
         return "".join(pieces)
     data = json.loads(buf.decode())
     return data["choices"][0]["message"]["content"]
 
 
-def _consume_sse(line: bytes, pieces: list[str]):
-    """Parse one SSE line: ``data: {json}`` or ``data: [DONE]``."""
+def _consume_sse(line: bytes, pieces: list[str], on_delta=None):
+    """Parse one SSE line: ``data: {json}`` or ``data: [DONE]``.
+
+    ``on_delta`` receives each text chunk instead of it being printed — the web
+    frontend streams it to the browser; the CLI leaves it None and watches stdout.
+    """
     line = line.strip()
     if not line.startswith(b"data:"):
         return
@@ -246,8 +251,11 @@ def _consume_sse(line: bytes, pieces: list[str]):
         text = delta.get("content")
         if text:
             pieces.append(text)
-            sys.stdout.write(text)
-            sys.stdout.flush()
+            if on_delta is not None:
+                on_delta(text)
+            else:
+                sys.stdout.write(text)
+                sys.stdout.flush()
 
 
 def _slim(metrics):
@@ -417,6 +425,30 @@ def build_multi_user_message(rows, profile=None, notes=None):
     if profile:
         parts.append(f"## Player profile\n{json.dumps(profile, indent=1)}")
     return "\n\n".join(parts)
+
+
+def prepare_critique(metrics, outdir, baseline=None, profile=None,
+                     prompt_file=None):
+    """``(system, user, notes)`` for one run's critique — no network, no keys."""
+    from .annotations import for_metrics
+
+    system = load_system_prompt(prompt_file)
+    notes = for_metrics(metrics, outdir)
+    user = build_user_message(metrics, baseline, profile, notes=notes)
+    return system, user, notes
+
+
+def generate_critique(system, user, model=None, on_delta=None, key=None):
+    """Run one chat call; returns ``(text, model)``. Raises without a key."""
+    from .config import llm_base_url, llm_key, llm_model
+
+    key = key or llm_key()
+    if not key:
+        raise RuntimeError(
+            "no LLM key configured. Run `osu-critique setup` or set OSU_LLM_KEY.")
+    base, mdl = llm_base_url(), model or llm_model()
+    text = _call_chat(system, user, key, base, mdl, on_delta=on_delta)
+    return text, mdl
 
 
 def coach(metrics_path, baseline_path=None, profile=None, model=None,

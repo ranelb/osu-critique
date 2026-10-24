@@ -476,12 +476,51 @@ def cmd_coach(args):
               f"#{profile.get('global_rank')} · {profile.get('pp')}pp · "
               f"{profile.get('play_time_hours')}h", file=sys.stderr)
     try:
-        run_coach(args.metrics_json, args.baseline, profile,
-                  model=args.model, prompt_file=args.prompt)
+        text = run_coach(args.metrics_json, args.baseline, profile,
+                         model=args.model, prompt_file=args.prompt)
     except RuntimeError as e:
         print(f"error: {e}", file=sys.stderr)
         return 2
+    if args.save:
+        _save_critique(args, text)
     return 0
+
+
+def _save_critique(args, text):
+    """Store the critique next to the run: out/critiques/<run_id>.json."""
+    import os as _os
+
+    from . import critiques, index
+    from .coach import load_system_prompt
+    from .config import llm_model
+
+    if _os.path.isdir(args.metrics_json):
+        print("  ! --save stores one critique per run: pass a single metrics JSON",
+              file=sys.stderr)
+        return
+    try:
+        metrics = _load_metrics(args.metrics_json)
+    except RuntimeError as exc:
+        print(f"  ! not saved: {exc}", file=sys.stderr)
+        return
+    root = _os.path.dirname(_os.path.abspath(args.metrics_json))
+    run_id = index.run_id_for(metrics)
+    from .annotations import for_metrics
+    doc = critiques.build(metrics, for_metrics(metrics, root),
+                          load_system_prompt(args.prompt),
+                          args.model or llm_model(), text, run_id=run_id)
+    path = critiques.save(root, doc)
+    try:
+        conn = index.connect(index.db_path(root))
+        try:
+            index.sync_critiques(conn, root)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as exc:  # the sidecar is saved; the mirror can wait
+        print(f"  ! index not updated ({exc}) — run `osu-critique index`",
+              file=sys.stderr)
+    print(f"  saved critique: {path}", file=sys.stderr)
 
 
 def cmd_profile(args):
@@ -1017,6 +1056,9 @@ def main(argv=None):
     p.add_argument("--model", default=None,
                    help="LLM model name to use (overrides config/env); "
                         "default deepseek-v4-flash (the tested/recommended model)")
+    p.add_argument("--save", action="store_true",
+                   help="store the critique with the run (out/critiques/, one "
+                        "metrics JSON only) so the web UI shows it")
     p.add_argument("--prompt", default=None,
                    help="custom critique-framework prompt file (overrides built-in)")
     p.set_defaults(func=cmd_coach)
@@ -1029,6 +1071,9 @@ def main(argv=None):
     p.add_argument("--profile", default=None, help="optional osu! username for context")
     p.add_argument("--scrape", action="store_true",
                    help="allow the unofficial HTML profile fallback")
+    p.add_argument("--save", action="store_true",
+                   help="store the critique with the run (out/critiques/, one "
+                        "metrics JSON only) so the web UI shows it")
     p.add_argument("--prompt", default=None, help="custom prompt file (overrides built-in)")
     p.set_defaults(func=cmd_prompt)
 

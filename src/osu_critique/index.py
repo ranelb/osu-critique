@@ -33,7 +33,7 @@ DB_FILENAME = "index.sqlite"
 
 class SchemaMismatch(RuntimeError):
     """The DB was written by another build; it is derived, so rebuild it."""
-SCHEMA_VERSION = 3  # v3: annotations keyed by note_id (authored ids, not rowids)
+SCHEMA_VERSION = 4  # v4: critiques keyed by run_id (authored files, not rowids)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -139,13 +139,15 @@ CREATE TABLE IF NOT EXISTS annotations (
 CREATE INDEX IF NOT EXISTS annotations_by_map ON annotations (beatmap_md5);
 CREATE INDEX IF NOT EXISTS annotations_by_run ON annotations (replay_md5);
 
--- authored, canonical in out/critiques/<replay_md5>.json
+-- authored, canonical in out/critiques/<run_id>.json
 CREATE TABLE IF NOT EXISTS critiques (
-    replay_md5  TEXT PRIMARY KEY,
-    model       TEXT NOT NULL,
-    prompt_hash TEXT NOT NULL,
-    run_hash    TEXT NOT NULL,
-    created     TEXT NOT NULL,
+    run_id      TEXT PRIMARY KEY,
+    replay_md5  TEXT,
+    beatmap_md5 TEXT,
+    model       TEXT,
+    prompt_hash TEXT,
+    run_hash    TEXT,
+    created     TEXT,
     body        TEXT NOT NULL,
     source_path TEXT
 );
@@ -581,6 +583,7 @@ def sweep(outdir=None, rebuild: bool = False, quiet: bool = False,
                 conn.execute("DELETE FROM runs WHERE json_path = ?", (fp_str,))
         if not check:
             sync_annotations(conn, root)
+            sync_critiques(conn, root)
             conn.commit()
         stats["beatmaps"] = conn.execute("SELECT COUNT(*) FROM beatmaps").fetchone()[0]
         stats["runs"] = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
@@ -636,6 +639,24 @@ def sync_annotations(conn: sqlite3.Connection, outdir) -> int:
              note.get("updated_at"),
              os.fspath(annotations.sidecar_path(outdir, note["beatmap_md5"]))))
     return len(notes)
+
+
+def sync_critiques(conn: sqlite3.Connection, outdir) -> int:
+    """Replace the critiques mirror from ``out/critiques/*.json`` (canonical)."""
+    from . import critiques
+
+    rows = critiques.all_critiques(outdir)
+    conn.execute("DELETE FROM critiques")
+    for doc in rows:
+        conn.execute(
+            "INSERT OR REPLACE INTO critiques (run_id, replay_md5, beatmap_md5, "
+            "model, prompt_hash, run_hash, created, body, source_path) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (doc["run_id"], doc.get("replay_md5"), doc.get("beatmap_md5"),
+             doc.get("model"), doc.get("prompt_hash"), doc.get("run_hash"),
+             doc.get("created"), doc["body"],
+             os.fspath(critiques.path_for(outdir, doc["run_id"]))))
+    return len(rows)
 
 
 def check(outdir=None) -> dict:
