@@ -5,9 +5,10 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.12.0** (tag `v0.11.0` is the last published release); 188 tests green
-(182 run anywhere, 6 opt-in), CI on Python 3.10/3.12/3.14 on every push, tag →
-wheel + GitHub release (`.github/workflows/release.yml`).
+State: **0.13.0** (tag `v0.12.0` is the last published release); 212 tests green
+(182 run anywhere: 24 need the `[web]` extra, 6 need the author's replays), CI
+on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
+(`.github/workflows/release.yml`).
 
 ## In progress — web UI + per-map index (0.12.0 → 0.20.0)
 
@@ -21,7 +22,8 @@ osu! beatmap-listing idiom with covers from `assets.ppy.sh`, human annotations
 stored LLM critiques with staleness hashes, and an opt-in export + digest for
 new replays.
 
-Milestone **0.12.0 (the index) has landed** — see `docs/index.md`.
+Milestone **0.12.0 (the index)** and **0.13.0 (the web read path)** have landed —
+see `docs/index.md` and `docs/web.md`.
 
 **Not now, deliberately** — the fence, so scope cannot quietly grow: replay
 playback / cursor animation, auth or multi-user, public hosting, re-analysis
@@ -32,6 +34,22 @@ it does not need a schema change.
 
 ## Shipped since the handoff
 
+- **0.13.0 — the web read path** (`web/`, `covers.py`, `osu-critique serve`,
+  `docs/web.md`): FastAPI + Jinja2 + htmx as the optional `[web]` extra. `/` is a
+  cover-card listing (search, sort by recency/accuracy/SR/attempts/pp, status +
+  trust filters), `/map/<md5>` carries the `.osu` metadata, a sortable attempt
+  table (htmx partial, no reload) and the cross-attempt block as first→latest,
+  `/run/<id>` leads with the trust banner (a differing judgement changes the
+  wording, not just the colour) and renders the hit-error chart, the interesting
+  object rows, a lazy full object table and the deterministic report.
+  `/api/objects/<id>` serves the artifact verbatim; `/run/<id>/frames` is a 501
+  reservation for playback. Covers are lazy from `assets.ppy.sh` with a disk
+  cache and a `.miss` marker; the look is Poppins (OFL) because Torus is
+  licensed for osu! only. 24 route tests, a golden map-page structure test, and
+  a subprocess test proving the core imports without fastapi.
+  Traps: the listing must use `rank_status` (the runs column), not `status`;
+  `render()` needs `status_code=` or 404s render 200; the cross-attempt table
+  with 26 attempts needs first→latest, not one column per attempt.
 - **0.12.0 — the index** (`index.py`, `mapmeta.py`, `osu-critique index`,
   `docs/index.md`): a SQLite **projection** of `out/` at `out/index.sqlite` —
   one row per artifact plus a `beatmaps` row carrying `[Metadata]`/`[Events]`
@@ -148,7 +166,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 188 tests (6 opt-in), no network
+.venv/bin/python -m pytest -q                       # 212 tests (24 need [web]), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy

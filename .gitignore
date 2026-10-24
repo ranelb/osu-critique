@@ -24,3 +24,8 @@ maps/*
 !maps/.gitkeep
 replays/*
 !replays/.gitkeep
+
+# Screenshots are rendered from this player's real corpus: they contain personal
+# accuracy/attempt numbers, so they stay local. A publishable set has to be
+# rendered from the synthetic fixture corpus instead.
+docs/screenshots/

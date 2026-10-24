@@ -1,0 +1,45 @@
+<section class="panel" id="attempts">
+<h2>attempts <span class="count">{{ n_attempts }}</span></h2>
+{% if attempts %}
+<table class="data">
+  <thead>
+    <tr>
+      <th>
+        <a href="/map/{{ md5 }}?sort=played_at" data-sort="played_at"
+           hx-get="/map/{{ md5 }}/attempts?sort=played_at" hx-target="#attempts"
+           hx-swap="outerHTML">when</a>
+      </th>
+      <th>mods</th>
+      <th class="num">
+        <a href="/map/{{ md5 }}?sort=accuracy" hx-get="/map/{{ md5 }}/attempts?sort=accuracy"
+           hx-target="#attempts" hx-swap="outerHTML">accuracy</a>
+      </th>
+      <th class="num">
+        <a href="/map/{{ md5 }}?sort=ur" hx-get="/map/{{ md5 }}/attempts?sort=ur"
+           hx-target="#attempts" hx-swap="outerHTML">UR</a>
+      </th>
+      <th class="num">misses</th>
+      <th class="num">combo</th>
+      <th>trust</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for a in attempts %}
+    <tr class="{{ 'untrusted' if not a.trust_ok else '' }}">
+      <td>{{ a.when }}</td>
+      <td><span class="mods">{{ a.mod_string or '—' }}</span></td>
+      <td class="num">{{ a.accuracy | pct }}</td>
+      <td class="num">{{ a.ur | num(0) }}</td>
+      <td class="num {{ 'neg' if a.miss }}">{{ a.miss }}</td>
+      <td class="num">{{ a.max_combo }}</td>
+      <td>{% if a.trust_ok %}<span class="ok">ok</span>{% else %}<span class="bad" title="judgement differs from the game's counts">differs</span>{% endif %}</td>
+      <td class="num"><a class="open" href="/run/{{ a.run_id }}">open →</a></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="empty">No analysed attempts for this map yet.</p>
+{% endif %}
+</section>

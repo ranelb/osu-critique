@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ title_display }} · osu-critique{% endblock %}
+{% block body %}
+<article class="map">
+  <header class="map-hero">
+    <img class="hero-img" src="/api/cover/{{ md5 }}?size=hero" alt="" onerror="this.remove()">
+    <div class="hero-shade"></div>
+    <div class="hero-text">
+      <div class="crumbs"><a href="/">maps</a><span>/</span>{{ beatmap.version or '—' }}</div>
+      <h1>{{ title_display }}</h1>
+      <p class="meta">
+        {% if beatmap.creator %}mapped by <b>{{ beatmap.creator }}</b>{% endif %}
+        {% if beatmap.beatmap_id %}<span class="muted">#{{ beatmap.beatmap_id }}</span>{% endif %}
+        {% if sr %}<span class="pill star">{{ sr | star }}</span>{% endif %}
+        {% if status %}<span class="pill st-{{ status }}">{{ status }}</span>{% endif %}
+      </p>
+    </div>
+  </header>
+
+  <section class="statrow">
+    <div class="statcard"><span class="k">attempts</span><span class="v">{{ n_attempts }}</span></div>
+    <div class="statcard"><span class="k">best accuracy</span><span class="v">{{ best.accuracy | pct if best else '—' }}</span></div>
+    <div class="statcard"><span class="k">average</span><span class="v">{{ avg_acc | pct }}</span></div>
+    <div class="statcard"><span class="k">untrusted</span><span class="v {% if untrusted %}warn{% endif %}">{{ untrusted }}</span></div>
+  </section>
+
+  {% include "partials/attempts.html" %}
+
+  {% if cross_attempt and cross_attempt.families %}
+  <section class="panel">
+    <h2>cross-attempt structure</h2>
+    <p class="verdict">{{ cross_attempt.verdict }}</p>
+    <p class="fineprint">first → latest of {{ cross_attempt.n_attempts }} attempts:
+      {{ cross_attempt.attempts[0].played_at | when }}
+      → {{ cross_attempt.attempts[-1].played_at | when }}.</p>
+    {% for group_key, label in [('families', 'families'), ('shapes', 'shapes')] %}
+      {% set rows = cross_attempt[group_key] | selectattr('reported') | list %}
+      {% if rows %}
+      <table class="data tight">
+        <thead><tr><th>{{ label }}</th><th class="num">first</th><th class="num">latest</th>
+          <th class="num">Δ</th><th class="num">n (min)</th></tr></thead>
+        <tbody>
+        {% for f in rows %}
+          <tr>
+            <td>{{ f.name }}</td>
+            <td class="num">{{ f.rates[0] | pct(1) }}</td>
+            <td class="num">{{ f.rates[-1] | pct(1) }}</td>
+            <td class="num {{ 'neg' if f.delta_pts > 0 else 'pos' }}">{{ '%+.1f' | format(f.delta_pts) }} pts</td>
+            <td class="num muted">{{ f.n | min }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    {% endfor %}
+    <p class="fineprint">A rate is only reported where the bucket has at least the map's solid gate
+      ({{ cross_attempt.gate }} objects). “consistent weakness” = worse than the play's own rate in
+      every attempt; “swings” is one-off noise until explained. The full per-attempt table is
+      <code>osu-critique attempts out/</code>.</p>
+  </section>
+  {% endif %}
+
+  <section class="panel">
+    <h2>annotations</h2>
+    <p class="muted">Notes arrive in 0.14.0: a textbox above the run view with a timestamp chip,
+      stored per map so every attempt sees it and the coach prompt can read it.</p>
+  </section>
+</article>
+{% endblock %}
+{% block scripts %}<script src="/static/htmx.min.js" defer></script>{% endblock %}

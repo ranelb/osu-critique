@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}{{ total }} maps · osu-critique{% endblock %}
+{% block body %}
+<section class="page-head">
+  <h1>maps <span class="count">{{ total }}</span></h1>
+  <form class="filters" method="get" action="/">
+    <input type="search" name="q" value="{{ q }}" placeholder="artist, title, difficulty" aria-label="search">
+    <select name="sort" aria-label="sort">
+      {% for key, pair in sorts %}
+      <option value="{{ key }}" {% if key == sort %}selected{% endif %}>sort: {{ pair[1] }}</option>
+      {% endfor %}
+    </select>
+    <select name="status" aria-label="status">
+      <option value="">any status</option>
+      {% for s in ['ranked', 'qualified', 'loved', 'approved', 'pending', 'wip', 'graveyard'] %}
+      <option value="{{ s }}" {% if s == status %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <label class="check"><input type="checkbox" name="trust" value="ok" {% if trust == 'ok' %}checked{% endif %}> trustworthy only</label>
+    <button type="submit">apply</button>
+    {% if q or status or trust %}<a class="clear" href="/">clear</a>{% endif %}
+  </form>
+</section>
+
+<div class="grid">
+{% for m in maps %}
+  <a class="card" href="/map/{{ m.md5 }}">
+    <div class="cover">
+      <img src="/api/cover/{{ m.md5 }}?size=card" alt="" loading="lazy" onerror="this.remove()">
+      <div class="cover-shade"></div>
+      <span class="diff" title="difficulty">{{ m.version or '—' }}</span>
+      <span class="cover-badges">
+        {% if m.sr %}<span class="pill star">{{ m.sr | star }}</span>{% endif %}
+        {% if m.rank_status %}<span class="pill st-{{ m.rank_status }}">{{ m.rank_status }}</span>{% endif %}
+      </span>
+    </div>
+    <div class="card-body">
+      <div class="title">{{ m.title_display }}</div>
+      <div class="sub">{% if m.creator %}mapped by {{ m.creator }}{% else %}<span class="muted">metadata missing</span>{% endif %}</div>
+      <div class="stats">
+        <span class="stat"><b>{{ m.attempts }}</b> attempt{{ '' if m.attempts == 1 else 's' }}</span>
+        <span class="stat">best <b>{{ m.acc_pct | num(2) }}%</b></span>
+        <span class="stat muted">{{ m.last }}</span>
+      </div>
+    </div>
+  </a>
+{% else %}
+  <p class="empty">
+    No maps indexed. Run <code>osu-critique batch</code>, then
+    <code>osu-critique index</code>.
+  </p>
+{% endfor %}
+</div>
+
+{% if offset or has_next %}
+<nav class="pager">
+  {% if offset %}
+  <a href="/?q={{ q }}&amp;sort={{ sort }}&amp;status={{ status }}&amp;trust={{ trust }}&amp;offset={{ [offset - limit, 0] | max }}">← newer</a>
+  {% endif %}
+  <span class="muted">{{ offset + 1 }}–{{ offset + maps | length }} of {{ total }}</span>
+  {% if has_next %}
+  <a href="/?q={{ q }}&amp;sort={{ sort }}&amp;status={{ status }}&amp;trust={{ trust }}&amp;offset={{ offset + limit }}">older →</a>
+  {% endif %}
+</nav>
+{% endif %}
+{% endblock %}

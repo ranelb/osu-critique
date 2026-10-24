@@ -47,17 +47,30 @@ def save_config(cfg: dict) -> Path:
 def get(name: str, env: str | None = None, default=None):
     """Resolve a single value: env var first, then config file, then default.
 
-    Config keys may be hand-edited with the ``osu_`` prefix (e.g.
-    ``osu_llm_key`` instead of ``llm_key``) — a legacy alias lookup covers
-    that so a misremembered key name never silently disables a setting.
+    Dotted names reach into nested config (``web.host``); a flat key of the same
+    spelling also works, and ``osu_`` prefixed flat keys are a legacy alias, so
+    a misremembered key name never silently disables a setting.
     """
     if env and os.environ.get(env):
         return os.environ[env]
     cfg = load_config()
     for key in (name, "osu_" + name):
-        if key in cfg and cfg[key] not in (None, ""):
-            return cfg[key]
+        value = _lookup(cfg, key)
+        if value not in (None, ""):
+            return value
     return default
+
+
+def _lookup(cfg, key):
+    """``a.b`` -> cfg["a"]["b"]; a plain key is just ``cfg[key]``."""
+    if "." not in key:
+        return cfg.get(key)
+    cur = cfg
+    for part in key.split("."):
+        if not isinstance(cur, dict) or part not in cur:
+            return None
+        cur = cur[part]
+    return cur
 
 
 # ------------------------------------------------------- path resolution ----

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% set acc = metrics.get('accuracy') %}
+{% set he = metrics.get('hit_error_ms') or {} %}
+{% set aim = metrics.get('aim_px') or {} %}
+{% set counts = metrics.get('counts_recorded') or {} %}
+{% set tb = metrics.get('time_base') or {} %}
+{% set tr = metrics.get('trust') or {} %}
+{% block title %}{{ title_display }} · {{ run.mod_string }} · osu-critique{% endblock %}
+{% block body %}
+<article class="run" data-run-id="{{ run.run_id }}">
+  <div class="crumbs">
+    <a href="/">maps</a><span>/</span>
+    {% if run.beatmap_md5 %}<a href="/map/{{ run.beatmap_md5 }}">{{ title_display }}</a>{% else %}{{ title_display }}{% endif %}
+    <span>/</span>{{ run.when }}
+  </div>
+
+  {% if not trust %}
+  <div class="banner bad">
+    <b>Judgement differs from the game.</b>
+    {{ tr.get('abs_delta_total') }} of {{ tr.get('judged') }} objects disagree
+    ({{ tr.get('abs_delta_pct') | num(1) }}%, miss {{ (tr.get('count_deltas') or {}).get('miss', 0) }}).
+    Every per-pattern number below is approximate — read the counts as the truth.
+  </div>
+  {% else %}
+  <div class="banner good">
+    <b>Judgement matches the game's recorded counts.</b>
+    {{ tr.get('judged') }} objects judged, 0 disagreements.
+  </div>
+  {% endif %}
+
+  <header class="run-head">
+    <h1>{{ title_display }}</h1>
+    <p class="meta">
+      <span class="pill mods">{{ run.mod_string }}</span>
+      <span class="muted">{{ run.when }}</span>
+      {% if run.failed %}<span class="pill bad-pill">failed play</span>{% endif %}
+      {% if run.is_relax %}<span class="pill">relax-like</span>{% endif %}
+      {% if run.full_combo %}<span class="pill good-pill">full combo</span>{% endif %}
+      {% if run.sr %}<span class="pill star">{{ run.sr | star }}</span>{% endif %}
+      {% if run.pp %}<span class="pill">{{ run.pp | num(0) }}pp</span>{% endif %}
+    </p>
+  </header>
+
+  {% if tb.get('note') %}
+  <p class="notice">time base: {{ tb.get('note') }}</p>
+  {% endif %}
+
+  <section class="statrow">
+    <div class="statcard"><span class="k">accuracy</span><span class="v">{{ acc | pct }}</span></div>
+    <div class="statcard"><span class="k">UR</span><span class="v">{{ run.ur | num(0) }}</span>
+      <span class="k2">{{ run.ur_pct_of_300 | num(0) }}% of window</span></div>
+    <div class="statcard"><span class="k">counts</span><span class="v small">{{ counts.get('300', 0) }}<span class="x">/</span>{{ counts.get('100', 0) }}<span class="x">/</span>{{ counts.get('50', 0) }}<span class="x">/</span><span class="{{ 'neg' if counts.get('miss') }}">{{ counts.get('miss', 0) }}</span></span>
+      <span class="k2">300 / 100 / 50 / miss</span></div>
+    <div class="statcard"><span class="k">combo</span><span class="v">{{ run.max_combo }}</span>
+      <span class="k2">of {{ run.n_objects_map }}</span></div>
+    <div class="statcard"><span class="k">hit error</span><span class="v">{{ he.get('mean') | num(1) }}<span class="unit">ms</span></span>
+      <span class="k2">σ {{ he.get('std') | num(1) }} ms</span></div>
+    <div class="statcard"><span class="k">aim at note</span><span class="v">{{ aim.get('mean_norm') | num(2) }}<span class="unit">r</span></span>
+      <span class="k2">{{ run.whiffed_presses }} whiffed presses</span></div>
+  </section>
+
+  <section class="panel">
+    <h2>hit error over the map</h2>
+    <canvas id="hiterror" class="chart" height="220"
+            data-w300="{{ (metrics.get('windows_ms') or {}).get('300') }}"
+            data-w100="{{ (metrics.get('windows_ms') or {}).get('100') }}"
+            data-w50="{{ (metrics.get('windows_ms') or {}).get('50') }}"></canvas>
+    <p class="fineprint">Each dot is a judged object; the bands are the hit windows
+      (±{{ (metrics.get('windows_ms') or {}).get('300') | num(1) }} ms for a 300).</p>
+  </section>
+
+  <section class="panel">
+    <h2>objects worth looking at <span class="count">{{ n_interesting }}</span></h2>
+    {% if objects_available %}
+    <table class="data tight" id="interesting">
+      <thead><tr><th>#</th><th class="num">time</th><th>kind</th><th>result</th>
+        <th class="num">error</th><th class="num">aim</th><th class="num">spacing</th>
+        <th class="num">snap</th><th class="num">angle</th></tr></thead>
+      <tbody>
+      {% for o in interesting[:table_limit] %}
+        <tr class="res-{{ o.result }}">
+          <td class="num muted">{{ o.i }}</td>
+          <td class="num">{{ o.t | mmss }}</td>
+          <td>{{ o.kind }}</td>
+          <td><span class="res r-{{ o.result }}">{{ o.result }}</span></td>
+          <td class="num">{{ o.error_ms | num(1) }}</td>
+          <td class="num">{{ o.aim_r | num(2) }}</td>
+          <td class="num">{{ o.spacing_r | num(2) }}</td>
+          <td class="num">{{ o.snap | num(0) }}</td>
+          <td class="num">{{ o.angle_deg | num(0) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% if n_interesting > table_limit %}
+    <p class="fineprint">… and {{ n_interesting - table_limit }} more. <button class="link" id="all-objects" type="button">load the full object table</button></p>
+    {% endif %}
+    <details class="all-objects">
+      <summary>the whole map, object by object</summary>
+      <div id="object-table"></div>
+    </details>
+    {% else %}
+    <p class="muted">This run was analysed with <code>--no-objects</code>: no per-object records on disk.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>deterministic critique</h2>
+    <pre class="report">{{ report }}</pre>
+    <p class="fineprint">Rule-based, offline, no keys. The LLM critique arrives in 0.15.0.</p>
+  </section>
+
+  <section class="panel">
+    <h2>annotations</h2>
+    <p class="muted">Run-scoped notes arrive in 0.14.0.</p>
+  </section>
+</article>
+{% endblock %}
+{% block scripts %}<script src="/static/app.js" defer></script>{% endblock %}

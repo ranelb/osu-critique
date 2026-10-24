@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block body %}
+<section class="panel lone">
+  <h1>no index yet</h1>
+  <p>Analyse some replays, then build the index:</p>
+  <pre class="report">osu-critique batch
+osu-critique index</pre>
+  <p class="muted">The server also builds it on boot — restart with the index present, or run
+    <code>osu-critique index</code> in another shell.</p>
+</section>
+{% endblock %}

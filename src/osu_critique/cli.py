@@ -13,6 +13,7 @@ Subcommands:
   profile <username>                     fetch osu! profile (BYO osu API creds)
   setup   [--show]                       first-time configuration wizard
   index   [--rebuild|--check]            build / refresh out/index.sqlite
+  serve   [--host] [--port]              run the local web frontend (needs [web])
 """
 from __future__ import annotations
 
@@ -39,6 +40,42 @@ def cmd_analyze(args):
                       write_aim=not args.no_aim,
                       write_autopsy=not args.no_autopsy)
     console_summary(metrics)
+    return 0
+
+
+def cmd_serve(args):
+    """Run the local web frontend (optional extra: osu-critique[web])."""
+    try:
+        import uvicorn
+    except ImportError:
+        print("error: the web frontend needs the [web] extra:\n"
+              "  pip install 'osu-critique[web]'", file=sys.stderr)
+        return 2
+    try:
+        from .web.app import create_app
+    except ImportError as exc:
+        print(f"error: cannot load the web frontend ({exc})\n"
+              "  pip install 'osu-critique[web]'", file=sys.stderr)
+        return 2
+
+    from .config import get
+    host = args.host or str(get("web.host", "OSU_WEB_HOST", "0.0.0.0"))
+    port = int(args.port or get("web.port", "OSU_WEB_PORT", 8765))
+    out = args.outdir or outdir()
+    app = create_app(outdir=out, index_on_boot=not args.no_index)
+
+    shown = "localhost" if host in ("0.0.0.0", "::") else host
+    print(f"osu-critique web  http://{shown}:{port}   (out: {out})")
+    if host in ("0.0.0.0", "::"):
+        print("  bound to every interface, no auth: anything on this network can "
+              "read the history")
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="warning")
+    except OSError as exc:
+        print(f"error: cannot bind {host}:{port}: {exc}", file=sys.stderr)
+        return 2
+    except KeyboardInterrupt:
+        pass
     return 0
 
 
@@ -937,6 +974,17 @@ def main(argv=None):
     p.add_argument("--quiet", action="store_true", help="no progress meter")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_index)
+
+    p = sub.add_parser("serve", help="run the local web frontend "
+                                     "(needs the [web] extra)")
+    p.add_argument("--host", default=None,
+                   help="bind address (default: web.host, else 0.0.0.0)")
+    p.add_argument("--port", type=int, default=None,
+                   help="port (default: web.port, else 8765)")
+    p.add_argument("--no-index", action="store_true",
+                   help="do not sweep the index on boot")
+    p.add_argument("--outdir", default=None)
+    p.set_defaults(func=cmd_serve)
 
     args = parser.parse_args(argv)
     return args.func(args)
