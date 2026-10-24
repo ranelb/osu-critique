@@ -5,9 +5,28 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.11.0** (tag `v0.10.1` is the last published release); 160 tests green
+State: **0.11.0** (tag `v0.11.0` is the last published release); 160 tests green
 (154 run anywhere, 6 opt-in), CI on Python 3.10/3.12/3.14 on every push, tag →
 wheel + GitHub release (`.github/workflows/release.yml`).
+
+## In progress — web UI + per-map index (0.12.0 → 0.20.0)
+
+Planned 2026-10-24; the frozen design is
+[superpowers/plans/2026-10-24-web-ui.md](superpowers/plans/2026-10-24-web-ui.md).
+Short version: a local FastAPI frontend over this library (optional extra
+`[web]`), a **derived** SQLite index of runs at `out/index.sqlite` (the JSON
+artifacts stay canonical and the DB is rebuildable), map showcase pages in the
+osu! beatmap-listing idiom with covers from `assets.ppy.sh`, human annotations
+(map- and run-scoped, timestamped in map time) that the coach prompt reads,
+stored LLM critiques with staleness hashes, and an opt-in export + digest for
+new replays.
+
+**Not now, deliberately** — the fence, so scope cannot quietly grow: replay
+playback / cursor animation, auth or multi-user, public hosting, re-analysis
+from the browser, global osu! leaderboards, a mobile-specific layout, and
+websockets. Playback is the likely next one; the index stores
+`replay_path`/`map_path` and a `/run/{id}/frames` route is reserved so adding
+it does not need a schema change.
 
 ## Shipped since the handoff
 
