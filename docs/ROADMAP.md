@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.21.0** (tag `v0.21.0` is the last published release); 300 tests green
+State: **0.21.1** (tag `v0.21.1` is the last published release); 300 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
@@ -39,6 +39,10 @@ and is skipped by the digest.
 
 ## Shipped since the handoff
 
+- **0.21.1 — a 3.10 syntax fix**: 0.21.0 nested an f-string inside an f-string
+  with the same quote character, which only parses on Python 3.12+ (PEP 701).
+  CI caught it on 3.10; the wheel for 0.21.0 is unusable below 3.12. The value
+  is computed before the string now.
 - **0.21.0 — the deterministic report as data**: `report_sections.py` builds the
   critique once (typed items: `kv`, `note` with a tone, `table`) and
   `render_report()` is now its terminal rendering, so the CLI and the run page

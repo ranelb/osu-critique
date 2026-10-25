@@ -78,9 +78,10 @@ def sections(metrics: dict, baseline: dict | None = None) -> list[dict]:
     recorded = metrics.get("counts_recorded") or {}
 
     # -- headline ------------------------------------------------------------
+    ur = metrics.get("ur")
+    ur_text = f"{ur:.1f} ({ur_verdict(ur)})" if ur is not None else "n/a"
     headline = [
-        note(f"Accuracy {metrics['accuracy'] * 100:.1f}% | UR "
-             f"{(f'{metrics['ur']:.1f} ({ur_verdict(metrics['ur'])})') if metrics.get('ur') is not None else 'n/a'} | "
+        note(f"Accuracy {metrics['accuracy'] * 100:.1f}% | UR {ur_text} | "
              f"{recorded.get('300', 0)}x300 / {recorded.get('100', 0)}x100 / "
              f"{recorded.get('50', 0)}x50 / {recorded.get('miss', 0)}x miss | "
              f"max combo {metrics.get('max_combo')}", "headline"),
