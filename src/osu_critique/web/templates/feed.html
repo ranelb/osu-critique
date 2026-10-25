@@ -45,7 +45,19 @@
   </details>
 
   {% elif not d.n_runs %}
-  <section class="panel"><p class="muted">Nothing new in this window.</p></section>
+  <section class="panel">
+    <p class="muted">Nothing new in this window.</p>
+    {% if d.export and d.export.error %}
+    <p class="fineprint">No replays to read: {{ d.export.error.split('\n')[0] }}</p>
+    {% elif d.export_enabled %}
+    <p class="fineprint">osu! had no new scores to export since the last digest — nothing
+      was played, or the game was not running when the export ran.</p>
+    {% else %}
+    <p class="fineprint">Pulling replays out of osu! is off (<code>export.enabled</code>).
+      Turn it on, or run <code>osu-critique export --run</code>, and the next digest reads
+      them.</p>
+    {% endif %}
+  </section>
 
   {% else %}
   <section class="statrow">

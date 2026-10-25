@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,15 @@ import pytest
 from osu_critique import digest, index
 
 M = "a" * 32
+
+
+@pytest.fixture(autouse=True)
+def no_real_exporter(monkeypatch):
+    """Tests must never read this machine's config, exports dir or osu! DB."""
+    monkeypatch.setattr("osu_critique.export.enabled", lambda: False)
+    monkeypatch.setattr("osu_critique.digest._export_mtimes", lambda: [])
+    monkeypatch.setattr("osu_critique.config.lazer_exports",
+                        lambda: Path("/nonexistent/osu-exports"))
 
 
 def run_doc(tag, replay, played_at, accuracy=0.9, miss=3, n=100, ur_pct=50.0,
@@ -186,3 +196,117 @@ def test_build_writes_a_json_sidecar_for_the_feed(tmp_path):
     assert items[0]["data"]["n_runs"] == 3
     assert "worth" in items[0]["data"]          # a view concern, added on load
     assert [w["md5"] for w in items[0]["data"]["worth"]] == [M]
+
+
+# ---------------------------------------------------------- the watermark ----
+
+def test_ingest_watermark_is_the_newest_file_not_now(tmp_path, monkeypatch):
+    """The bug that lost a night: a marker set to "now" skips older exports."""
+    out = tmp_path / "out"
+    out.mkdir()
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    old = exports / "old.osr"
+    old.write_bytes(b"x")
+    os.utime(old, (1_700_000_000, 1_700_000_000))
+    monkeypatch.setattr("osu_critique.config.lazer_exports", lambda: exports)
+    monkeypatch.setattr("osu_critique.io.pairing.pair_all",
+                        lambda replay_filter=None: [])
+    monkeypatch.setattr("osu_critique.digest._export_mtimes",
+                        lambda: [1_700_000_000.0])
+    stats = digest.ingest(out, since_epoch=1_600_000_000, quiet=True)
+    assert stats["watermark"] == pytest.approx(1_700_000_000)
+    assert stats["watermark"] != pytest.approx(datetime.now().timestamp(), abs=1000)
+
+
+def test_a_summarise_only_digest_does_not_advance_the_ingest_watermark(tmp_path):
+    out = corpus(tmp_path / "out")
+    (out / "digests").mkdir()
+    (out / "digests" / ".ingest").write_text("1000.000\n")
+    digest.build(outdir=out, since="2026-10-01T00:00:00", ingest_first=False,
+                 quiet=True)
+    # untouched: the next ingest still looks at everything newer than 1000
+    assert digest.last_ingest(out) == pytest.approx(1000.0)
+
+
+def test_legacy_folders_fall_back_to_the_old_marker(tmp_path):
+    out = tmp_path / "out"
+    (out / "digests").mkdir(parents=True)
+    marker = out / "digests" / ".last"
+    marker.write_text("2026-10-20T10:00:00\n")
+    os.utime(marker, (1_650_000_000, 1_650_000_000))
+    assert digest.last_ingest(out) == pytest.approx(1_650_000_000)
+
+
+# --------------------------------------------------------------- export -----
+
+def test_the_digest_exports_first_when_enabled(tmp_path, monkeypatch):
+    out = corpus(tmp_path / "out")
+    calls = {}
+
+    def fake_run(**kwargs):
+        calls["ran"] = True
+        return {"ok": True, "exported": 3, "total": 10, "beatmaps": 4,
+                "seconds": 1.0, "pruned": []}
+
+    monkeypatch.setattr("osu_critique.export.enabled", lambda: True)
+    monkeypatch.setattr("osu_critique.export.run", fake_run)
+    monkeypatch.setattr("osu_critique.digest.ingest",
+                        lambda *a, **k: {"candidates": 0, "analysed": 0,
+                                         "known": 0, "failed": 0, "seconds": 0.0,
+                                         "tags": [], "watermark": 0.0})
+    doc = digest.build(outdir=out, since="2026-10-01T00:00:00", write=False,
+                       quiet=True)
+    assert calls.get("ran")
+    assert doc["export"]["exported"] == 3
+    assert "Exported 3 replays from osu! first." in doc["markdown"]
+
+
+def test_an_export_failure_is_reported_not_fatal(tmp_path, monkeypatch):
+    out = corpus(tmp_path / "out")
+    from osu_critique.export import ExportError
+
+    def boom(**kwargs):
+        raise ExportError("no BeatmapExporter found")
+
+    monkeypatch.setattr("osu_critique.export.enabled", lambda: True)
+    monkeypatch.setattr("osu_critique.export.run", boom)
+    monkeypatch.setattr("osu_critique.digest.ingest",
+                        lambda *a, **k: {"candidates": 0, "analysed": 0,
+                                         "known": 0, "failed": 0, "seconds": 0.0,
+                                         "tags": [], "watermark": 0.0})
+    doc = digest.build(outdir=out, since="2026-10-28T00:00:00", write=False,
+                       quiet=True)
+    assert "No replays to read: no BeatmapExporter found" in doc["markdown"]
+
+
+def test_an_empty_window_says_why(tmp_path):
+    out = corpus(tmp_path / "out")
+    doc = digest.build(outdir=out, since="2026-12-01T00:00:00",
+                       ingest_first=False, write=False, quiet=True)
+    assert doc["n_runs"] == 0
+    assert "Nothing new" in doc["markdown"]
+    assert "export.enabled: true" in doc["markdown"]
+
+
+def test_a_play_exported_late_still_counts_as_new(tmp_path, monkeypatch):
+    """The reported bug: play at 21:00, digest at 22:34, export at 22:58.
+
+    The play predates the marker and the previous digest covered nothing, so a
+    timestamp-only window drops it. The freshly ingested tag is what catches it.
+    """
+    out = corpus(tmp_path / "out")
+    late = run_doc("late", "l" * 32, "2026-10-20T21:00:00", accuracy=0.93)
+    write_run(out, late)
+    # a digest ran afterwards, over an older corpus, and covered up to the 18th
+    (out / "digests").mkdir()
+    (out / "digests" / ".last").write_text("2026-10-22T22:34:00\n")
+    digest.window_path(out).write_text(json.dumps({"played_at": "2026-10-18T00:00:00"}))
+
+    monkeypatch.setattr("osu_critique.digest.ingest",
+                        lambda *a, **k: {"candidates": 1, "analysed": 1, "known": 0,
+                                         "failed": 0, "seconds": 0.1,
+                                         "tags": ["late"], "watermark": 0.0})
+    doc = digest.build(outdir=out, ingest_first=True, write=False, quiet=True)
+    assert doc["n_runs"] == 1
+    assert doc["runs"][0]["when"].startswith("2026-10-20")

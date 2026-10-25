@@ -193,7 +193,9 @@ def ensure_schema(conn: sqlite3.Connection) -> None:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    """Naive local time: it is compared with ``played_at`` (also naive local)
+    and with the digest markers, so mixing in an offset would sort wrongly."""
+    return datetime.now().isoformat(timespec="seconds")
 
 
 def _json_or_none(value):

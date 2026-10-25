@@ -120,6 +120,8 @@ def pair_lazer(exports_dir=None, files_dir=None, replay_filter=None):
     replays = sorted(glob.glob(os.path.join(str(exports_dir), "*.osr")))
     if replay_filter is not None:
         replays = [r for r in replays if replay_filter(r)]
+        if not replays:
+            return []          # nothing new; an empty folder is a different thing
     if not replays:
         print(f"no lazer replays in {exports_dir}", file=sys.stderr)
         return []

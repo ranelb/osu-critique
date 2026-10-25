@@ -30,6 +30,11 @@ AAAA = FIXTURES / "aaaaa.osu"           # set 2338325, id 5021628
 @pytest.fixture(autouse=True)
 def no_lazer_scan(monkeypatch):
     monkeypatch.setattr(index._MapResolver, "_build", lambda self: {})
+    # never touch this machine's config/exports from a route test
+    monkeypatch.setattr("osu_critique.export.enabled", lambda: False)
+    monkeypatch.setattr("osu_critique.digest._export_mtimes", lambda: [])
+    monkeypatch.setattr("osu_critique.config.lazer_exports",
+                        lambda: Path("/nonexistent/osu-exports"))
 
 
 def metrics(tag, replay, beatmap, accuracy, played_at, mod_string="NM",

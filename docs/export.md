@@ -57,14 +57,28 @@ Environment=OSU_EXPORT_ENABLED=1
 ## Digest
 
 ```sh
-osu-critique digest                  # ingest new replays + write today's digest
+osu-critique digest                  # export (if enabled) + ingest + write
 osu-critique digest --no-ingest      # summarise only
+osu-critique digest --no-export      # do not touch the osu! database
 osu-critique digest --stdout         # print, write nothing, move no marker
 osu-critique digest --since 2026-10-01T00:00:00
 ```
 
-The window is `out/digests/.last` (an ISO timestamp, plus the file's mtime for
-the ingest side). With no marker the first digest looks back 24 hours.
+**A digest pulls its own replays.** When `export.enabled` is true, `digest` runs
+the exporter first, so "digest now" on the feed really means "fetch my latest
+plays and summarise them" rather than "read whatever some other tool exported".
+With export off it only reads the exports folder and says so when that is empty.
+
+Three markers, because "new" has three meanings and conflating them loses plays:
+
+| marker | meaning |
+|---|---|
+| `out/digests/.ingest` | the newest **exported-file mtime** an ingest pass has already seen. Advanced only by an ingest, and only to the newest file that exists — never to "now". |
+| `out/digests/.window` | the newest **play** the last digest actually reported. A digest that shows nothing leaves it alone, so an unreported play stays in the next window instead of vanishing. |
+| `out/digests/.last` | when the last digest ran (fallback for folders written before the other two). |
+
+A play also counts as new when **this run just ingested it**, whatever its
+timestamp — the late-export case (played last night, exported tonight).
 
 **Ingest** is the only expensive part: it lists exported `.osr` files newer than
 the marker, pairs them, analyses them and indexes them. A replay is skipped when

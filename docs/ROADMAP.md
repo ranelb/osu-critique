@@ -5,8 +5,8 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.20.0** (tag `v0.20.0` is the last published release); 285 tests green
-(229 run anywhere: 50 need the `[web]` extra, 6 need the author's replays), CI
+State: **0.20.1** (tag `v0.20.1` is the last published release); 293 tests green
+(235 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
 
@@ -39,6 +39,22 @@ and is skipped by the digest.
 
 ## Shipped since the handoff
 
+- **0.20.1 — the digest actually fetches plays** (reported: "digest doesn't work,
+  it says none detected even when I play"):
+  - `digest` now runs the **export** first when `export.enabled` is true, so
+    "digest now" means "pull my latest plays, analyse them, summarise them".
+    An export failure is reported in the digest, never fatal.
+  - three markers instead of one: `.ingest` (newest exported-file mtime seen,
+    advanced only by an ingest and never to *now*), `.window` (newest **play**
+    actually reported — a digest that shows nothing leaves it alone), and
+    `.last` (when the digest ran). The old single marker was set to the wall
+    clock, so a digest that summarised without ingesting skipped every file
+    exported before it, and every play whose timestamp preceded it.
+  - a play is also new when **this run just ingested it** (the late-export
+    case), and an empty window now says *why* (export off / nothing played).
+  - traps: `pair_lazer` printed "no lazer replays" when a filter had merely
+    excluded them all; and any test that calls `digest.build()` must stub
+    `export.enabled`, or it exports into the developer's real out/.
 - **0.20.0 — the feed as a page, and per-run near-miss boards**:
   - every digest is written twice (`…md` canonical, `…json` structured) and
     `/feed` renders the JSON: digest header, timing/miss percentiles as meters,
@@ -240,7 +256,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 285 tests (50 need [web]), no network
+.venv/bin/python -m pytest -q                       # 293 tests (52 need [web]), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy

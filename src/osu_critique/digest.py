@@ -23,6 +23,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 MARKER_NAME = ".last"
+INGEST_MARKER_NAME = ".ingest"
+WINDOW_NAME = ".window"
 
 
 # ------------------------------------------------------------------ helpers --
@@ -44,6 +46,52 @@ def last_digest(outdir) -> tuple[str | None, float]:
     except OSError:
         return None, 0.0
     return (text or None), epoch
+
+
+def window_path(outdir) -> Path:
+    return digests_dir(outdir) / WINDOW_NAME
+
+
+def last_window(outdir) -> dict:
+    """What the previous digest covered: ``{"played_at": <newest play seen>}``.
+
+    Deliberately the newest **play** in the corpus at that moment, not the time
+    the digest ran: a digest that ran at 22:34 over plays whose newest was from
+    the 24th must leave the window at the 24th, so the 25th's plays (exported
+    afterwards) still count as new.
+    """
+    try:
+        doc = json.loads(window_path(outdir).read_text())
+        if isinstance(doc, dict):
+            return doc
+    except (OSError, ValueError):
+        pass
+    return {}
+
+
+def ingest_marker_path(outdir) -> Path:
+    return digests_dir(outdir) / INGEST_MARKER_NAME
+
+
+def last_ingest(outdir) -> float:
+    """The newest exported-file mtime that a previous ingest has already seen.
+
+    Deliberately **not** "when the last digest ran": a digest that only
+    summarised (``--no-ingest``) used to move the marker to *now* and thereby
+    skip every file exported before it — which is exactly how a night of plays
+    went missing. Falls back to the old marker's mtime for existing folders.
+    """
+    path = ingest_marker_path(outdir)
+    try:
+        return float(path.read_text().strip())
+    except (OSError, ValueError):
+        return last_digest(outdir)[1]
+
+
+def _write_ingest_marker(outdir, epoch: float) -> None:
+    path = ingest_marker_path(outdir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{epoch:.3f}\n")
 
 
 def _now() -> datetime:
@@ -89,6 +137,12 @@ def ingest(outdir=None, since_epoch: float = 0.0, limit: int | None = None,
     pairs = pairing.pair_all(replay_filter=is_new)
     candidates = list(pairs if limit is None else pairs[:limit])
     stats["candidates"] = len(candidates)
+    # advance the watermark only to the newest file that exists, never to "now":
+    # a file written after this pass stays newer than the watermark and is
+    # picked up next time, while a file exported *before* an earlier marker can
+    # no longer be skipped by it
+    stats["watermark"] = max([since_epoch] + [_mtime(r) for _s, r, _m in pairs]
+                             + _export_mtimes())
 
     taken: set[str] = set()
     for _source, replay_path, map_path in candidates:
@@ -114,6 +168,23 @@ def ingest(outdir=None, since_epoch: float = 0.0, limit: int | None = None,
         index.sweep(out, quiet=True)
     stats["seconds"] = round(time.time() - started, 1)
     return stats
+
+
+def _mtime(path) -> float:
+    try:
+        return os.path.getmtime(path)
+    except OSError:
+        return 0.0
+
+
+def _export_mtimes() -> list[float]:
+    """mtime of every exported .osr (one stat per file, no parsing)."""
+    from .config import lazer_exports
+
+    directory = Path(lazer_exports())
+    if not directory.is_dir():
+        return []
+    return [_mtime(p) for p in directory.glob("*.osr")]
 
 
 def _known_replay_md5(out: Path) -> set[str]:
@@ -186,31 +257,66 @@ def _pct(value, values, lower_is_better=True):
     return better_than_pct(value, values, lower_is_better)
 
 
-def _new_rows(conn, since: str | None) -> list:
-    sql = "SELECT * FROM runs"
-    args: tuple = ()
-    if since:
-        sql += " WHERE played_at > ?"
-        args = (since,)
+def _new_rows(conn, since_played: str | None, fresh_tags: list[str]) -> list:
+    """Plays after the window, plus whatever this run just ingested.
+
+    The tags matter for the case the timestamp cannot see: a replay exported
+    tonight for a play from last night. Ingest knows exactly which runs it just
+    analysed, so those are included regardless of their ``played_at``.
+    """
+    where, args = [], []
+    if since_played:
+        where.append("(played_at IS NOT NULL AND played_at > ?)")
+        args.append(since_played)
+    fresh = [t for t in (fresh_tags or []) if t]
+    if fresh:
+        where.append("tag IN (" + ",".join("?" * len(fresh)) + ")")
+        args.extend(fresh)
+    sql = "SELECT * FROM runs" + (" WHERE " + " OR ".join(where) if where else "")
     sql += " ORDER BY played_at DESC"
-    return conn.execute(sql, args).fetchall()
+    return conn.execute(sql, tuple(args)).fetchall()
 
 
 def build(outdir=None, since: str | None = None, ingest_first: bool = True,
-          write: bool = True, quiet: bool = False) -> dict:
-    """Produce the digest for the window since the last one."""
-    from . import index
+          write: bool = True, quiet: bool = False,
+          export_first: bool | None = None) -> dict:
+    """Produce the digest for the window since the last one.
+
+    ``export_first`` (default: whatever ``export.enabled`` says) pulls new
+    replays out of the osu! database before ingesting, so "digest now" means
+    "get my latest plays and summarise them" rather than "read whatever someone
+    else exported".
+    """
+    from . import export, index
 
     from .config import outdir as _outdir
 
     out = Path(outdir or _outdir())
     marker_iso, marker_epoch = last_digest(out)
+    window = last_window(out)
     if since is None:
-        since = marker_iso
+        since = window.get("played_at") or marker_iso
+
+    export_stats = None
+    if export_first is None:
+        export_first = export.enabled()
+    if export_first:
+        try:
+            export_stats = export.run()
+        except export.ExportError as exc:
+            export_stats = {"ok": False, "error": str(exc)}
+        if not quiet:
+            if export_stats.get("ok"):
+                print(f"  exported {export_stats.get('exported', 0)} new replays",
+                      file=sys.stderr)
+            else:
+                print(f"  ! export skipped: {export_stats.get('error')}",
+                      file=sys.stderr)
+
     ingest_stats = {"candidates": 0, "analysed": 0, "known": 0, "failed": 0,
-                    "seconds": 0.0, "tags": []}
+                    "seconds": 0.0, "tags": [], "watermark": 0.0}
     if ingest_first:
-        ingest_stats = ingest(out, since_epoch=marker_epoch, quiet=quiet)
+        ingest_stats = ingest(out, since_epoch=last_ingest(out), quiet=quiet)
 
     conn = index.open_readonly(out)
     if conn is None:
@@ -225,9 +331,14 @@ def build(outdir=None, since: str | None = None, ingest_first: bool = True,
                 "LIMIT 1", (cutoff,)).fetchone()
             if older:
                 since = cutoff
-        rows = _new_rows(conn, since)
+        rows = _new_rows(conn, since, ingest_stats.get("tags") or [])
         history = _history(conn, since)
         maps = _map_blocks(conn, rows)
+        # the window only advances over plays this digest actually reported;
+        # a window over the whole corpus would silently swallow a play that was
+        # in the index but not shown (that is how a night went missing)
+        window_to = max((r["played_at"] for r in rows if r["played_at"]),
+                        default=None)
     finally:
         if conn is not None:
             conn.close()
@@ -247,7 +358,10 @@ def build(outdir=None, since: str | None = None, ingest_first: bool = True,
             "miss_median": _median(history["miss"]),
         },
         "maps": maps,
+        "window_to": window_to,
         "ingest": ingest_stats,
+        "export": export_stats,
+        "export_enabled": bool(export_first),
     }
     scored = [r for r in digest["runs"] if r["accuracy"] is not None]
     if scored:
@@ -263,7 +377,20 @@ def build(outdir=None, since: str | None = None, ingest_first: bool = True,
         digest["path"] = str(path)
         marker_path(out).parent.mkdir(parents=True, exist_ok=True)
         marker_path(out).write_text(digest["generated"] + "\n")
+        if digest.get("window_to"):
+            window_path(out).write_text(json.dumps({
+                "played_at": digest["window_to"],
+            }, indent=1) + "\n")
+        if ingest_first:
+            _write_ingest_marker(out, float(ingest_stats.get("watermark") or 0.0))
     return digest
+
+
+def _max_text(conn, column: str) -> str | None:
+    try:
+        return conn.execute(f"SELECT MAX({column}) FROM runs").fetchone()[0]
+    except Exception:
+        return None
 
 
 def _median(values):
@@ -374,13 +501,29 @@ def render(d: dict) -> str:
                      f"since {_fmt(d['window_from'])}.")
     else:
         lines.append(f"**Nothing new** since {_fmt(d['window_from'])}.")
+    exported = d.get("export") or {}
+    if exported.get("exported"):
+        lines.append(f"Exported {exported['exported']} replay"
+                     f"{'' if exported['exported'] == 1 else 's'} from osu! first.")
     ingest = d.get("ingest") or {}
-    if ingest.get("analysed") or ingest.get("failed"):
+    if ingest.get("analysed") or ingest.get("failed") or ingest.get("candidates"):
         lines.append("")
         lines.append(f"Ingest: {ingest.get('analysed', 0)} analysed, "
                      f"{ingest.get('known', 0)} already known, "
                      f"{ingest.get('failed', 0)} failed "
                      f"({ingest.get('seconds', 0)}s).")
+    if not d["n_runs"] and not ingest.get("candidates"):
+        lines.append("")
+        if exported.get("error"):
+            lines.append(f"_No replays to read: {exported['error'].splitlines()[0]}_")
+        elif not d.get("export_enabled"):
+            lines.append("_No new exported replays, and pulling them out of osu! is "
+                         "off. Run `osu-critique export --run`, or set "
+                         "`export.enabled: true` so every digest fetches them._")
+        else:
+            lines.append("_osu! had no new scores to export since the last digest — "
+                         "nothing was played, or the game was not running when the "
+                         "export ran._")
     if not d["n_runs"]:
         return "\n".join(lines) + "\n"
 

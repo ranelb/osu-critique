@@ -17,6 +17,7 @@ Subcommands:
   annotate add|list|rm                   human notes the coach reads (map or run scoped)
   export  [--install|--run]              opt-in replay export from the osu! database
   digest  [--since] [--no-ingest]        what's new since your last digest (no LLM)
+         [--no-export]                 (it exports first when export.enabled)
 """
 from __future__ import annotations
 
@@ -138,7 +139,8 @@ def cmd_digest(args):
     try:
         doc = digest.build(outdir=args.outdir, since=args.since,
                            ingest_first=not args.no_ingest,
-                           write=not args.stdout)
+                           write=not args.stdout,
+                           export_first=False if args.no_export else None)
     except Exception as exc:  # noqa: BLE001 - the CLI reports, never tracebacks
         print(f"error: {type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
@@ -1249,6 +1251,8 @@ def main(argv=None):
                    help="ISO timestamp (default: the previous digest)")
     p.add_argument("--no-ingest", action="store_true",
                    help="summarise only; do not analyse new exported replays")
+    p.add_argument("--no-export", action="store_true",
+                   help="do not pull replays out of osu! even if export.enabled is true")
     p.add_argument("--stdout", action="store_true",
                    help="print only; do not write out/digests/ or move the marker")
     p.add_argument("--json", action="store_true")
