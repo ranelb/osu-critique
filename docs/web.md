@@ -19,7 +19,7 @@ skip), then serves until interrupted.
 |---|---|
 | `/` | one card per beatmap: cover, difficulty, star pill, ranked status, attempts, best accuracy, last played. Search by artist/title/difficulty; sort by recency, accuracy, SR, attempts or pp; filter by status or "trustworthy only". |
 | `/map/<beatmap_md5>` | hero cover + `[Metadata]` from the `.osu`, star/status pills, attempt table (sortable via htmx, no page reload), the cross-attempt block (first → latest per family/shape, with the `attempts` gate and verdict). |
-| `/run/<run_id>` | the trust banner **first**, then accuracy/UR/counts/combo/hit-error/aim cards, a hit-error-over-time chart, a **collapsed** "where it went wrong" board set (see below), the objects worth looking at, the full object table on demand, and the deterministic report. |
+| `/run/<run_id>` | the trust banner **first**, then accuracy/UR/counts/combo/hit-error/aim cards, a hit-error-over-time chart, a **collapsed** "where it went wrong" board set (see below), the objects worth looking at, the full object table on demand, and the deterministic report as **cards with tables** (see below). |
 | `/api/objects/<run_id>` | the per-object JSON, verbatim as `analyze` wrote it. |
 | `/api/map/<md5>`, `/api/runs` | the same data the pages render, for anything that wants JSON. |
 | `/api/cover/<md5>?size=card\|hero` | the cached cover, fetched once from `assets.ppy.sh`. |
@@ -34,6 +34,11 @@ that carry no md5. Re-exports of one play share an id; the newest artifact wins.
 - **Server-rendered.** Jinja templates and one `app.js` (a few canvases and a
   lazy table). htmx handles the one partial (attempt sorting). No npm, no
   bundler, no serialising the corpus into the client.
+- **One report, two renderers.** `report_sections.py` builds the deterministic
+  critique as data — `kv` rows, notes with a tone (trust, time base, primary
+  target), and tables — and `render_report()` is its terminal rendering, so the
+  CLI text and the run page cannot drift. Sections with more than five table
+  columns take the full grid width instead of being squeezed into a card.
 - **Boards are computed server-side, drawn client-side.** `web/boards.py` turns
   `autopsy.misses.rows` + the object positions into zoomed five-note windows
   ranked by closest approach, the same misses as one playfield overview, and the

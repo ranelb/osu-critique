@@ -151,10 +151,37 @@
     {% endif %}
   </section>
 
-  <section class="panel">
-    <h2>deterministic critique</h2>
-    <pre class="report">{{ report }}</pre>
-    <p class="fineprint">Rule-based, offline, no keys.</p>
+  <section class="panel" id="report">
+    <h2>deterministic critique <span class="count">{{ report_sections | length }} sections</span></h2>
+    <div class="rsections">
+    {% for s in report_sections %}
+      {% set items = s['items'] | rejectattr('tone', 'equalto', 'headline') | list %}
+      {% if items %}
+      <article class="rsection{% if s.wide %} wide{% endif %}" id="rs-{{ s.id }}">
+        <h3>{{ s.title }}</h3>
+        {% for item in items %}
+          {% if item.kind == 'note' %}
+          <p class="rnote {{ item.tone }}">{{ item.text }}</p>
+          {% elif item.kind == 'kv' %}
+          <div class="rkv">
+            <span class="rk">{{ item.label }}</span>
+            <span class="rv">{{ item.value }}</span>
+            {% if item.note %}<span class="rn">{{ item.note }}</span>{% endif %}
+          </div>
+          {% elif item.kind == 'table' %}
+          {% if item.caption %}<div class="rcap">{{ item.caption }}</div>{% endif %}
+          <div class="rscroll"><table class="data tight rtable">
+            <thead><tr>{% for c in item.columns %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+            <tbody>{% for row in item.rows %}<tr>{% for cell in row %}<td>{{ cell }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+          </table></div>
+          {% endif %}
+        {% endfor %}
+      </article>
+      {% endif %}
+    {% endfor %}
+    </div>
+    <p class="fineprint">Rule-based, offline, no keys — the same content as
+      <code>osu-critique report</code>.</p>
   </section>
 
   <section class="panel" id="critique">

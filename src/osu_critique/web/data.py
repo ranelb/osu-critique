@@ -187,12 +187,13 @@ def run_page(conn, run_id: str) -> dict | None:
     metrics = _metrics_at(run["json_path"]) or {}
     objects = _objects(run)
     interesting = [o for o in objects if o.get("result") in INTERESTING]
-    report = ""
-    try:
-        from ..cli import render_report
-        report = render_report(metrics) if metrics else ""
-    except Exception:
-        report = ""
+    report_sections = []
+    if metrics:
+        try:
+            from ..report_sections import sections as build_sections
+            report_sections = build_sections(metrics)
+        except Exception:
+            report_sections = []
     beatmap = _row_dict(get_beatmap(conn, run["beatmap_md5"])) if run["beatmap_md5"] else None
     title = _title(beatmap) if beatmap else None
     if title and beatmap.get("version"):
@@ -210,7 +211,7 @@ def run_page(conn, run_id: str) -> dict | None:
         "boards": build_boards(metrics, objects) if objects else
                   {"playfield": {"w": 512.0, "h": 384.0}, "misses": [],
                    "heat": [], "good": []},
-        "report": report,
+        "report_sections": report_sections,
         "objects": objects,
         "interesting": interesting,
         "n_interesting": len(interesting),

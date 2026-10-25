@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.20.1** — 293 tests (235 run anywhere without optional extras), CI on
+> **Status: 0.21.0** — 300 tests (242 run anywhere without optional extras), CI on
 > Python 3.10-3.14. The judgement is validated against the game's own recorded
 > counts; see [Validation and trust](#validation-and-trust).
 
@@ -76,6 +76,8 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 ![A run page](docs/img/run.webp)
 
 ![Near-miss boards](docs/img/boards.webp)
+
+![The deterministic report](docs/img/report.webp)
 
 ![The digest feed](docs/img/feed.webp)
 
@@ -217,7 +219,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 293 tests (6 need the author's replays, 52 need [web])
+pytest -q                     # 300 tests (6 need the author's replays, 52 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

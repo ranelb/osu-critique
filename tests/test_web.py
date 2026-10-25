@@ -685,3 +685,16 @@ def test_run_page_has_a_collapsed_board_section(client):
     # collapsed by default: the details tag must not carry `open`
     section = page.split('<details class="panel" id="boards">')[1].split(">")[0]
     assert "open" not in section
+
+
+# ------------------------------------------------- deterministic report -----
+
+def test_the_report_renders_as_cards_not_a_text_blob(client):
+    page = client.get("/run/" + "2" * 32).text
+    assert 'id="report"' in page
+    assert 'class="rsection"' in page
+    assert "Map profile" in page or "Timing" in page
+    assert 'class="rnote ' in page or 'class="rkv"' in page
+    # the deterministic report is no longer a <pre>; only the LLM critique is
+    assert page.count('<pre class="report"') <= 1
+    assert page.index('id="report"') < page.index('<pre class="report"')

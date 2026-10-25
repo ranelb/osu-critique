@@ -5,8 +5,8 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.20.1** (tag `v0.20.1` is the last published release); 293 tests green
-(235 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
+State: **0.21.0** (tag `v0.21.0` is the last published release); 300 tests green
+(242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
 
@@ -39,6 +39,16 @@ and is skipped by the digest.
 
 ## Shipped since the handoff
 
+- **0.21.0 — the deterministic report as data**: `report_sections.py` builds the
+  critique once (typed items: `kv`, `note` with a tone, `table`) and
+  `render_report()` is now its terminal rendering, so the CLI and the run page
+  cannot drift. The page shows it as cards: kv rows, toned notes (trust, time
+  base, primary target, clean run) and tables; sections with more than five
+  columns span the full grid instead of being squeezed into a third of the page.
+  Found while doing it: five real runs store `legs: null`, an empty
+  `error_shape` and null stream velocities, which made `render_report` raise
+  `TypeError` — a latent crash, now degrading per-field. Verified by running
+  `sections()` over all 3 365 stored metrics files (0 crashes).
 - **0.20.1 — the digest actually fetches plays** (reported: "digest doesn't work,
   it says none detected even when I play"):
   - `digest` now runs the **export** first when `export.enabled` is true, so
@@ -256,7 +266,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 293 tests (52 need [web]), no network
+.venv/bin/python -m pytest -q                       # 300 tests (52 need [web]), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
