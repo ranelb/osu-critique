@@ -5,8 +5,8 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.16.0** (tag `v0.15.0` is the last published release); 270 tests green
-(219 run anywhere: 45 need the `[web]` extra, 6 need the author's replays), CI
+State: **0.16.1** (tag `v0.15.0` is the last published release); 271 tests green
+(220 run anywhere: 45 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
 
@@ -37,6 +37,11 @@ it does not need a schema change.
 
 ## Shipped since the handoff
 
+- **0.16.1 — the index keys on the artifact, not on the cwd**: `json_path`
+  (and every other stored path) is now absolute. Running the CLI from the repo
+  (``out/x``) and the systemd service from anywhere
+  (``/home/.../out/x``) indexed every artifact **twice** — 6 686 rows for 3 343
+  files on this box. `--rebuild` cleans it up. Regression test added.
 - **0.16.0 — export and the digest** (`export.py`, `digest.py`,
   `export_assets.json`, `THIRD_PARTY.md`, `docs/export.md`): the opt-in
   `osu-critique export` drives BeatmapExporter (MIT v2.8.0, sha256-pinned,
@@ -216,7 +221,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 270 tests (45 need [web]), no network
+.venv/bin/python -m pytest -q                       # 271 tests (45 need [web]), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy

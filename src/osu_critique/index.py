@@ -271,11 +271,14 @@ def metrics_to_row(metrics: dict, json_path, objects_path=None,
                           or _get(metrics, "aim_mode", "is_relax", default=False))
                     else 0,
         "time_base_overridden": 1 if tb.get("overridden") else 0,
-        "json_path": os.fspath(json_path) if json_path else None,
-        "objects_path": os.fspath(objects_path) if objects_path else None,
+        # absolute, always: the same artifact must not get two rows because the
+        # CLI ran from the repo (``out/x``) and the service from anywhere
+        # (``/home/.../out/x``). This bit the systemd unit on first boot.
+        "json_path": os.path.abspath(os.fspath(json_path)) if json_path else None,
+        "objects_path": os.path.abspath(os.fspath(objects_path)) if objects_path else None,
         "objects_missing": 0 if objects_path and os.path.isfile(objects_path) else 1,
-        "replay_path": os.fspath(replay_path) if replay_path else None,
-        "map_path": os.fspath(map_path) if map_path else None,
+        "replay_path": os.path.abspath(os.fspath(replay_path)) if replay_path else None,
+        "map_path": os.path.abspath(os.fspath(map_path)) if map_path else None,
         "mtime": mtime,
         "size": size,
         "indexed_at": _now(),
@@ -499,7 +502,7 @@ def sweep(outdir=None, rebuild: bool = False, quiet: bool = False,
 
     ``check=True`` computes the same diff and writes nothing.
     """
-    root = Path(outdir or _default_outdir())
+    root = Path(os.path.abspath(Path(outdir or _default_outdir())))
     path = root / DB_FILENAME
     started = time.time()
     files = _metrics_files(root)
@@ -661,7 +664,7 @@ def sync_critiques(conn: sqlite3.Connection, outdir) -> int:
 
 def check(outdir=None) -> dict:
     """Report drift between the artifacts and the index without writing."""
-    root = Path(outdir or _default_outdir())
+    root = Path(os.path.abspath(Path(outdir or _default_outdir())))
     path = root / DB_FILENAME
     if not path.exists():
         files = _metrics_files(root)

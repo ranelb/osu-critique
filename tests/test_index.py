@@ -353,3 +353,26 @@ def test_rebuild_recovers_from_another_build(tmp_path):
         index.connect(out / index.DB_FILENAME)
     stats = index.sweep(out, rebuild=True)   # must delete the file, not the rows
     assert stats["runs"] == 1
+
+
+def test_the_same_artifact_is_one_row_whatever_the_cwd(tmp_path, monkeypatch):
+    """A relative path and an absolute one are the same artifact.
+
+    Found in production: the CLI (cwd = repo, ``out/x``) and the systemd
+    service (cwd = anywhere, ``/home/.../out/x``) indexed every run twice.
+    """
+    out = tmp_path / "out"
+    doc = metrics(tag="a")
+    path = write_run(out, doc)
+
+    monkeypatch.chdir(tmp_path)
+    index.upsert_run(doc, "out/a_metrics.json", outdir="out")
+    stats = index.sweep(str(out))            # absolute this time
+    conn = index.connect(out / index.DB_FILENAME)
+    try:
+        assert stats["added"] == 0
+        assert conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0] == 1
+        row = conn.execute("SELECT json_path FROM runs").fetchone()
+        assert row["json_path"] == str(path)
+    finally:
+        conn.close()
