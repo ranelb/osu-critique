@@ -66,40 +66,20 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 
 ## Screenshots
 
-The local frontend, rendered from the **demo corpus** (`scripts/make_demo_corpus.py`:
-invented plays on public maps). None of this is a real player's history — the
-screenshots you take of your own corpus stay on your machine.
+![The map list](docs/img/maps.webp)
 
-**The map list.** One card per beatmap: cover, difficulty, star rating, ranked
-status, attempts, best accuracy, last played. Search, sort and filter on top.
+<details>
+<summary>More screenshots</summary>
 
-![The map list](docs/img/maps.png)
+![A map page](docs/img/map.webp)
 
-**One map.** Every attempt with mods, accuracy, UR, misses, combo and whether
-the judgement matched the game — then the cross-attempt block, which separates a
-*consistent weakness* from something that merely *swings* between attempts.
+![A run page](docs/img/run.webp)
 
-![A map page](docs/img/map.png)
+![Near-miss boards](docs/img/boards.webp)
 
-**One run.** The trust banner first, then accuracy, UR, counts, combo, hit error
-and aim at the note, and the hit-error trace over the map with the hit windows
-as bands.
+![The digest feed](docs/img/feed.webp)
 
-![A run page](docs/img/run.png)
-
-**Where it went wrong.** A collapsed panel on every run: near-misses ranked by
-closest approach, each drawn as its five-note window with the hit circles at the
-map's CS, the travel path, and the miss ringed — plus the cleanest stretch of the
-run as the counterweight.
-
-![Near-miss boards](docs/img/boards.png)
-
-**The feed.** Deterministic digests: timing and miss-rate percentiles against
-your own history, the plays, and the maps that deserve another attempt — with
-cover art and the named weaknesses. A **digest now** button runs the ingest and
-the summary without leaving the page.
-
-![The digest feed](docs/img/feed.png)
+</details>
 
 ## Features
 
