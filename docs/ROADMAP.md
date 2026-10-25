@@ -5,28 +5,25 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.16.1** (tag `v0.15.0` is the last published release); 271 tests green
-(220 run anywhere: 45 need the `[web]` extra, 6 need the author's replays), CI
+State: **0.20.0** (tag `v0.20.0` is the last published release); 285 tests green
+(229 run anywhere: 50 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
 
-## In progress — web UI + per-map index (0.12.0 → 0.20.0)
+## The web UI arc — shipped (0.12.0 → 0.20.0)
 
-Planned 2026-10-24; the frozen design is
+The frozen design is
 [superpowers/plans/2026-10-24-web-ui.md](superpowers/plans/2026-10-24-web-ui.md).
-Short version: a local FastAPI frontend over this library (optional extra
-`[web]`), a **derived** SQLite index of runs at `out/index.sqlite` (the JSON
-artifacts stay canonical and the DB is rebuildable), map showcase pages in the
-osu! beatmap-listing idiom with covers from `assets.ppy.sh`, human annotations
-(map- and run-scoped, timestamped in map time) that the coach prompt reads,
-stored LLM critiques with staleness hashes, and an opt-in export + digest for
-new replays.
+All of it shipped: a local FastAPI frontend over this library (optional extra
+`[web]`), a **derived** SQLite index of runs (the JSON artifacts stay canonical
+and the DB is rebuildable), map showcase pages in the osu! beatmap-listing idiom
+with covers from `assets.ppy.sh`, human annotations in map time that the coach
+prompt reads, stored LLM critiques with staleness hashes, an opt-in export and a
+deterministic digest with a real feed, and per-run near-miss boards.
 
-Milestones **0.12.0 (the index)**, **0.13.0 (the web read path)**,
-**0.14.0 (annotations)**, **0.15.0 (stored critiques)** and **0.16.0 (export +
-digest)** have landed — see `docs/index.md`, `docs/web.md`, `docs/annotations.md`,
-`docs/critiques.md`, `docs/export.md`. What remains is **0.20.0**, the polish
-release (covers, empty states, screenshots from the synthetic corpus, docs).
+Where each piece lives: `docs/index.md` (the projection), `docs/web.md` (pages,
+routes, boards), `docs/annotations.md`, `docs/critiques.md`, `docs/export.md`
+(export, digest, feed).
 
 **Not now, deliberately** — the fence, so scope cannot quietly grow: replay
 playback / cursor animation, auth or multi-user, public hosting, re-analysis
@@ -35,8 +32,30 @@ websockets. Playback is the likely next one; the index stores
 `replay_path`/`map_path` and a `/run/{id}/frames` route is reserved so adding
 it does not need a schema change.
 
+Smaller things intentionally left: publishable screenshots rendered from the
+synthetic corpus (the real ones are gitignored because they carry personal
+numbers), and one 2020 replay that trips a pre-existing analyser `TypeError`
+and is skipped by the digest.
+
 ## Shipped since the handoff
 
+- **0.20.0 — the feed as a page, and per-run near-miss boards**:
+  - every digest is written twice (`…md` canonical, `…json` structured) and
+    `/feed` renders the JSON: digest header, timing/miss percentiles as meters,
+    best/worst, the plays table with links to map and run, and **maps worth
+    another look** as cover cards with star pill, `+N`, mapper and the named
+    weaknesses — plus a **digest now** button (`POST /feed/digest`, 409 on a
+    concurrent run).
+  - the run page gained a collapsed **"where it went wrong"**: `web/boards.py`
+    ranks misses by closest approach, attaches the five-note window, and the
+    browser draws zoomed boards (hit circles at the map's CS, dashed travel
+    path, the miss ringed), one playfield-wide miss overview, and the cleanest
+    stretch as the counterweight (a clean quarter when the map has no long
+    streams). No matplotlib, no frames, no extra request.
+  - traps: a `<p>` cannot contain the delete `<form>` (browser hoists it);
+    mini-card badges must live at the top of the cover or they collide with the
+    difficulty label; a `<details>` panel must not size its canvas from
+    `clientWidth` (it is 0 while closed) — fixed logical dimensions instead.
 - **0.16.1 — the index keys on the artifact, not on the cwd**: `json_path`
   (and every other stored path) is now absolute. Running the CLI from the repo
   (``out/x``) and the systemd service from anywhere
@@ -221,7 +240,7 @@ Two examples of what that way of working produced (both reproduced by
 
 ```sh
 cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 271 tests (45 need [web]), no network
+.venv/bin/python -m pytest -q                       # 285 tests (50 need [web]), no network
 .venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
 .venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
 .venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy

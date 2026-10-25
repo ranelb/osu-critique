@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.16.1** — 271 tests (220 run anywhere without optional extras), CI on
+> **Status: 0.20.0** — 285 tests (229 run anywhere without optional extras), CI on
 > Python 3.10-3.14. The judgement is validated against the game's own recorded
 > counts; see [Validation and trust](#validation-and-trust).
 
@@ -74,7 +74,7 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 | **Stars/pp** | `stars`, `pp` | optional extra (`[stars]`) | star ratings and pp per play |
 | **Profile** | `profile` | osu! API creds (BYO, optional) | player stats for context |
 | **Status** | `status` | osu! API creds (BYO, optional) | pp-eligible vs unranked split |
-| **Web** | `serve` | optional extra (`[web]`) | local frontend: map showcase, run pages, deterministic report |
+| **Web** | `serve` | optional extra (`[web]`) | local frontend: map showcase, run pages with near-miss boards, feed, stored critiques |
 | **Annotate** | `annotate` | no | notes the coach reads, in map time |
 | **Export** | `export` | optional binary + opt-in | replay export from the osu! database |
 | **Digest** | `digest` | no | what's new since your last visit; no LLM |
@@ -199,7 +199,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 271 tests (6 need the author's replays, 45 need [web])
+pytest -q                     # 285 tests (6 need the author's replays, 50 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
