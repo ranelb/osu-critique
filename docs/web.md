@@ -19,11 +19,11 @@ skip), then serves until interrupted.
 |---|---|
 | `/` | one card per beatmap: cover, difficulty, star pill, ranked status, attempts, best accuracy, last played. Search by artist/title/difficulty; sort by recency, accuracy, SR, attempts or pp; filter by status or "trustworthy only". |
 | `/map/<beatmap_md5>` | hero cover + `[Metadata]` from the `.osu`, star/status pills, attempt table (sortable via htmx, no page reload), the cross-attempt block (first → latest per family/shape, with the `attempts` gate and verdict). |
-| `/run/<run_id>` | the trust banner **first**, then accuracy/UR/counts/combo/hit-error/aim cards, a hit-error-over-time chart, the objects worth looking at, the full object table on demand, and the deterministic report. |
+| `/run/<run_id>` | the trust banner **first**, then accuracy/UR/counts/combo/hit-error/aim cards, a hit-error-over-time chart, a **collapsed** "where it went wrong" board set (see below), the objects worth looking at, the full object table on demand, and the deterministic report. |
 | `/api/objects/<run_id>` | the per-object JSON, verbatim as `analyze` wrote it. |
 | `/api/map/<md5>`, `/api/runs` | the same data the pages render, for anything that wants JSON. |
 | `/api/cover/<md5>?size=card\|hero` | the cached cover, fetched once from `assets.ppy.sh`. |
-| `/feed` | the written digests as pages — stat cards, linked plays, map cards with art (see [export.md](export.md)). |
+| `/feed` | the written digests as pages — stat cards, linked plays, map cards with art, and a **digest now** button (see [export.md](export.md)). |
 | `/run/<id>/frames` | **501** — reserved for replay playback, deliberately unimplemented. |
 
 `run_id` is the replay's md5, or `tag:<tag>` for the four pre-schema artifacts
@@ -31,9 +31,16 @@ that carry no md5. Re-exports of one play share an id; the newest artifact wins.
 
 ## Design rules
 
-- **Server-rendered.** Jinja templates and one 180-line `app.js` (two canvases
-  and a lazy table). htmx handles the one partial (attempt sorting). No npm, no
+- **Server-rendered.** Jinja templates and one `app.js` (a few canvases and a
+  lazy table). htmx handles the one partial (attempt sorting). No npm, no
   bundler, no serialising the corpus into the client.
+- **Boards are computed server-side, drawn client-side.** `web/boards.py` turns
+  `autopsy.misses.rows` + the object positions into zoomed five-note windows
+  ranked by closest approach, the same misses as one playfield overview, and the
+  cleanest stretch (a stream segment, or a quarter on a map with no long
+  streams). The browser only draws circles and lines: no matplotlib, no frames,
+  no extra request. The whole panel is a collapsed `<details>` — it costs one
+  JSON blob in the page and nothing until you open it.
 - **Critiques are stored, not recomputed.** The run page streams one LLM call
   and keeps the answer in `out/critiques/` with the hashes that say what it was
   made from; see [critiques.md](critiques.md).

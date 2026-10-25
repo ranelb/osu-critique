@@ -302,3 +302,30 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .card.mini .title { font-size: .88rem; }
 .pill-list { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: .5rem; }
 .pill-list .pill { font-size: .68rem; }
+
+
+/* ------------------------------------------------------------- boards ---- */
+
+details.panel > summary { cursor: pointer; font-weight: 600; color: #cbd4e6;
+  font-size: 1.05rem; letter-spacing: -.01em; }
+details.panel > summary::marker { color: var(--pink); }
+details.panel[open] > summary { margin-bottom: .8rem; }
+details.panel > summary .count { font-weight: 600; }
+
+.boardgrid { display: grid; gap: .8rem;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
+.board-fig { margin: 0; }
+.board { width: 100%; height: auto; display: block; border: 1px solid var(--line);
+  border-radius: 10px; background: #0c0f16; }
+.board-fig figcaption { font-size: .74rem; color: var(--muted); margin-top: .3rem;
+  display: flex; gap: .4rem; align-items: center; flex-wrap: wrap; }
+.boardrow { display: flex; gap: 1.2rem; margin-top: 1rem; flex-wrap: wrap;
+  align-items: flex-start; }
+.boardrow .board-fig { flex: 0 1 260px; }
+.stretches { flex: 1 1 260px; }
+.stretches ul { list-style: none; margin: .4rem 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: .35rem; }
+.stretches li { font-size: .85rem; color: #c9d2e3; }
+.feed-actions { display: flex; align-items: center; gap: .8rem; }
+.feed-actions form { margin: 0; }
+.feed-actions button { padding: .45rem .9rem; }

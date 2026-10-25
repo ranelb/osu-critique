@@ -9,8 +9,15 @@
       {% else %}Nothing new since your last digest{% endif %}
       · deterministic, no model called.
     </p>
+    <p class="fineprint"><b>digest now</b> ingests replays that were exported since the
+      last digest, analyses them, then writes a new one — that can take a minute.</p>
   </div>
-  <span class="fineprint">{{ items | length }} digest{{ '' if items | length == 1 else 's' }}</span>
+  <div class="feed-actions">
+    <span class="fineprint">{{ items | length }} digest{{ '' if items | length == 1 else 's' }}</span>
+    <form method="post" action="/feed/digest" id="digest-form">
+      <button type="submit" id="digest-run">digest now</button>
+    </form>
+  </div>
 </section>
 
 {% for item in items %}

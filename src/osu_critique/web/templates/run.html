@@ -70,6 +70,52 @@
       (±{{ (metrics.get('windows_ms') or {}).get('300') | num(1) }} ms for a 300).</p>
   </section>
 
+  <details class="panel" id="boards">
+    <summary>where it went wrong
+      <span class="count">{{ boards.misses | length }} near-miss{{ '' if boards.misses | length == 1 else 'es' }}</span>
+      {% if boards.good %}<span class="count">· {{ boards.good | length }} clean stretch{{ '' if boards.good | length == 1 else 'es' }}</span>{% endif %}</summary>
+    {% if objects_available %}
+    <script type="application/json" id="boards-data">{{ boards | tojson }}</script>
+    {% if boards.misses or boards.heat or boards.good %}
+    <p class="fineprint">Near-misses ranked by closest approach — the ones you almost
+      had, with the five-note window around each. Circles are hit circles at this map's
+      CS; the red one is the miss{% if boards.misses and boards.misses[0].press_ms is not none %},
+      the label is the press offset{% endif %}.</p>
+    <div class="boardgrid" id="miss-boards"></div>
+    <div class="boardrow">
+      {% if boards.heat %}
+      <figure class="board-fig">
+        <canvas class="board" id="miss-heat" width="512" height="384"></canvas>
+        <figcaption>every miss on the playfield ({{ boards.heat | length }})</figcaption>
+      </figure>
+      {% endif %}
+      {% if boards.good %}
+      <div class="stretches">
+        <h3>unusually clean</h3>
+        <ul>
+          {% for g in boards.good %}
+          <li><span class="chip">{{ g.t_start | mmss }}–{{ g.t_end | mmss }}</span>
+            {{ g.n }} notes{% if g.notes_per_s %} at {{ g.notes_per_s }} n/s{% endif %}
+            {% if g.kind == 'quarter' %}
+            <span class="muted">· no misses · timing ±{{ g.std_err }} ms</span>
+            {% else %}
+            <span class="muted">· {{ g.gap_ms | num(0) }} ms gaps · {{ g.alt_ratio }} alt</span>
+            {% endif %}</li>
+          {% endfor %}
+        </ul>
+        <p class="fineprint">Zero misses at speed — the material you already own, and
+          the model for the rest.</p>
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <p class="muted">No misses in this run, and no clean stretch long enough to call out.</p>
+    {% endif %}
+    {% else %}
+    <p class="muted">No per-object records for this run (<code>--no-objects</code>).</p>
+    {% endif %}
+  </details>
+
   <section class="panel">
     <h2>objects worth looking at <span class="count">{{ n_interesting }}</span></h2>
     {% if objects_available %}

@@ -197,6 +197,142 @@
     show();
   }
 
+  /* ------------------------------------------------------------ boards -- */
+
+  const BOARD_W = 512;
+  const BOARD_H = 384;
+
+  function drawBoard(canvas, board, radius) {
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#0c0f16";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const chain = board.chain || [];
+    if (!chain.length) return;
+    const r = Math.max(8, radius || 40);
+
+    // zoom to the five-note window: at full playfield scale the chain is a few
+    // tiny dots in a big rectangle, which is not a picture of anything
+    const xs = chain.map((c) => c.x);
+    const ys = chain.map((c) => c.y);
+    const pad = r * 1.15;
+    let minX = Math.min(...xs) - r - pad, maxX = Math.max(...xs) + r + pad;
+    let minY = Math.min(...ys) - r - pad, maxY = Math.max(...ys) + r + pad;
+    const minSpan = r * 9;
+    for (const axis of ["x", "y"]) {
+      const lo = axis === "x" ? minX : minY;
+      const hi = axis === "x" ? maxX : maxY;
+      if (hi - lo < minSpan) {
+        const mid = (lo + hi) / 2;
+        const half = minSpan / 2;
+        if (axis === "x") { minX = mid - half; maxX = mid + half; }
+        else { minY = mid - half; maxY = mid + half; }
+      }
+    }
+    const sx = canvas.width / (maxX - minX);
+    const sy = canvas.height / (maxY - minY);
+    const scale = Math.min(sx, sy);
+    const offX = (canvas.width - (maxX - minX) * scale) / 2;
+    const offY = (canvas.height - (maxY - minY) * scale) / 2;
+    ctx.setTransform(scale, 0, 0, scale, offX - minX * scale, offY - minY * scale);
+
+    // the path the hand had to travel
+    ctx.strokeStyle = "#ffffff2b";
+    ctx.lineWidth = 2 / scale;
+    ctx.setLineDash([9 / scale, 7 / scale]);
+    ctx.beginPath();
+    chain.forEach((c, i) => (i ? ctx.lineTo(c.x, c.y) : ctx.moveTo(c.x, c.y)));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    chain.forEach((c) => {
+      const miss = c.i === board.i;
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+      ctx.fillStyle = miss ? "#ff5f6d3d" : "#ff66aa10";
+      ctx.fill();
+      ctx.lineWidth = miss ? 3.5 : 2;
+      ctx.strokeStyle = miss ? "#ff5f6d" : "#ff66aa77";
+      ctx.stroke();
+      if (c.kind === "Slider") {
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r + 6, 0, Math.PI * 2);
+        ctx.strokeStyle = "#ffffff14";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
+      if (miss) {
+        // a double ring so the miss reads at a glance even in a small card
+        ctx.beginPath();
+        ctx.arc(c.x, c.y, r * 0.42, 0, Math.PI * 2);
+        ctx.strokeStyle = "#ff5f6d";
+        ctx.lineWidth = 2.5;
+        ctx.stroke();
+      }
+    });
+  }
+
+  function drawHeat(canvas, heat) {
+    const ctx = canvas.getContext("2d");
+    const s = canvas.width / BOARD_W;
+    ctx.setTransform(s, 0, 0, s, 0, 0);
+    ctx.clearRect(0, 0, BOARD_W, BOARD_H);
+    ctx.fillStyle = "#0c0f16";
+    ctx.fillRect(0, 0, BOARD_W, BOARD_H);
+    ctx.strokeStyle = "#242c3d";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(1, 1, BOARD_W - 2, BOARD_H - 2);
+    heat.forEach((p) => {
+      const near = p.closest_r != null ? Math.max(0, 1 - p.closest_r / 3) : 0.3;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 7 + near * 9, 0, Math.PI * 2);
+      ctx.fillStyle = "rgb(255,95,109," + (0.25 + near * 0.55).toFixed(2) + ")";
+      ctx.fill();
+    });
+  }
+
+  function initBoards() {
+    const data = document.getElementById("boards-data");
+    if (!data) return;
+    let boards;
+    try { boards = JSON.parse(data.textContent); } catch (e) { return; }
+
+    const host = document.getElementById("miss-boards");
+    if (host) {
+      (boards.misses || []).forEach((board, idx) => {
+        const fig = document.createElement("figure");
+        fig.className = "board-fig";
+        const canvas = document.createElement("canvas");
+        canvas.className = "board";
+        canvas.width = BOARD_W;
+        canvas.height = BOARD_H;
+        fig.appendChild(canvas);
+        const cap = document.createElement("figcaption");
+        const when = document.createElement("span");
+        when.className = "chip";
+        when.textContent = mmss(board.t);
+        cap.appendChild(when);
+        const detail = document.createElement("span");
+        detail.className = "muted";
+        detail.textContent =
+          " closest " + fmt(board.closest_r, 2) + "r" +
+          (board.turn_deg != null ? " · turn " + fmt(board.turn_deg, 0) + "°" : "") +
+          (board.press_ms != null ? " · press " + fmt(board.press_ms, 0) + " ms" : "");
+        cap.appendChild(detail);
+        fig.appendChild(cap);
+        host.appendChild(fig);
+        drawBoard(canvas, board, boards.radius);
+      });
+    }
+
+    const heatCanvas = document.getElementById("miss-heat");
+    if (heatCanvas && boards.heat && boards.heat.length) {
+      drawHeat(heatCanvas, boards.heat);
+    }
+  }
+
   /* ---------------------------------------------------------- critiques -- */
 
   async function streamCritique(form, body, button) {
@@ -272,6 +408,17 @@
         });
       }
       initAnnotations(run);
+      initBoards();
+      const digestForm = document.getElementById("digest-form");
+      if (digestForm) {
+        digestForm.addEventListener("submit", () => {
+          const btn = document.getElementById("digest-run");
+          if (btn) {
+            btn.disabled = true;
+            btn.textContent = "digesting… (up to a minute)";
+          }
+        });
+      }
       const critiqueForm = document.getElementById("critique-form");
       if (critiqueForm) {
         critiqueForm.addEventListener("submit", (ev) => {

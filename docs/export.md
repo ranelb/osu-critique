@@ -102,8 +102,14 @@ pasting into anything) and `…json` (the same data structured, which the feed
 renders). A digest without the JSON sidecar — anything written before 0.20 —
 still appears, collapsed, as its text under "read the text".
 
+**digest now** on that page runs the same thing the CLI does (`POST
+/feed/digest`): ingest, analyse, write, redirect back. It can take a minute when
+there are new replays, so the button disables itself and says so; a second click
+while one is running gets a 409 rather than two concurrent digests.
+
 ```
-GET /feed     # the page
+GET  /feed          # the page
+POST /feed/digest   # ingest + write one now (optional form field: since)
 ```
 
 ## Files

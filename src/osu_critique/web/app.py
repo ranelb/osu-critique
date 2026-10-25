@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import queue
+import sys
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -271,6 +272,28 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             raise HTTPException(status_code=404, detail="cover unavailable")
         return FileResponse(path, media_type="image/jpeg",
                             headers={"Cache-Control": "public, max-age=604800"})
+
+    # ------------------------------------------------------------- digest --
+
+    _digest_lock = threading.Lock()
+
+    @app.post("/feed/digest")
+    def run_digest(since: str = Form("")):
+        """Run the digest now (ingest + summary). One at a time."""
+        if not _digest_lock.acquire(blocking=False):
+            raise HTTPException(status_code=409,
+                                detail="a digest is already running — give it a moment")
+        try:
+            doc = digest.build(outdir=out, since=since.strip() or None,
+                               ingest_first=True, quiet=True)
+        except Exception as exc:  # noqa: BLE001 - show the reason, not a traceback
+            raise HTTPException(status_code=500, detail=(
+                f"digest failed: {type(exc).__name__}: {exc}"))
+        finally:
+            _digest_lock.release()
+        print(f"digest: {doc.get('n_runs', 0)} new runs, {doc.get('path')}",
+              file=sys.stderr)
+        return _redirect("/feed")
 
     # -------------------------------------------------------- annotations --
 

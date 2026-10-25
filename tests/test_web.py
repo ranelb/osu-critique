@@ -34,7 +34,8 @@ def no_lazer_scan(monkeypatch):
 
 def metrics(tag, replay, beatmap, accuracy, played_at, mod_string="NM",
             trustworthy=True, delta=0, n_objects=100, counts=None,
-            composition=None, shapes=None, objects=True):
+            composition=None, shapes=None, objects=True, misses=None,
+            quarters=None):
     det = counts or {"300": 90, "100": 8, "50": 0, "miss": 2}
     doc = {
         "schema_version": 1, "tag": tag, "beatmap_md5": beatmap,
@@ -60,9 +61,11 @@ def metrics(tag, replay, beatmap, accuracy, played_at, mod_string="NM",
         "time_base": {"overridden": False, "note": None},
         "windows_ms": {"300": 24.8, "100": 66.4, "50": 108.0},
         "profile": {"composition": composition or []},
-        "autopsy": {"shapes": {"classes": shapes or []}},
+        "autopsy": {"shapes": {"classes": shapes or []},
+                    "misses": {"rows": misses or []}},
         "aim_mode": {"is_relax": False, "mean_norm": 0.4},
         "streams": {"n_segments": 1, "notes": 10},
+        "quarters": quarters or [],
     }
     return doc
 
@@ -101,7 +104,11 @@ def build_corpus(tmp_path):
         (metrics("a1", "1" * 32, MAP_A, 0.80, "2026-09-01T10:00:00",
                  trustworthy=False, delta=15, composition=comp, shapes=shape), DEAF),
         (metrics("a2", "2" * 32, MAP_A, 0.90, "2026-09-10T10:00:00",
-                 composition=comp, shapes=shape), DEAF),
+                 composition=comp, shapes=shape,
+                 misses=[{"i": 3, "t": 1300.0, "kind": "Circle", "d_r": 1.5,
+                          "closest_r": 0.25, "aim_at_press_r": 1.2,
+                          "press_ms": -8.0, "key": "A", "gap_r": 6.0,
+                          "turn_deg": 140.0, "speed": 0.4}]), DEAF),
         (metrics("a3", "3" * 32, MAP_A, 0.95, "2026-09-20T10:00:00", mod_string="DT",
                  composition=comp, shapes=shape), DEAF),
         (metrics("b1", "4" * 32, MAP_B, 0.70, "2026-08-01T10:00:00",
@@ -599,3 +606,77 @@ def test_feed_is_empty_before_the_first_digest(client):
 
 def test_nav_links_the_feed(client):
     assert 'href="/feed"' in client.get("/").text
+
+
+# ------------------------------------------------------ digest button ------
+
+def test_the_feed_can_run_a_digest(monkeypatch, tmp_path):
+    out = build_corpus(tmp_path)
+    app = create_app(outdir=out, index_on_boot=False)
+    client = TestClient(app)
+
+    calls = {}
+
+    def fake_ingest(outdir=None, since_epoch=0.0, limit=None, quiet=False):
+        calls["ingest"] = since_epoch
+        return {"candidates": 0, "analysed": 0, "known": 0, "failed": 0,
+                "seconds": 0.0, "tags": []}
+
+    monkeypatch.setattr("osu_critique.digest.ingest", fake_ingest)
+    r = client.post("/feed/digest", data={"since": ""}, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["location"] == "/feed"
+    assert "ingest" in calls                     # it did try to ingest first
+    assert list((out / "digests").glob("*.md")), "a digest was written"
+    page = client.get("/feed").text
+    assert 'class="digest-head"' in page
+
+
+def test_a_failing_digest_reports_why(monkeypatch, tmp_path):
+    out = build_corpus(tmp_path)
+    client = TestClient(create_app(outdir=out, index_on_boot=False))
+
+    def boom(**kwargs):
+        raise RuntimeError("no replays in ./replays")
+
+    monkeypatch.setattr("osu_critique.digest.build", boom)
+    r = client.post("/feed/digest", data={"since": ""}, follow_redirects=False)
+    assert r.status_code == 500
+    assert "no replays" in r.text
+
+
+def test_two_digests_at_once_are_refused(monkeypatch, tmp_path):
+    import threading
+    out = build_corpus(tmp_path)
+    client = TestClient(create_app(outdir=out, index_on_boot=False))
+    started, release = threading.Event(), threading.Event()
+
+    def slow(**kwargs):
+        started.set()
+        release.wait(5)
+        return {"n_runs": 0, "markdown": "", "path": None}
+
+    monkeypatch.setattr("osu_critique.digest.build", slow)
+    worker = threading.Thread(target=lambda: client.post("/feed/digest", data={}),
+                              daemon=True)
+    worker.start()
+    assert started.wait(5)
+    second = client.post("/feed/digest", data={}, follow_redirects=False)
+    assert second.status_code == 409
+    assert "already running" in second.text
+    release.set()
+    worker.join(5)
+
+
+# --------------------------------------------------------------- boards -----
+
+def test_run_page_has_a_collapsed_board_section(client):
+    page = client.get("/run/" + "2" * 32).text
+    assert '<details class="panel" id="boards">' in page
+    assert "where it went wrong" in page
+    assert 'id="boards-data"' in page
+    assert 'id="miss-boards"' in page
+    assert "closest 0.25r" in page or "near-miss" in page
+    # collapsed by default: the details tag must not carry `open`
+    section = page.split('<details class="panel" id="boards">')[1].split(">")[0]
+    assert "open" not in section
