@@ -147,6 +147,25 @@ def test_beatmap_metadata_is_parsed_and_cached(tmp_path):
     conn.close()
 
 
+def test_a_beatmap_without_a_file_keeps_its_id_for_joins(tmp_path):
+    """A row with metadata but no .osu (demo corpora, moved files) still joins."""
+    outdir = tmp_path / "out"
+    path = write_run(outdir, metrics(tag="one"))
+    conn = open_db(outdir)
+    conn.execute(
+        "INSERT INTO beatmaps (beatmap_md5, beatmap_id, set_id, title, version, "
+        "metadata_missing) VALUES (?, 42, 7, 'T', 'V', 0)", ("m" * 32,))
+    conn.commit()
+    conn.close()
+    (outdir / "beatmap_status.json").write_text(json.dumps({"42": {"status": "ranked"}}))
+    index.upsert_run(metrics(tag="one"), path, outdir=outdir)
+    conn = open_db(outdir)
+    try:
+        assert index.get_run(conn, "r" * 32)["rank_status"] == "ranked"
+    finally:
+        conn.close()
+
+
 def test_joins_come_from_the_existing_caches(tmp_path):
     outdir = tmp_path / "out"
     (outdir).mkdir(parents=True)

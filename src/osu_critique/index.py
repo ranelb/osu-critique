@@ -398,6 +398,11 @@ def _upsert_beatmap(conn, beatmap_md5: str, map_path=None, resolver=None,
             conn.execute(
                 "INSERT INTO beatmaps (beatmap_md5, map_path, metadata_missing, parsed_at) "
                 "VALUES (?, ?, 1, ?)", (beatmap_md5, path, _now()))
+            return None
+        # no .osu on disk, but the row may already carry metadata (a demo
+        # corpus, or a map file that moved): keep its id so joins still work
+        if not existing["metadata_missing"] and existing["beatmap_id"]:
+            return existing["beatmap_id"]
         return None
 
     meta = mapmeta.parse_file(path)

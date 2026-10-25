@@ -71,9 +71,10 @@
     [limit, limit / 2, 0, -limit / 2, -limit].forEach((v) => {
       ctx.fillText(v.toFixed(0), pad.l - 6, y(v));
     });
-    // x labels
-    ctx.textAlign = "center";
+    // x labels: pin the ends to their edges so the first and last are not
+    // half-clipped by the canvas
     [0, 0.5, 1].forEach((f) => {
+      ctx.textAlign = f === 0 ? "left" : f === 1 ? "right" : "center";
       ctx.fillText(mmss(tMin + span * f), pad.l + (w - pad.l - pad.r) * f, h - 12);
     });
 
