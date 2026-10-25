@@ -117,6 +117,10 @@ button.link { background: none; color: var(--pink); padding: 0; border: 0;
   font-size: .86rem; text-shadow: 0 1px 8px #000c; max-width: 62%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cover-badges { position: absolute; right: .55rem; bottom: .5rem; display: flex; gap: .35rem; }
+/* pills sit on art, so they need their own backdrop to stay readable */
+.cover .pill { background: #0a0c12cc; border-color: #ffffff2b; color: #eef2fa;
+  backdrop-filter: blur(4px); }
+.cover .pill.star { background: #2a0f1cd9; border-color: #ff66aa66; color: #ffb3d2; }
 
 .pill { display: inline-block; padding: .1rem .5rem; border-radius: 999px;
   font-size: .74rem; font-weight: 600; background: #ffffff12;
@@ -270,3 +274,31 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .obj-row { cursor: pointer; }
 .obj-row:hover td { background: #ffffff08; }
 .chip.stamped { border-color: var(--pink); box-shadow: 0 0 0 2px #ff66aa22; }
+
+/* --------------------------------------------------------------- feed ---- */
+
+.feed-head { align-items: flex-end; }
+.feed-head h1 { margin-bottom: .2rem; }
+.digest { margin-bottom: 2.6rem; }
+.digest-head { border-left: 3px solid var(--pink); padding-left: .95rem;
+  margin: 0 0 1rem; }
+.digest-head h2 { font-size: 1.35rem; letter-spacing: -.02em; }
+.digest-head p { color: var(--muted); font-size: .82rem; margin: .25rem 0 0; }
+.digest-date { font-family: var(--mono); font-size: .74rem; color: #6d778c;
+  letter-spacing: .04em; text-transform: uppercase; }
+
+.meter { height: 6px; background: #ffffff10; border-radius: 999px;
+  overflow: hidden; margin-top: .45rem; }
+.meter i { display: block; height: 100%; border-radius: 999px;
+  background: linear-gradient(90deg, #ff66aa, #ff9cc6); }
+
+.minigrid { display: grid; gap: .9rem;
+  grid-template-columns: repeat(auto-fill, minmax(238px, 1fr)); }
+.card.mini .cover { aspect-ratio: 3.2 / 1; }
+.card.mini .cover-shade { background: linear-gradient(180deg, #0a0c1240 0%, #0a0c12e8 100%); }
+.card.mini .cover-badges { top: .45rem; bottom: auto; }
+.card.mini .diff { max-width: 55%; }
+.card.mini .card-body { padding: .6rem .7rem .7rem; }
+.card.mini .title { font-size: .88rem; }
+.pill-list { display: flex; gap: .3rem; flex-wrap: wrap; margin-top: .5rem; }
+.pill-list .pill { font-size: .68rem; }

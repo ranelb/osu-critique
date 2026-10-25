@@ -106,6 +106,7 @@ def test_history_compares_only_prior_runs(tmp_path):
     write_run(out, run_doc("new", "n" * 32, "2026-10-20T20:00:00", ur_pct=52.0))
     doc = digest.build(outdir=out, since="2026-10-01T00:00:00", ingest_first=False)
     assert doc["history"]["n"] == 12
+    assert doc["history"]["timing_pct"] is not None   # the feed draws a meter
     # 52 is lower (better) than all twelve 80..91 values
     assert doc["history"]["timing_pct"] == pytest.approx(100.0)
     assert "better than **100%**" in doc["markdown"]
@@ -168,3 +169,20 @@ def test_load_digests_is_newest_first(tmp_path):
     assert len(items) == 1
     assert items[0]["name"].endswith(".md")
     assert "Digest —" in items[0]["text"]
+
+
+def test_build_writes_a_json_sidecar_for_the_feed(tmp_path):
+    out = corpus(tmp_path / "out")
+    doc = digest.build(outdir=out, since="2026-10-01T00:00:00", ingest_first=False)
+    stem = Path(doc["path"]).with_suffix("")
+    assert stem.with_suffix(".md").is_file()
+    side = json.loads(stem.with_suffix(".json").read_text())
+    for key in ("generated", "n_runs", "runs", "history", "maps", "best", "worst"):
+        assert key in side
+    assert "markdown" not in side and "path" not in side
+    assert side["best"]["accuracy"] >= side["worst"]["accuracy"]
+
+    items = digest.load_digests(out)
+    assert items[0]["data"]["n_runs"] == 3
+    assert "worth" in items[0]["data"]          # a view concern, added on load
+    assert [w["md5"] for w in items[0]["data"]["worth"]] == [M]

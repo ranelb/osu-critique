@@ -84,9 +84,23 @@ Nothing in this path calls a model. The footer of every digest says so.
 
 ## The feed
 
-`/feed` in the web frontend lists `out/digests/*.md`, newest first, with a
-header count of runs since the last digest. It reads files only: no generation,
-no keys.
+`/feed` in the web frontend lists the digests, newest first. It is a **page**,
+not a text dump: each digest renders as
+
+- a header (date, "199 plays over 100 maps", the window, what ingest did);
+- stat cards for **timing spread** and **miss rate** as percentiles against
+  earlier runs, each with a bar, plus **best** and **worst** play (linked to
+  their map);
+- the plays table — every row's map links to `/map/<md5>`, every row has
+  `open →` to the run;
+- **maps worth another look**: cover cards (art from the same lazy CDN cache),
+  star pill, `+N` for this window, mapper, attempt count, and the named
+  consistent weaknesses / swings as pills — each card links to its map page.
+
+Each digest is written twice: `…md` (canonical text, for the CLI and for
+pasting into anything) and `…json` (the same data structured, which the feed
+renders). A digest without the JSON sidecar — anything written before 0.20 —
+still appears, collapsed, as its text under "read the text".
 
 ```
 GET /feed     # the page
@@ -96,7 +110,8 @@ GET /feed     # the page
 
 | path | meaning |
 |---|---|
-| `out/digests/YYYY-MM-DD_HHMM.md` | one digest per run |
+| `out/digests/YYYY-MM-DD_HHMM.md` | one digest per run, canonical text |
+| `out/digests/YYYY-MM-DD_HHMM.json` | the same digest structured, read by `/feed` |
 | `out/digests/.last` | the window marker (ISO timestamp) |
 | `~/.local/share/osu-critique/bin/` | the installed BeatmapExporter |
 | `~/.config/osu-critique/config.json` | `export.enabled`, `export.statuses`, `export.binary` |

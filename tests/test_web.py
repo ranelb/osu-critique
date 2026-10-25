@@ -559,7 +559,7 @@ def test_llm_remote_false_refuses_non_loopback_clients(tmp_path, monkeypatch, ll
 
 # ------------------------------------------------------------------- feed ----
 
-def test_feed_lists_digests(tmp_path):
+def test_feed_renders_a_digest_as_a_page_not_a_text_blob(tmp_path):
     out = build_corpus(tmp_path)
     from osu_critique import digest
     digest.build(outdir=out, since="2026-09-01T00:00:00", ingest_first=False)
@@ -567,9 +567,28 @@ def test_feed_lists_digests(tmp_path):
     client = TestClient(app)
     r = client.get("/feed")
     assert r.status_code == 200
-    assert "Digest —" in r.text
-    assert "no new runs" not in r.text.lower()
-    assert "New runs" not in r.text  # the header counts, it does not shout
+    # structure, not <pre>
+    assert 'class="digest-head"' in r.text
+    assert "maps worth another look" in r.text
+    assert 'class="minigrid"' in r.text
+    assert '<pre class="report">' not in r.text
+    # the cards link to the map pages and load covers
+    assert f'href="/map/{MAP_A}"' in r.text
+    assert f"/api/cover/{MAP_A}" in r.text
+    # and the plays table links to the runs
+    assert '/run/' in r.text
+
+
+def test_feed_falls_back_to_text_for_a_digest_without_a_sidecar(tmp_path):
+    out = build_corpus(tmp_path)
+    d = out / "digests"
+    d.mkdir()
+    (d / "2026-01-01_0000.md").write_text("# Digest — old\n\nnothing fancy\n")
+    app = create_app(outdir=out, index_on_boot=False)
+    r = TestClient(app).get("/feed")
+    assert "older digest" in r.text
+    assert '<details class="panel legacy">' in r.text
+    assert "nothing fancy" in r.text
 
 
 def test_feed_is_empty_before_the_first_digest(client):

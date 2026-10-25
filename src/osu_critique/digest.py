@@ -249,10 +249,17 @@ def build(outdir=None, since: str | None = None, ingest_first: bool = True,
         "maps": maps,
         "ingest": ingest_stats,
     }
+    scored = [r for r in digest["runs"] if r["accuracy"] is not None]
+    if scored:
+        digest["best"] = max(scored, key=lambda r: r["accuracy"])
+        digest["worst"] = min(scored, key=lambda r: r["accuracy"])
+    else:
+        digest["best"] = digest["worst"] = None
+    digest["window_label"] = _fmt(since)
     text = render(digest)
     digest["markdown"] = text
     if write:
-        path = _write(out, now, text)
+        path = _write(out, now, text, digest)
         digest["path"] = str(path)
         marker_path(out).parent.mkdir(parents=True, exist_ok=True)
         marker_path(out).write_text(digest["generated"] + "\n")
@@ -311,8 +318,17 @@ def _map_blocks(conn, rows) -> list[dict]:
         attempts = conn.execute(
             "SELECT * FROM runs WHERE beatmap_md5 = ? ORDER BY played_at",
             (md5,)).fetchall()
+        beatmap = conn.execute(
+            "SELECT title, artist, creator, version, set_id FROM beatmaps "
+            "WHERE beatmap_md5 = ?", (md5,)).fetchone()
         block = {"md5": md5, "map": row["map_name"], "n_attempts": len(attempts),
-                 "new": 0, "stable": [], "volatile": [], "verdict": None}
+                 "new": 0, "stable": [], "volatile": [], "verdict": None,
+                 "title": None, "artist": None, "creator": None,
+                 "version": None, "set_id": None,
+                 "sr": next((a["sr"] for a in attempts if a["sr"] is not None), None)}
+        if beatmap is not None:
+            block.update({k: beatmap[k] for k in
+                          ("title", "artist", "creator", "version", "set_id")})
         block["new"] = sum(1 for a in attempts
                            if a["run_id"] in {r["run_id"] for r in rows})
         if len(attempts) >= 2:
@@ -335,11 +351,16 @@ def _map_blocks(conn, rows) -> list[dict]:
     return blocks
 
 
-def _write(out: Path, now: datetime, text: str) -> Path:
+def _write(out: Path, now: datetime, text: str, data: dict) -> Path:
+    """Markdown for humans/CLIs, JSON for the feed to render as a page."""
     directory = digests_dir(out)
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"{now.strftime('%Y-%m-%d_%H%M')}.md"
+    stem = now.strftime("%Y-%m-%d_%H%M")
+    path = directory / f"{stem}.md"
     path.write_text(text)
+    stored = {k: v for k, v in data.items() if k not in ("markdown", "path")}
+    (directory / f"{stem}.json").write_text(
+        json.dumps(stored, indent=1, default=str, ensure_ascii=False) + "\n")
     return path
 
 
@@ -434,8 +455,21 @@ def load_digests(outdir) -> list[dict]:
     out = []
     for path in sorted(directory.glob("*.md"), reverse=True):
         try:
-            out.append({"name": path.name, "text": path.read_text(),
-                        "mtime": path.stat().st_mtime})
+            text = path.read_text()
+            mtime = path.stat().st_mtime
         except OSError:
             continue
+        data = None
+        sidecar = path.with_suffix(".json")
+        if sidecar.is_file():
+            try:
+                data = json.loads(sidecar.read_text())
+            except (OSError, ValueError):
+                data = None
+        if data:
+            data["worth"] = [b for b in data.get("maps", [])
+                             if b.get("stable") or b.get("volatile")
+                             or (b.get("n_attempts") or 0) > 1][:8]
+        out.append({"name": path.name, "stem": path.stem, "text": text,
+                    "mtime": mtime, "data": data})
     return out

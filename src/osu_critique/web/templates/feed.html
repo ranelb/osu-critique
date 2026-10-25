@@ -1,26 +1,144 @@
 {% extends "base.html" %}
 {% block title %}feed · osu-critique{% endblock %}
 {% block body %}
-<section class="page-head">
-  <h1>feed</h1>
-  <p class="muted">
-    {{ n_new }} new run{{ '' if n_new == 1 else 's' }} since
-    {{ marker | when if marker else 'the beginning' }} —
-    deterministic digests, no model called.
-  </p>
-  <p class="muted"><code>osu-critique digest</code> ingests new exported replays and
-    writes one; <code>osu-critique export --run</code> pulls them from osu! first
-    (opt-in).</p>
+<section class="page-head feed-head">
+  <div>
+    <h1>feed</h1>
+    <p class="muted">
+      {% if n_new %}<b>{{ n_new }}</b> run{{ '' if n_new == 1 else 's' }} since your last digest
+      {% else %}Nothing new since your last digest{% endif %}
+      · deterministic, no model called.
+    </p>
+  </div>
+  <span class="fineprint">{{ items | length }} digest{{ '' if items | length == 1 else 's' }}</span>
 </section>
 
 {% for item in items %}
-<section class="panel">
-  <h2>digest <span class="count">{{ item.mtime | ts }}</span></h2>
-  <pre class="report">{{ item.text }}</pre>
-</section>
+{% set d = item.data %}
+<article class="digest">
+  <header class="digest-head">
+    <span class="digest-date">{{ item.mtime | ts }}</span>
+    {% if d %}
+      <h2>{{ d.n_runs }} play{{ '' if d.n_runs == 1 else 's' }}
+        over {{ d.n_maps }} map{{ '' if d.n_maps == 1 else 's' }}</h2>
+      <p>since {{ d.window_label }}
+        {% if d.ingest and d.ingest.analysed %}· {{ d.ingest.analysed }} replays ingested
+        ({{ d.ingest.known }} already known{% if d.ingest.failed %}, {{ d.ingest.failed }} failed{% endif %})
+        in {{ d.ingest.seconds }}s{% endif %}</p>
+    {% else %}
+      <h2>digest</h2>
+      <p>older digest — text only</p>
+    {% endif %}
+  </header>
+
+  {% if not d %}
+  <details class="panel legacy">
+    <summary>read the text</summary>
+    <pre class="report">{{ item.text }}</pre>
+  </details>
+
+  {% elif not d.n_runs %}
+  <section class="panel"><p class="muted">Nothing new in this window.</p></section>
+
+  {% else %}
+  <section class="statrow">
+    {% if d.history.timing_pct is not none %}
+    <div class="statcard">
+      <span class="k">timing spread</span>
+      <span class="v">{{ d.history.timing_pct | num(0) }}<span class="unit">%</span></span>
+      <span class="k2">better than that share of {{ d.history.n }} earlier runs
+        · median {{ d.history.timing_median | num(1) }}</span>
+      <div class="meter"><i style="width: {{ d.history.timing_pct | num(0) }}%"></i></div>
+    </div>
+    {% endif %}
+    {% if d.history.miss_pct is not none %}
+    <div class="statcard">
+      <span class="k">miss rate</span>
+      <span class="v">{{ d.history.miss_pct | num(0) }}<span class="unit">%</span></span>
+      <span class="k2">better than that share · median
+        {{ d.history.miss_median | num(1) }} per 100</span>
+      <div class="meter"><i style="width: {{ d.history.miss_pct | num(0) }}%"></i></div>
+    </div>
+    {% endif %}
+    {% if d.best %}
+    <div class="statcard">
+      <span class="k">best</span>
+      <span class="v">{{ d.best.accuracy | pct }}</span>
+      <span class="k2"><a href="/map/{{ d.best.beatmap_md5 }}">{{ d.best.map }}</a></span>
+    </div>
+    {% endif %}
+    {% if d.worst %}
+    <div class="statcard">
+      <span class="k">worst</span>
+      <span class="v">{{ d.worst.accuracy | pct }}</span>
+      <span class="k2"><a href="/map/{{ d.worst.beatmap_md5 }}">{{ d.worst.map }}</a></span>
+    </div>
+    {% endif %}
+  </section>
+
+  <section class="panel">
+    <h2>plays <span class="count">{{ d.n_runs }}</span></h2>
+    <table class="data tight">
+      <thead><tr><th>when</th><th>map</th><th>mods</th><th class="num">acc</th>
+        <th class="num">UR</th><th class="num">miss</th><th>trust</th><th></th></tr></thead>
+      <tbody>
+      {% for r in d.runs[:20] %}
+        <tr>
+          <td class="muted">{{ r.when }}</td>
+          <td><a href="/map/{{ r.beatmap_md5 }}">{{ r.map }}</a></td>
+          <td><span class="mods">{{ r.mods }}</span></td>
+          <td class="num">{{ r.accuracy | pct }}</td>
+          <td class="num">{{ r.ur | num(0) }}</td>
+          <td class="num {{ 'neg' if r.miss }}">{{ r.miss }}</td>
+          <td>{% if r.trust %}<span class="ok">ok</span>{% else %}<span class="bad">differs</span>{% endif %}</td>
+          <td class="num"><a class="open" href="/run/{{ r.run_id }}">open →</a></td>
+        </tr>
+      {% endfor %}
+      {% if d.runs | length > 20 %}
+        <tr><td colspan="8" class="muted">… and {{ d.runs | length - 20 }} more</td></tr>
+      {% endif %}
+      </tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <h2>maps worth another look <span class="count">{{ d.worth | length }}</span></h2>
+    {% if d.worth %}
+    <div class="minigrid">
+      {% for b in d.worth %}
+      <a class="card mini" href="/map/{{ b.md5 }}">
+        <div class="cover">
+          <img src="/api/cover/{{ b.md5 }}?size=card" alt="" loading="lazy" onerror="this.remove()">
+          <div class="cover-shade"></div>
+          <span class="diff">{{ b.version or '—' }}</span>
+          <span class="cover-badges">
+            {% if b.sr %}<span class="pill star">{{ b.sr | star }}</span>{% endif %}
+            {% if b.new %}<span class="pill star">+{{ b.new }}</span>{% endif %}
+          </span>
+        </div>
+        <div class="card-body">
+          <div class="title">{% if b.title %}{{ b.artist }} - {{ b.title }}{% else %}{{ b.map }}{% endif %}</div>
+          <div class="sub">{% if b.creator %}mapped by {{ b.creator }}{% endif %}</div>
+          <div class="pill-list">
+            {% for name in b.stable[:2] %}<span class="pill warn-pill" title="consistent weakness across attempts">{{ name }}</span>{% endfor %}
+            {% for name in b.volatile[:2] %}<span class="pill" title="swings between attempts">{{ name }}</span>{% endfor %}
+            {% if not b.stable and not b.volatile %}<span class="pill">no structural signal</span>{% endif %}
+          </div>
+          <div class="sub">{{ b.n_attempts }} play{{ '' if b.n_attempts == 1 else 's' }} on record{% if b.new %} · {{ b.new }} in this window{% endif %}</div>
+        </div>
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">Everything in this window was a first attempt — nothing structural to compare yet.</p>
+    {% endif %}
+  </section>
+  {% endif %}
+</article>
 {% else %}
 <section class="panel">
-  <p class="muted">No digests yet. Run <code>osu-critique digest</code>.</p>
+  <p class="muted">No digests yet. Run <code>osu-critique digest</code> to ingest new
+    replays and write one.</p>
 </section>
 {% endfor %}
 {% endblock %}
