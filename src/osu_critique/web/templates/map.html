@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% from "partials/notes.html" import note_list with context %}
+{% from "partials/rail.html" import rail with context %}
 {% block title %}{{ title_display }} · osu-critique{% endblock %}
+{% block main_class %}has-rail{% endblock %}
+{% block rail %}{{ rail(toc, 'this map') }}{% endblock %}
 {% block body %}
 <article class="map">
   <header class="map-hero">
@@ -28,7 +31,7 @@
   {% include "partials/attempts.html" %}
 
   {% if cross_attempt and cross_attempt.families %}
-  <section class="panel">
+  <section class="panel" id="cross">
     <h2>cross-attempt structure</h2>
     <p class="verdict">{{ cross_attempt.verdict }}</p>
     <p class="fineprint">first → latest of {{ cross_attempt.n_attempts }} attempts:

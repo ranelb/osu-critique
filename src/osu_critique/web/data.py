@@ -200,6 +200,9 @@ def run_page(conn, run_id: str) -> dict | None:
         title = f"{title} [{beatmap['version']}]"
     from .boards import build as build_boards
 
+    boards = (build_boards(metrics, objects) if objects else
+              {"playfield": {"w": 512.0, "h": 384.0}, "misses": [],
+               "heat": [], "good": []})
     duration = max((o.get("t") or 0) for o in objects) if objects else 0
     return {
         "run": run,
@@ -208,18 +211,61 @@ def run_page(conn, run_id: str) -> dict | None:
         "title_display": title or run.get("map_name") or "run",
         "rows_scale": float((metrics.get("time_base") or {}).get("rows_scale") or 1.0),
         "duration_ms": duration,
-        "boards": build_boards(metrics, objects) if objects else
-                  {"playfield": {"w": 512.0, "h": 384.0}, "misses": [],
-                   "heat": [], "good": []},
+        "boards": boards,
         "report_sections": report_sections,
+        "n_report_sections": sum(1 for sec in report_sections
+                                 if any(item.get("tone") != "headline"
+                                        for item in sec["items"])),
         "objects": objects,
         "interesting": interesting,
         "n_interesting": len(interesting),
+        "n_objects": len(objects),
         "objects_available": bool(objects),
         "trust": run["trust_ok"] == 1,
         "annotations": [],          # 0.14.0
         "critique": None,           # 0.15.0
     }
+
+
+#: One rail entry per block a reader might want to jump to. The counts are what
+#: the block holds, never a metric that is already on the cards above.
+def run_toc(page: dict) -> list:
+    notes = page.get("notes") or {}
+    entries = [{"id": "stats", "label": "summary"},
+               {"id": "chart", "label": "chart"}]
+    if page.get("boards", {}).get("misses"):
+        entries.append({"id": "boards", "label": "boards",
+                        "count": len(page["boards"]["misses"])})
+    if page.get("objects_available"):
+        entries.append({"id": "objects", "label": "objects",
+                        "count": page.get("n_interesting") or 0})
+    if page.get("n_report_sections"):
+        entries.append({"id": "report", "label": "report",
+                        "count": page["n_report_sections"]})
+    entries.append({"id": "critique", "label": "llm"})
+    n_notes = len(notes.get("map") or []) + len(notes.get("run") or [])
+    entries.append({"id": "annotations", "label": "notes", "count": n_notes})
+    return entries
+
+
+def map_toc(page: dict) -> list:
+    notes = page.get("notes") or {}
+    entries = [{"id": "attempts", "label": "attempts",
+                "count": page.get("n_attempts") or 0}]
+    if page.get("cross_attempt"):
+        entries.append({"id": "cross", "label": "cross-attempt"})
+    entries.append({"id": "annotations", "label": "notes",
+                    "count": len(notes.get("map") or [])})
+    return entries
+
+
+def report_text(run_row: dict) -> str | None:
+    """The deterministic report as the CLI prints it, for the copy button."""
+    metrics = _metrics_at(run_row.get("json_path") or "") or {}
+    if not metrics:
+        return None
+    from ..report_sections import sections, to_text
+    return to_text(metrics, sections(metrics))
 
 
 def _objects(run: dict) -> list:

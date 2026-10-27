@@ -135,20 +135,119 @@
   }
 
   async function loadAllObjects(runId, host, button) {
-    button.disabled = true;
-    button.textContent = "loading…";
+    if (button) { button.disabled = true; button.textContent = "loading…"; }
+    host.replaceChildren(Object.assign(document.createElement("p"),
+      { className: "muted", textContent: "loading the object table…" }));
     try {
       const res = await fetch("/api/objects/" + encodeURIComponent(runId));
       if (!res.ok) throw new Error(res.status);
       const doc = await res.json();
       buildTable(host, doc.objects || []);
-      const details = host.closest("details");
-      if (details) details.open = true;
-      button.remove();
+      if (button) button.remove();
     } catch (err) {
-      button.disabled = false;
-      button.textContent = "could not load the objects (" + err.message + ")";
+      const msg = "could not load the objects (" + err.message + ")";
+      if (button) { button.disabled = false; button.textContent = msg; }
+      host.replaceChildren(Object.assign(document.createElement("p"),
+        { className: "muted", textContent: msg }));
     }
+  }
+
+  /* ---------------------------------------------------------------- rail -- */
+
+  /* Highlight the rail entry for the last block that crossed the reading line.
+     Deliberately not an IntersectionObserver: a fold that opens or closes moves
+     every block below it without scrolling, and reconstructing "what is on
+     screen" from enter/leave events gets subtle. Seven bounding rects per frame
+     is cheap and cannot desync. */
+  function initRail() {
+    const rail = document.querySelector(".rail");
+    if (!rail) return;
+    const links = Array.from(rail.querySelectorAll("a[data-spy]"));
+    const targets = links.map((a) => document.getElementById(a.dataset.spy))
+      .filter(Boolean);
+    if (!targets.length) return;
+    let current = null;
+    const pick = () => {
+      const line = window.innerHeight * 0.28;
+      let id = targets[0].id;
+      targets.forEach((t) => {
+        if (t.getBoundingClientRect().top <= line) id = t.id;
+      });
+      // a short page cannot scroll its last blocks past the line: the bottom wins
+      if (window.innerHeight + window.scrollY
+          >= document.documentElement.scrollHeight - 4) {
+        id = targets[targets.length - 1].id;
+      }
+      if (id === current) return;
+      current = id;
+      links.forEach((a) => a.classList.toggle("active", a.dataset.spy === id));
+    };
+    let queued = false;
+    const schedule = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; pick(); });
+    };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    document.addEventListener("toggle", schedule, true);
+    pick();
+  }
+
+  /* ---------------------------------------------------------------- copy -- */
+
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (err) {
+      /* plain-http LAN pages have no clipboard API — fall back to the old way */
+    }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-1000px;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+
+  function initCopy() {
+    const button = document.getElementById("copy-report");
+    if (!button) return;
+    const label = button.textContent;
+    button.addEventListener("click", async (ev) => {
+      ev.preventDefault();      // a button inside <summary> would toggle the fold
+      ev.stopPropagation();
+      let text = "";
+      button.disabled = true;
+      try {
+        const res = await fetch(button.dataset.copy);
+        if (!res.ok) throw new Error(res.status);
+        text = await res.text();
+      } catch (err) {
+        button.textContent = "could not load the text";
+        button.disabled = false;
+        return;
+      }
+      const ok = await copyText(text);
+      button.disabled = false;
+      if (ok) {
+        button.textContent = "copied";
+        setTimeout(() => { button.textContent = label; }, 1600);
+      } else {
+        /* last resort: show it, the user selects and copies */
+        button.textContent = "select + ctrl+c";
+        const pre = document.createElement("pre");
+        pre.className = "report";
+        pre.id = "report-copy";
+        pre.textContent = text;
+        button.closest("details").appendChild(pre);
+      }
+    });
   }
 
   /* -------------------------------------------------------- annotations -- */
@@ -388,6 +487,7 @@
   /* --------------------------------------------------------------- init -- */
 
   document.addEventListener("DOMContentLoaded", () => {
+    initRail();
     const run = document.querySelector("[data-run-id]");
     if (run) {
       const canvas = document.getElementById("hiterror");
@@ -429,10 +529,15 @@
                          critiqueForm.querySelector("button[type=submit]"));
         });
       }
-      const button = document.getElementById("all-objects");
-      if (button) {
-        button.addEventListener("click", () =>
-          loadAllObjects(runId, document.getElementById("object-table"), button));
+      initCopy();
+      const allDetails = document.getElementById("all-objects-details");
+      if (allDetails) {
+        allDetails.addEventListener("toggle", () => {
+          const host = document.getElementById("object-table");
+          if (!allDetails.open || !host || host.dataset.loaded) return;
+          host.dataset.loaded = "1";
+          loadAllObjects(runId, host, null);
+        });
       }
     }
   });

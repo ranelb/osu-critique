@@ -677,13 +677,13 @@ def test_two_digests_at_once_are_refused(monkeypatch, tmp_path):
 
 def test_run_page_has_a_collapsed_board_section(client):
     page = client.get("/run/" + "2" * 32).text
-    assert '<details class="panel" id="boards">' in page
+    assert '<details class="panel fold" id="boards">' in page
     assert "where it went wrong" in page
     assert 'id="boards-data"' in page
     assert 'id="miss-boards"' in page
     assert "closest 0.25r" in page or "near-miss" in page
     # collapsed by default: the details tag must not carry `open`
-    section = page.split('<details class="panel" id="boards">')[1].split(">")[0]
+    section = page.split('<details class="panel fold" id="boards">')[1].split(">")[0]
     assert "open" not in section
 
 
@@ -698,3 +698,74 @@ def test_the_report_renders_as_cards_not_a_text_blob(client):
     # the deterministic report is no longer a <pre>; only the LLM critique is
     assert page.count('<pre class="report"') <= 1
     assert page.index('id="report"') < page.index('<pre class="report"')
+
+
+# ------------------------------------------------------- rail and folds ----
+
+def test_every_rail_entry_points_at_a_block_that_exists(client):
+    page = client.get("/run/" + "2" * 32).text
+    assert 'class="rail"' in page
+    assert 'aria-label="this run"' in page
+    for anchor in ("stats", "chart", "boards", "objects", "report",
+                   "critique", "annotations"):
+        assert f'data-spy="{anchor}"' in page
+        assert f'id="{anchor}"' in page
+    # the rail comes before the content it links to
+    assert page.index('class="rail"') < page.index('id="stats"')
+
+
+def test_heavy_blocks_start_collapsed(client):
+    page = client.get("/run/" + "2" * 32).text
+    for block in ("objects", "report", "annotations"):
+        opening = page.split(f'<details class="panel fold" id="{block}"')[1].split(">")[0]
+        assert "open" not in opening, block
+    # the llm panel is open when there is nothing stored: the form is the point
+    opening = page.split('<details class="panel fold" id="critique"')[1].split(">")[0]
+    assert "open" in opening
+
+
+def test_peeks_name_the_rule_not_a_number_from_the_cards(client):
+    page = client.get("/run/" + "2" * 32).text
+    assert "every miss and every non-300, in map order" in page
+    assert "of 12 objects" in page                  # 12 object rows in the fixture
+    assert "sections of tables and thresholds" in page
+    assert "map notes" in page or "map note" in page
+
+
+def test_the_object_table_is_its_own_fold(client):
+    page = client.get("/run/" + "2" * 32).text
+    assert 'id="all-objects-details"' in page
+    assert 'id="object-table"' in page
+    # the old separate button did nothing: expanding the details showed an empty div
+    assert 'id="all-objects"' not in page
+
+
+def test_the_report_count_matches_the_cards_rendered(client):
+    import re
+
+    page = client.get("/run/" + "2" * 32).text
+    cards = page.count('<article class="rsection')
+    stated = re.search(r"<span class=\"peek\">(\d+) sections?", page)
+    assert stated is not None
+    assert int(stated.group(1)) == cards
+
+
+def test_report_txt_is_the_cli_rendering(tmp_path):
+    from osu_critique.report_sections import sections, to_text
+
+    out = build_corpus(tmp_path)
+    c = TestClient(create_app(outdir=out, index_on_boot=False))
+    res = c.get("/run/" + "2" * 32 + "/report.txt")
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/plain")
+    doc = json.loads((out / "a2_metrics.json").read_text())
+    assert res.text == to_text(doc, sections(doc))
+    assert c.get("/run/" + "9" * 32 + "/report.txt").status_code == 404
+
+
+def test_the_map_page_has_a_rail_too(client):
+    page = client.get("/map/" + MAP_A).text
+    assert 'class="rail"' in page
+    for anchor in ("attempts", "annotations"):
+        assert f'data-spy="{anchor}"' in page
+        assert f'id="{anchor}"' in page

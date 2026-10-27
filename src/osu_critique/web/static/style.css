@@ -73,6 +73,22 @@ h2 { font-size: 1.05rem; color: #cbd4e6; }
 main { flex: 1; width: min(1180px, 100%); margin: 0 auto;
   padding: clamp(1.2rem, 3vw, 2.4rem) clamp(1rem, 3vw, 2rem) 3rem; }
 
+/* rail + content. Pages without a rail keep the old single column. */
+main.has-rail { display: grid; grid-template-columns: 178px minmax(0, 1fr);
+  gap: 2.2rem; align-items: start; }
+.page { min-width: 0; }
+.rail { position: sticky; top: 4.2rem; align-self: start;
+  max-height: calc(100vh - 6rem); overflow: auto; font-size: .85rem; }
+.rail-title { margin: 0 0 .55rem .55rem; font-size: .66rem; letter-spacing: .11em;
+  text-transform: uppercase; color: #5a6377; }
+.rail ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.rail a { display: flex; align-items: center; gap: .35rem; padding: .3rem .55rem;
+  border-left: 2px solid transparent; border-radius: 0 8px 8px 0; color: var(--muted); }
+.rail a:hover { color: var(--text); background: #ffffff08; }
+.rail a.active { color: var(--text); border-left-color: var(--pink); background: var(--pink-soft); }
+.rail .count { margin-left: auto; }
+main [id] { scroll-margin-top: 4.6rem; }
+
 footer { padding: 2rem clamp(1rem, 4vw, 2.5rem); color: #5a6377; font-size: .78rem;
   border-top: 1px solid #161b27; }
 
@@ -169,6 +185,13 @@ button.link { background: none; color: var(--pink); padding: 0; border: 0;
 
 .statrow { display: grid; gap: .8rem; margin: 1.1rem 0;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+/* the rail eats width: keep every card on one row rather than wrapping an orphan */
+main.has-rail .statrow { grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
+  grid-template-columns: none; }
+main.has-rail .statcard { padding: .6rem .7rem; }
+main.has-rail .statcard .v { font-size: 1.15rem; white-space: nowrap; }
+main.has-rail .statcard .v.small { font-size: .95rem; }
+main.has-rail .statcard .k2 { font-size: .66rem; }
 .statcard { background: var(--panel); border: 1px solid var(--line);
   border-radius: 12px; padding: .7rem .85rem; display: flex;
   flex-direction: column; gap: .1rem; }
@@ -231,11 +254,28 @@ details.all-objects { margin-top: .8rem; }
 details.all-objects summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
 #object-table { max-height: 520px; overflow: auto; margin-top: .6rem; }
 
+/* --------------------------------------------------------------- rail --- */
+
+@media (max-width: 1080px) {
+  main.has-rail { grid-template-columns: 1fr; gap: .7rem; }
+  .rail { position: sticky; top: 0; z-index: 6; max-height: none; display: flex;
+    gap: .4rem; overflow-x: auto; padding: .45rem 0; background: var(--bg);
+    border-bottom: 1px solid var(--line); }
+  .rail-title { display: none; }
+  .rail ul { flex-direction: row; gap: .35rem; }
+  .rail a { border: 1px solid var(--line); border-left-width: 1px; border-radius: 999px;
+    padding: .22rem .6rem; white-space: nowrap; }
+  .rail a.active { border-color: var(--pink); background: var(--pink-soft); }
+  .rail .count { margin-left: .1rem; }
+  main [id] { scroll-margin-top: 3.6rem; }
+}
+
 /* ------------------------------------------------------------ responsive - */
 @media (max-width: 620px) {
   .page-head { align-items: flex-start; }
   .filters input[type=search] { min-width: 100%; }
   .statrow { grid-template-columns: repeat(2, 1fr); }
+  main.has-rail .statrow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 /* ------------------------------------------------------- annotations ---- */
@@ -308,6 +348,18 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 
 details.panel > summary { cursor: pointer; font-weight: 600; color: #cbd4e6;
   font-size: 1.05rem; letter-spacing: -.01em; }
+/* fold: title + a peek line saying what is inside, plus an optional action */
+details.fold > summary { display: grid; grid-template-columns: 1fr auto;
+  gap: .15rem .8rem; list-style: none; }
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary .st::before { content: "▸ "; color: var(--pink); }
+details.fold[open] > summary .st::before { content: "▾ "; }
+details.fold > summary .peek { grid-column: 1; font-weight: 400; font-size: .78rem;
+  line-height: 1.45; color: #6d778c; }
+details.fold > summary .peek code { font-size: .95em; }
+details.fold > summary .copy { grid-column: 2; grid-row: 1 / span 2; align-self: center;
+  margin: 0; }
+details.fold[open] > summary { margin-bottom: .9rem; }
 details.panel > summary::marker { color: var(--pink); }
 details.panel[open] > summary { margin-bottom: .8rem; }
 details.panel > summary .count { font-weight: 600; }

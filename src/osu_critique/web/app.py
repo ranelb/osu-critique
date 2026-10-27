@@ -149,8 +149,13 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
                 n_new = conn.execute(sql, args).fetchone()[0]
             finally:
                 conn.close()
+        from datetime import datetime
+        toc = [{"id": f"digest-{i}",
+                "label": datetime.fromtimestamp(item["mtime"]).strftime("%d %b %H:%M"),
+                "count": (item["data"] or {}).get("n_runs") or 0}
+               for i, item in enumerate(items, 1) if item["data"]]
         return render("feed.html", request, items=items, marker=marker,
-                      n_new=n_new)
+                      n_new=n_new, toc=toc)
 
     @app.get("/map/{beatmap_md5}", response_class=HTMLResponse)
     def map_page(request: Request, beatmap_md5: str, sort: str = "played_at"):
@@ -164,6 +169,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         if page is None:
             raise HTTPException(status_code=404, detail="no such beatmap")
         page["notes"] = annotations.for_map(out, beatmap_md5)
+        page["toc"] = data.map_toc(page)
         return render("map.html", request, **page)
 
     @app.get("/map/{beatmap_md5}/attempts", response_class=HTMLResponse)
@@ -200,7 +206,31 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             stored, page["metrics"], flat, load_system_prompt())
         page["llm_available"] = bool(_llm_key())
         page["llm_allowed"] = _llm_allowed(request)
+        page["toc"] = data.run_toc(page)
         return render("run.html", request, **page)
+
+    @app.get("/run/{run_id}/report.txt", response_class=PlainTextResponse)
+    def run_report_text(run_id: str):
+        """The deterministic report as plain text — what the copy button copies.
+
+        Same `report_sections` data the page renders, so the pasted text cannot
+        drift from the cards, and it is the seam the critique tab will feed to
+        a model later.
+        """
+        conn = index.open_readonly(out)
+        if conn is None:
+            raise HTTPException(status_code=404, detail="no index")
+        try:
+            row = data.get_run(conn, run_id)
+        finally:
+            conn.close()
+        if row is None:
+            raise HTTPException(status_code=404, detail="no such run")
+        text = data.report_text(data._row_dict(row))
+        if not text:
+            raise HTTPException(status_code=404, detail="no metrics for this run")
+        return PlainTextResponse(
+            text, headers={"Content-Disposition": f'inline; filename="{run_id}.txt"'})
 
     # -------------------------------------------------------------- json --
 

@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.21.1** (tag `v0.21.1` is the last published release); 300 tests green
+State: **0.22.0** (tag `v0.22.0` is the last published release); 307 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
@@ -38,6 +38,19 @@ numbers), and one 2020 replay that trips a pre-existing analyser `TypeError`
 and is skipped by the digest.
 
 ## Shipped since the handoff
+
+- **0.22.0 — decluttering: a rail and five folds.** Measured first: the run page
+  was 7.5 screens at 1280x800 with 715 numbers on it, half of them restated, and
+  the deterministic report alone was 51 % of the page. Now: a left rail (chips
+  under 1080 px) jumping to each block, and boards / objects / report / critique
+  / notes as folds with a peek line, closed by default. The run page is **1.9
+  screens and 206 words** with everything folded, and grows only when asked.
+  Also fixed: "the whole map, object by object" was a `<details>` with an empty
+  div — the table only ever loaded from a *separate* button that sat above it, so
+  expanding the fold did nothing. The fold is the control now. Peeks state the
+  rule and the count, never a number the cards already show; the report fold has
+  a **copy** button wired to `/run/<id>/report.txt`, which serves the exact
+  `osu-critique report` text (the seam the critique tab will reuse).
 
 - **0.21.1 — a 3.10 syntax fix**: 0.21.0 nested an f-string inside an f-string
   with the same quote character, which only parses on Python 3.12+ (PEP 701).

@@ -16,8 +16,11 @@
   </nav>
   <span class="ver">v{{ version }}</span>
 </header>
-<main>
+<main class="{% block main_class %}{% endblock %}">
+{% block rail %}{% endblock %}
+<div class="page">
 {% block body %}{% endblock %}
+</div>
 </main>
 <footer>
   Local analysis, your data. Not affiliated with ppy Pty Ltd — osu! is a

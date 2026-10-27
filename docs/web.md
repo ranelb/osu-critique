@@ -19,7 +19,7 @@ skip), then serves until interrupted.
 |---|---|
 | `/` | one card per beatmap: cover, difficulty, star pill, ranked status, attempts, best accuracy, last played. Search by artist/title/difficulty; sort by recency, accuracy, SR, attempts or pp; filter by status or "trustworthy only". |
 | `/map/<beatmap_md5>` | hero cover + `[Metadata]` from the `.osu`, star/status pills, attempt table (sortable via htmx, no page reload), the cross-attempt block (first → latest per family/shape, with the `attempts` gate and verdict). |
-| `/run/<run_id>` | the trust banner **first**, then accuracy/UR/counts/combo/hit-error/aim cards, a hit-error-over-time chart, a **collapsed** "where it went wrong" board set (see below), the objects worth looking at, the full object table on demand, and the deterministic report as **cards with tables** (see below). |
+| `/run/<run_id>` | the trust banner **first**, then accuracy/UR/counts/combo/hit-error/aim cards, a hit-error-over-time chart, and then five folds: "where it went wrong", the objects worth looking at, the deterministic report as **cards with tables** (see below), the LLM critique, and the notes. A left rail jumps between them. |
 | `/api/objects/<run_id>` | the per-object JSON, verbatim as `analyze` wrote it. |
 | `/api/map/<md5>`, `/api/runs` | the same data the pages render, for anything that wants JSON. |
 | `/api/cover/<md5>?size=card\|hero` | the cached cover, fetched once from `assets.ppy.sh`. |
@@ -28,6 +28,36 @@ skip), then serves until interrupted.
 
 `run_id` is the replay's md5, or `tag:<tag>` for the four pre-schema artifacts
 that carry no md5. Re-exports of one play share an id; the newest artifact wins.
+
+## The rail
+
+Every page except the maps grid carries a left rail (`partials/rail.html`): one
+anchor per block, built from a `toc` list the route puts in the context, so it
+cannot drift from the markup. Entries carry a count when the block holds a
+countable thing — objects, sections, notes, attempts — and no count when a count
+would only restate the cards at the top.
+
+Sticky above 1080 px, a horizontal chip strip below it. The active entry is the
+last block whose top crossed 28 % of the viewport, recomputed on scroll, resize
+and `toggle`: **not** an IntersectionObserver, because opening a fold moves every
+block below it without a scroll event, and reconstructing "what is on screen"
+from enter/leave events gets subtle. On a page too short to scroll, the last
+entry wins.
+
+## Folds
+
+Heavy blocks are `<details class="fold">`, closed by default, with a **peek** line
+under the title. A peek states what is inside (the rule, the count, the model and
+when) and never a value that the cards already show — "37 of 153 objects: every
+miss and every non-300, in map order", not "37 objects, worst first".
+
+The deterministic report's fold carries a **copy** button: `/run/<id>/report.txt`
+serves exactly what `osu-critique report` prints (`report_sections.to_text`), so
+pasting it into a model cannot pick up a second, drifting formatter. The button
+lives inside `<summary>` and therefore stops propagation — otherwise copying
+would also toggle the fold. `navigator.clipboard` needs a secure context, so on a
+plain-http LAN address the fallback is a hidden textarea and `execCommand`, and
+if that fails too, the text is appended for a manual select.
 
 ## Design rules
 

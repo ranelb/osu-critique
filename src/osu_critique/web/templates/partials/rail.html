@@ -1,0 +1,13 @@
+{# The left rail: one anchor per block, built from the page's `toc` list.
+   Entries carry a count when the block holds a countable thing (objects,
+   sections, notes) and nothing when a count would only restate the cards. #}
+{% macro rail(entries, label) %}
+<nav class="rail" aria-label="{{ label }}">
+  <p class="rail-title">{{ label }}</p>
+  <ul>
+    {% for e in entries %}
+    <li><a href="#{{ e.id }}" data-spy="{{ e.id }}"><span>{{ e.label }}</span>{% if e.count is defined and e.count %}<span class="count">{{ e.count }}</span>{% endif %}</a></li>
+    {% endfor %}
+  </ul>
+</nav>
+{% endmacro %}

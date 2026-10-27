@@ -1,5 +1,8 @@
 {% extends "base.html" %}
+{% from "partials/rail.html" import rail with context %}
 {% block title %}feed · osu-critique{% endblock %}
+{% block main_class %}has-rail{% endblock %}
+{% block rail %}{{ rail(toc, 'digests') }}{% endblock %}
 {% block body %}
 <section class="page-head feed-head">
   <div>
@@ -22,7 +25,7 @@
 
 {% for item in items %}
 {% set d = item.data %}
-<article class="digest">
+<article class="digest"{% if d %} id="digest-{{ loop.index }}"{% endif %}>
   <header class="digest-head">
     <span class="digest-date">{{ item.mtime | ts }}</span>
     {% if d %}
