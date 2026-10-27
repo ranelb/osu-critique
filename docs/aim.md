@@ -58,7 +58,7 @@ as a late arrival. The block is measurement, and it carries its own `n`.
 
 ## Reference numbers
 
-On the author's Relax reference replay (665 objects, AR10/OD10), the block
+On the Relax reference replay (665 objects, AR10/OD10), the block
 reproduces: 0.72 r mean at the note, 0.26 r median closest approach, median peak
 +10 ms, 16.8 % reached-not-on-time, and a ceiling of 0.47 r at ≤1 px/ms rising to
 1.19 r above 3 px/ms. `tests/test_aim.py` pins a synthetic RX fixture with a

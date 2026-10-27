@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Generate a demo corpus for screenshots — fabricated plays on public maps.
 
-The real corpus is the author's; screenshots of it cannot be published. This
-writes a throwaway ``out/`` whose *map identity* is real (public osu! metadata
+A real corpus holds personal play history, so screenshots of it cannot be
+published. This writes a throwaway ``out/`` whose *map identity* is real (public osu! metadata
 and cover art, fetched through the API with your own credentials) and whose
 *plays are invented*: plausible accuracy/UR/miss numbers shaped by each map's
 star rating, coherent per-object records, and a date spread that gives the

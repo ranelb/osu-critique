@@ -74,13 +74,13 @@ columns are absent — the geometry stays.
 
 ## Reference numbers
 
-On the author's replays (docs/ROADMAP.md item 2):
+On two reference replays (docs/ROADMAP.md item 2):
 
 | | near-reversal | cornered | misses | heading error |
 |---|---|---|---|---|
-| MONTAGEM BATCHI | 17.5 % off 300 (n=143) | 0 % (n=14) | 1.32 / 1.30 / 1.07 r at the note, presses +5 / +2 / −3 ms | median 2°, p90 8°, max 14° |
-| 4ever | 9.1 % (n=165) | 0 % (n=9) | 1.20 r (press −9 ms, aim 1.26 r) and 0.98 r (press +16 ms, aim 1.07 r) | median 2°, p90 6°, max 11° |
+| play A | 17.5 % off 300 (n=143) | 0 % (n=14) | 1.32 / 1.30 / 1.07 r at the note, presses +5 / +2 / −3 ms | median 2°, p90 8°, max 14° |
+| play B | 9.1 % (n=165) | 0 % (n=9) | 1.20 r (press −9 ms, aim 1.26 r) and 0.98 r (press +16 ms, aim 1.07 r) | median 2°, p90 6°, max 11° |
 
 `tests/test_autopsy.py` pins the helpers on synthetic frames and checks these
-numbers when `OSU_TEST_MONTAGEM_REPLAY` / `_MAP` and `OSU_TEST_4EVER_REPLAY` /
-`_MAP` are set.
+numbers when the two reference replays are pointed at with the
+`OSU_TEST_*_REPLAY` / `_MAP` environment variables.

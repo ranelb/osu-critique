@@ -1,7 +1,8 @@
 """Cross-attempt structure: stable weaknesses vs one-off noise.
 
-The reference is the RASPUTIN 09-01 -> 09-22 comparison (docs/ROADMAP.md item 4):
-the 1/2 jump buckets roughly halve while the 1/4 dense bucket barely moves. The
+The reference is a repeated-map comparison over two dates (docs/ROADMAP.md
+item 4): the 1/2 jump buckets roughly halve while the 1/4 dense bucket barely
+moves. The
 published figures (25.3 -> 13.3, 34.3 -> 17.1, 27.7 -> 22.8) predate the 1 ms
 edge guard, so the acceptance test pins today's numbers *and* the shape of the
 change; the qualitative claim is what the item was written for.
@@ -175,7 +176,7 @@ def test_cli_attempts_json_and_missing(tmp_path, capsys):
 # --------------------------------------------------------- the reference ----
 
 def test_acceptance_on_the_reference_attempts(tmp_path, capsys):
-    """RASPUTIN 09-01 -> 09-22: the 1/2 jump buckets halve, 1/4 dense barely moves."""
+    """Two attempts on one map: the 1/2 jump buckets halve, 1/4 dense barely moves."""
     replay, map_path = (os.environ.get("OSU_TEST_MONTAGEM_REPLAY"), None)
     ras = os.environ.get("OSU_TEST_RASPUTIN_REPLAYS")      # colon-separated attempts
     rmap = os.environ.get("OSU_TEST_RASPUTIN_MAP")

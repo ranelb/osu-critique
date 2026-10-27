@@ -53,8 +53,8 @@ Per-play metrics include:
 - **Streams**: runs of sustained notes found by **rhythm and velocity
   continuity** (steady gap ≤250 ms, required speed `spacing/dt` steady within
   40 %, any object kind — the old "≥4 circles at ≤4r spacing" rule used spacing
-  as a proxy for speed and missed MONTAGEM's slider-interleaved bursts entirely:
-  0 segments before, 19 now). Each run reports what the material was — median
+  as a proxy for speed and missed slider-interleaved bursts entirely (0 segments
+  before, 19 after). Each run reports what the material was — median
   gap, notes/s, required speed, circle/slider mix — plus per-segment timing
   (std/UR) and alternation ratio (same-finger double-taps under pressure)
 - **Tapping**: alternation ratio, same-key adjacencies, key balance, whiffed

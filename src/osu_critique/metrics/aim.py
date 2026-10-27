@@ -19,7 +19,7 @@ but not on time, and the ceiling curve -- distance at the note against the
 cursor speed the jump demands.
 
 The numbers reproduce the reference implementation that used to live in
-``scripts/autopsy.py`` (docs/ROADMAP.md item 1): on the author's Relax replay,
+``scripts/autopsy.py`` (docs/ROADMAP.md item 1): on a Relax reference replay,
 0.72 r mean at the note, 0.26 r median closest approach, median peak +10 ms,
 16.8 % reached-not-on-time, ceiling 0.47 r at <=1 px/ms rising to 1.19 r above
 3 px/ms.

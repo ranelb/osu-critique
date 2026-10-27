@@ -3,7 +3,7 @@
 ## Validation and trust
 
 `counts_detected` is judged to match the game's own recorded counts. Across the
-author's 55 stored replays the judgement reproduces **14 plays exactly** and
+55-replay reference corpus the judgement reproduces **14 plays exactly** and
 drifts by a handful of objects on most of the rest (weighted L1 1470 over 55
 plays).
 
@@ -14,8 +14,8 @@ game judged, and an error measured *at* the window edge belongs to a press the
 game saw outside it. Shrinking every window by that guard is the difference
 between 1 and 14 plays reproduced exactly and halves the total drift; a 0.5 ms
 guard reproduces 8, no guard 1. It is what made the slider-heavy plays agree: on
-`MONTAGEM BATCHI` and `4ever (cut ver.)` the 300/100 split used to drift by 5-6
-objects and now matches the game exactly.
+the slider-heavy reference plays the 300/100 split used to drift by 5-6 objects
+and now matches the game exactly.
 
 Even with it, a play can be honest about what it cannot know. `trust` carries
 `count_deltas` (the per-count difference), `within_tolerance` (miss within

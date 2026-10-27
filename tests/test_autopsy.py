@@ -1,16 +1,16 @@
 """The miss-autopsy block: shape classes, arrival margin, legs, stutter, misses.
 
-Reference numbers were published for two real replays (docs/ROADMAP.md item 2):
+Reference numbers for two real replays (docs/ROADMAP.md item 2):
 
-- MONTAGEM BATCHI: near-reversal chains 17.5 % off 300 vs cornered 0 %, the three
+- play A: near-reversal chains 17.5 % off 300 vs cornered 0 %, the three
   misses at 1.32/1.30/1.07 r at the note with presses +5/+2/-3 ms, heading error
   median 2 deg / p90 8 deg / max 14 deg.
-- 4ever: reversals 9.1 % vs cornered 0 %, the two misses at 1.20 r (press -9 ms,
+- play B: reversals 9.1 % vs cornered 0 %, the two misses at 1.20 r (press -9 ms,
   aim 1.26 r) and 0.98 r (press +16 ms, aim 1.07 r), heading 2/6/11 deg.
 
-Those replays are the author's and are not committed; the checks run only where
-`OSU_TEST_MONTAGEM_REPLAY` / `_MAP` (and the 4ever pair) are set. The synthetic
-fixtures below pin the helpers without them.
+Those replays are local and are not committed; the checks run only where the
+`OSU_TEST_*_REPLAY` / `_MAP` variables are set. The synthetic fixtures below pin
+the helpers without them.
 """
 import json
 from pathlib import Path

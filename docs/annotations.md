@@ -38,8 +38,8 @@ same on every attempt no matter the mods. A run's *row* clock is not that:
 
 `annotations.to_map_time(ms, time_base)` / `to_row_ms(t_map, time_base)` use
 `time_base.rows_scale`; the web form stamps map time directly, so the chip reads
-`2:14.312` and the note lands on the same objects on every attempt. (In this
-author's corpus every DT export happens to store frames in map time, so
+`2:14.312` and the note lands on the same objects on every attempt. (In
+the reference corpus every DT export happens to store frames in map time, so
 `rows_scale` is 1.0 there — the conversion is for the exports where it is not.
 `tests/test_annotations.py` pins the 2/3 case.)
 

@@ -1,8 +1,7 @@
 """Slider bodies, ticks and ends: does the cursor stay on the slider?
 
 The judge is head-only: a slider's judgement comes from the press that started
-it, and the 55% of objects that are sliders on the author's maps are otherwise
-invisible. This module follows the body instead -- the curve (handling repeats),
+it, and slider-heavy maps (55 % of objects) are otherwise invisible. This module follows the body instead -- the curve (handling repeats),
 the tick points and times, and whether the player stayed inside the follow
 circle with the button held -- so a play can say how often sliders were *cut*,
 and a dropped slider end is a measured fact rather than a missing number
@@ -16,10 +15,10 @@ you only get back *on* within ``RE_ENTRY_R``.
 
 What it is not
 --------------
-It is **not** used to change the judgement. Measured on the author's replays the
-body rule fires far more often than the game degrades sliders (e.g. 150 of the
-374 sliders this play scores 300 on RASPUTIN leave the follow circle at some
-point, while the recorded counts say the game degraded ~0 of them) -- because a
+It is **not** used to change the judgement. Measurement showed the body rule
+fires far more often than the game degrades sliders (e.g. on one play the cursor
+left 150 of 374 sliders it scored 300 on at some point, while the recorded counts
+said the game degraded ~0 of them) -- because a
 cursor is *allowed* to cut the body; only the tail matters, and even that is
 handled by the head window plus the edge guard in ``assignment.classify``. So
 these numbers are reported, and the counts are left to the judgement model.

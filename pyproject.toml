@@ -9,7 +9,7 @@ description = "Data-driven osu! replay analysis: per-object hit/aim error, patte
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-authors = [{ name = "ran27" }]
+authors = [{ name = "ranelb" }]
 keywords = ["osu", "replay", "analysis", "hit error", "unstable rate"]
 classifiers = [
     "Programming Language :: Python :: 3",

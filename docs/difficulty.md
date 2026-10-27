@@ -46,7 +46,7 @@ the play's mods and ``set_lazer(True)``:
 
 ## Environment note
 
-The author's rosu-pp lives in its own venv
-(`~/.local/share/osu-sr/venv`), kept out of the repo venv. If the extra is not
+rosu-pp can live in its own virtualenv outside the repo venv; install the
+`[stars]` extra into whichever interpreter runs the command. If the extra is not
 installed, the commands exit with the exact `pip install` line instead of
 silently skipping.

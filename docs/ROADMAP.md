@@ -1,25 +1,22 @@
-# Roadmap and handoff
+# Roadmap
 
-For the next agent picking this up. Read this file, then `docs/profile.md` and
-`docs/object_schema.md`. The vault note `~/.local/share/ryoku/rashin/memory/osu-critique-handoff.md`
-holds the private half: the author's measured player profile and the reference
-numbers each feature below should reproduce.
+For contributors picking this up. Read this file, then `docs/profile.md` and
+`docs/object_schema.md`. It records the decisions already made, the items still
+open, and the traps that have bitten.
 
 State: **0.24.3** (tag `v0.24.3` is the last published release); 345 tests green
-(242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
-on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
+(242 run anywhere: 52 need the `[web]` extra, 6 need real replays), CI on Python
+3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
 
 ## The web UI arc — shipped (0.12.0 → 0.20.0)
 
-The frozen design is
-[superpowers/plans/2026-10-24-web-ui.md](superpowers/plans/2026-10-24-web-ui.md).
-All of it shipped: a local FastAPI frontend over this library (optional extra
-`[web]`), a **derived** SQLite index of runs (the JSON artifacts stay canonical
-and the DB is rebuildable), map showcase pages in the osu! beatmap-listing idiom
-with covers from `assets.ppy.sh`, human annotations in map time that the coach
-prompt reads, stored LLM critiques with staleness hashes, an opt-in export and a
-deterministic digest with a real feed, and per-run near-miss boards.
+A local FastAPI frontend over this library (optional extra `[web]`), a
+**derived** SQLite index of runs (the JSON artifacts stay canonical and the DB is
+rebuildable), map showcase pages in the osu! beatmap-listing idiom with covers
+from `assets.ppy.sh`, human annotations in map time that the coach prompt reads,
+stored LLM critiques with staleness hashes, an opt-in export and a deterministic
+digest with a real feed, and per-run near-miss boards.
 
 Where each piece lives: `docs/index.md` (the projection), `docs/web.md` (pages,
 routes, boards), `docs/annotations.md`, `docs/critiques.md`, `docs/export.md`
@@ -32,336 +29,75 @@ websockets. Playback is the likely next one; the index stores
 `replay_path`/`map_path` and a `/run/{id}/frames` route is reserved so adding
 it does not need a schema change.
 
-Smaller things intentionally left: publishable screenshots rendered from the
-synthetic corpus (the real ones are gitignored because they carry personal
-numbers), and one 2020 replay that trips a pre-existing analyser `TypeError`
-and is skipped by the digest.
+## Shipped since 0.12.0
 
-## Shipped since the handoff
-
-- **0.24.3 — the size threshold warns, it does not block.** 300 KB of summary now
-  produces a notice and a button that reads "generate anyway". Blocking was the
-  wrong call: the owner decides what to spend, the tool's job is to say what it
-  will cost. The CLI warns on stderr and proceeds, same rule.
-
-- **0.24.1 — the pickers scroll.** The lists stopped at 40 rows, which read as
-  "the corpus is tiny". They now load 40 at a time as you scroll (a sentinel, an
-  IntersectionObserver rooted at the list, `/critique/rows` returning rows plus a
-  fresh sentinel), with the offsets skipping already-picked ids in SQL so a page
-  boundary cannot repeat a row. Static assets switched to a content fingerprint
-  after an edited `app.js` was served from cache under the release-number query
-  and looked like broken JavaScript. Also: the picker grouped by run id — 35 of
-  the corpus's runs have two artifacts (a duplicate export), so the same play was
-  offered twice and paging spent offsets on it.
-
-- **0.24.0 — mod filter, order, covers.** Three refinements from using 0.23.0:
-  the picker filters by mod (`DT`, `HR`, `HD`, `HT`, `NM`: maps and ranges only,
-  never a replay you named by hand); the LLM critique now sits above the
-  deterministic summary on both the tab and the run page, because the answer is
-  what you read and the tables are what you check it against; and each replay row
-  in the picker carries its beatmap cover as a dimmed background, so a row is
-  recognisable at a glance without changing the row's height.
-
-- **0.23.0 — the critique tab.** A third page, plus the CLI command behind it.
-  Select replays, whole maps (every attempt) and date ranges into one additive,
-  deduplicated selection; the page builds **one deterministic text** and that
-  text is the model's entire input — no metrics JSON, no second formatter. Up to
-  10 runs get their full per-replay reports, above that it degrades to
-  overview + per-map table (top 40) + per-run table (newest 120) + the
-  cross-attempt stability block, and the header counts what was left out; above
-  300 KB of summary the preview stays and generation is refused with the reason.
-  Stored at `out/critiques/scope/<hash>.json`, hashed over text + prompt, with
-  the text inside so a stored answer always sits next to the input it was given;
-  `index.sqlite` mirrors metadata only (schema v5, auto-rebuilt by the server).
-  The run page stops generating: it shows a stored critique read-only (or an
-  older per-run one, labelled) and links into the tab. New scope system prompt,
-  framed for a selection rather than a play.
-
-- **0.22.1 — the dead-JavaScript fix.** 0.22.0 shipped with `initAnnotations`
-  and `initBoards` missing from `app.js`: an edit sliced a range of the file and
-  took two functions with it. The page rendered, the rail scrolled, and the
-  playhead, the boards and the critique stream were silently dead — no error
-  because the deletion left a call with no definition, which only surfaces at
-  runtime. Restored, and there is now a test that every `init*()` called in the
-  file is defined in it. Three smaller things from the same look: the rail stays
-  a column down to 880 px (a chip strip above the title read as clutter, which
-  was the whole point), static assets are cache-busted with the version (a stale
-  `style.css` under new markup looks exactly like a styling bug), and the report
-  fold now inlines its text and offers a plain `text` link, because copying from
-  an insecure http origin cannot rely on the clipboard API.
-
-- **0.22.0 — decluttering: a rail and five folds.** Measured first: the run page
-  was 7.5 screens at 1280x800 with 715 numbers on it, half of them restated, and
-  the deterministic report alone was 51 % of the page. Now: a left rail (chips
-  under 1080 px) jumping to each block, and boards / objects / report / critique
-  / notes as folds with a peek line, closed by default. The run page is **1.9
-  screens and 206 words** with everything folded, and grows only when asked.
-  Also fixed: "the whole map, object by object" was a `<details>` with an empty
-  div — the table only ever loaded from a *separate* button that sat above it, so
-  expanding the fold did nothing. The fold is the control now. Peeks state the
-  rule and the count, never a number the cards already show; the report fold has
-  a **copy** button wired to `/run/<id>/report.txt`, which serves the exact
-  `osu-critique report` text (the seam the critique tab will reuse).
-
-- **0.21.1 — a 3.10 syntax fix**: 0.21.0 nested an f-string inside an f-string
-  with the same quote character, which only parses on Python 3.12+ (PEP 701).
-  CI caught it on 3.10; the wheel for 0.21.0 is unusable below 3.12. The value
-  is computed before the string now.
-- **0.21.0 — the deterministic report as data**: `report_sections.py` builds the
-  critique once (typed items: `kv`, `note` with a tone, `table`) and
-  `render_report()` is now its terminal rendering, so the CLI and the run page
-  cannot drift. The page shows it as cards: kv rows, toned notes (trust, time
-  base, primary target, clean run) and tables; sections with more than five
-  columns span the full grid instead of being squeezed into a third of the page.
-  Found while doing it: five real runs store `legs: null`, an empty
-  `error_shape` and null stream velocities, which made `render_report` raise
-  `TypeError` — a latent crash, now degrading per-field. Verified by running
-  `sections()` over all 3 365 stored metrics files (0 crashes).
-- **0.20.1 — the digest actually fetches plays** (reported: "digest doesn't work,
-  it says none detected even when I play"):
-  - `digest` now runs the **export** first when `export.enabled` is true, so
-    "digest now" means "pull my latest plays, analyse them, summarise them".
-    An export failure is reported in the digest, never fatal.
-  - three markers instead of one: `.ingest` (newest exported-file mtime seen,
-    advanced only by an ingest and never to *now*), `.window` (newest **play**
-    actually reported — a digest that shows nothing leaves it alone), and
-    `.last` (when the digest ran). The old single marker was set to the wall
-    clock, so a digest that summarised without ingesting skipped every file
-    exported before it, and every play whose timestamp preceded it.
-  - a play is also new when **this run just ingested it** (the late-export
-    case), and an empty window now says *why* (export off / nothing played).
-  - traps: `pair_lazer` printed "no lazer replays" when a filter had merely
-    excluded them all; and any test that calls `digest.build()` must stub
-    `export.enabled`, or it exports into the developer's real out/.
-- **0.20.0 — the feed as a page, and per-run near-miss boards**:
-  - every digest is written twice (`…md` canonical, `…json` structured) and
-    `/feed` renders the JSON: digest header, timing/miss percentiles as meters,
-    best/worst, the plays table with links to map and run, and **maps worth
-    another look** as cover cards with star pill, `+N`, mapper and the named
-    weaknesses — plus a **digest now** button (`POST /feed/digest`, 409 on a
-    concurrent run).
-  - the run page gained a collapsed **"where it went wrong"**: `web/boards.py`
-    ranks misses by closest approach, attaches the five-note window, and the
-    browser draws zoomed boards (hit circles at the map's CS, dashed travel
-    path, the miss ringed), one playfield-wide miss overview, and the cleanest
-    stretch as the counterweight (a clean quarter when the map has no long
-    streams). No matplotlib, no frames, no extra request.
-  - traps: a `<p>` cannot contain the delete `<form>` (browser hoists it);
-    mini-card badges must live at the top of the cover or they collide with the
-    difficulty label; a `<details>` panel must not size its canvas from
-    `clientWidth` (it is 0 while closed) — fixed logical dimensions instead.
-- **0.16.1 — the index keys on the artifact, not on the cwd**: `json_path`
-  (and every other stored path) is now absolute. Running the CLI from the repo
-  (``out/x``) and the systemd service from anywhere
-  (``/home/.../out/x``) indexed every artifact **twice** — 6 686 rows for 3 343
-  files on this box. `--rebuild` cleans it up. Regression test added.
-- **0.16.0 — export and the digest** (`export.py`, `digest.py`,
-  `export_assets.json`, `THIRD_PARTY.md`, `docs/export.md`): the opt-in
-  `osu-critique export` drives BeatmapExporter (MIT v2.8.0, sha256-pinned,
-  vendored in this project's releases for linux/win/mac, detected or
-  `--install`ed, disabled until `export.enabled`). Its menu is text-driven
-  (`status …` / `reset`), so no screen scraping; the filter is **reset** when no
-  status is configured, which is the bug that had been hiding loved/graveyard
-  plays (171 of the author's). `osu-critique digest` ingests exported `.osr`
-  newer than `out/digests/.last` (md5-checked, so a re-run is a no-op), then
-  writes a deterministic summary: the plays, timing spread and miss rate as
-  percentiles against prior history, and per-map consistent weaknesses vs
-  swings. `/feed` lists the digests. 7 export tests + 8 digest tests + 3 route
-  tests.
-  Traps: a fake exporter in a pty must not read stdin to EOF (``cat`` hangs);
-  `os.write` to a pty whose child already exited raises EIO and must be
-  swallowed; the digest marker is **naive local time** because it is compared
-  lexicographically with `played_at` from the replay.
-- **0.15.0 — stored critiques** (`critiques.py`, `coach --save`,
-  `docs/critiques.md`): one canonical sidecar per run at
-  `out/critiques/<run_id>.json`, mirrored into the index. A critique records
-  `run_hash` (the metrics **plus the player's notes**) and `prompt_hash` (the
-  framework), so re-analysing the play, adding a note, or changing the prompt
-  marks it **stale** with a badge instead of silently lying; a different model
-  is not staleness. The run page streams the call as SSE (`delta` frames, then
-  `done`), stores it and shows model + date; a no-JS form post does the same
-  blocking and redirects. The key stays server-side; `web.llm_remote: false`
-  answers 403 to non-loopback clients on the LLM routes only. 6 unit tests + 8
-  route tests.
-  Traps: a `<form>` inside `<p>` gets hoisted by the browser (the delete button
-  vanished from `.critique-meta`), the empty-state element must be hidden when
-  streaming starts or the panel shows "no critique" above the critique, and the
-  JSON-vs-HTML error branch has to key off `Accept: text/event-stream` so the
-  streaming client gets `{"detail"}` while a plain form gets a page.
-- **0.14.0 — annotations** (`annotations.py`, `osu-critique annotate`,
-  `docs/annotations.md`): notes scoped to a **map** (every attempt) or a **run**
-  (one attempt), optionally timestamped in **map time** and written from the CLI
-  or the web form (playhead + stamp button, click an object row to move it).
-  Canonical sidecars at `out/annotations/<beatmap_md5>.json` — annotations are
-  authored, so the index mirror is rebuilt from the files on every sweep and
-  deleting the DB loses nothing. `coach`/`prompt` (single and directory) gain a
-  "player's own notes" block before the metrics; `report` deliberately ignores
-  them. 15 unit tests + 10 route tests.
-  Traps: `Form()` needs `python-multipart` (now in `[web]`); `t_map` is seconds in
-  map time while object times are row-clock milliseconds — convert with
-  `rows_scale`, never by hand; `sweep --rebuild` must delete the DB *file*
-  because a schema from another build refuses to open at all (the server
-  auto-rebuilds instead of failing to start).
-- **0.13.0 — the web read path** (`web/`, `covers.py`, `osu-critique serve`,
-  `docs/web.md`): FastAPI + Jinja2 + htmx as the optional `[web]` extra. `/` is a
-  cover-card listing (search, sort by recency/accuracy/SR/attempts/pp, status +
-  trust filters), `/map/<md5>` carries the `.osu` metadata, a sortable attempt
-  table (htmx partial, no reload) and the cross-attempt block as first→latest,
-  `/run/<id>` leads with the trust banner (a differing judgement changes the
-  wording, not just the colour) and renders the hit-error chart, the interesting
-  object rows, a lazy full object table and the deterministic report.
-  `/api/objects/<id>` serves the artifact verbatim; `/run/<id>/frames` is a 501
-  reservation for playback. Covers are lazy from `assets.ppy.sh` with a disk
-  cache and a `.miss` marker; the look is Poppins (OFL) because Torus is
-  licensed for osu! only. 24 route tests, a golden map-page structure test, and
-  a subprocess test proving the core imports without fastapi.
-  Traps: the listing must use `rank_status` (the runs column), not `status`;
-  `render()` needs `status_code=` or 404s render 200; the cross-attempt table
-  with 26 attempts needs first→latest, not one column per attempt.
-- **0.12.0 — the index** (`index.py`, `mapmeta.py`, `osu-critique index`,
-  `docs/index.md`): a SQLite **projection** of `out/` at `out/index.sqlite` —
-  one row per artifact plus a `beatmaps` row carrying `[Metadata]`/`[Events]`
-  parsed from the `.osu` (title, artist, creator, version, ids, background,
-  mode) and the three existing caches joined on (`sr`, `pp`, `rank_status`).
-  `analyze`/`batch` upsert their run; `--rebuild` drops and re-reads, `--check`
-  reports drift and writes nothing. Measured on the 3 171-run corpus: 4 s
-  cold, 0.1 s no-op sweep, 3.7 MB. Re-exports of one play are kept as separate
-  artifacts (36 of them) and de-duplicated at query time, never dropped.
-  Traps: `replay_md5` is the replay's internal hash, not the file's md5 (0/383
-  matched), so historical `replay_path` needs an explicit resolve pass;
-  `is_relax` must include `AP` and `aim_mode.is_relax`, not just `mods.RX`;
-  four pre-schema artifacts have `schema_version = NULL` and no beatmap md5.
-- **0.11.0 — breakdown, stars/pp, status** (the handoff's "DO NEXT, item B"):
-  - `metrics/breakdown.py` + `osu-critique breakdown` + a `## How it breaks
-    down` report section (`docs/breakdown.md`): the speed cliff (miss rate per
-    **recomputed** required cursor speed, never `objects[].cursor_speed`, which
-    is null on no-press misses), reversal x spacing buckets, miss cascades and
-    the worst ramp. Computed for every run into `metrics["breakdown"]`.
-  - `metrics/difficulty.py` + `osu-critique stars` / `osu-critique pp`
-    (optional extra `osu-critique[stars]`, `docs/difficulty.md`): rosu-pp star
-    ratings per SR mod family (NM always) and pp per play, with the lazer
-    SHA-256-store vs MD5-replay index gotcha handled.
-  - `io/status.py` + `osu-critique status` (`docs/status.md`): the ranked /
-    leaderboard-only / unranked split via osu! API v2, batched at 50 ids and
-    parsing the `{"beatmaps": [...]}` wrapper.
-  - `batch` no longer dies on one bad replay: the per-run analyze/call is
-    wrapped in try/except and skips with a message, and a stream block with a
-    median gap but a None velocity no longer crashes `console_summary` (the
-    crash that killed the sweep). Regression tests for both.
-  - the AI coach feeds itself: `coach`/`prompt` trim only the bulky redundant
-    metrics fields (the old 12k cap silently truncated streams/breakdown/tapping
-    off every real run) and auto-join `sr`/`pp`/`rank_status` from the
-    `stars`/`pp`/`status` caches into each run. The system prompt now covers
-    `breakdown` and the value fields.
-
-- **0.4.0 — aim mode** (`metrics["aim_mode"]`, `docs/aim.md`): the cursor path is
-  re-derived from the frames for every run — distance at the note, closest
-  approach and when it peaks, the along/lateral split, reached-not-on-time and
-  the speed-conditioned ceiling curve — with a six-panel figure
-  (`out/<tag>_aim.png`) and `--no-aim` to skip it. Works with or without Relax,
-  so a Relax replay is now analysable: the old note said "aim data is
-  meaningless", which was only true of the press-time numbers.
-  `scripts/autopsy.py` is now a thin printer over the library's blocks (plus the
-  worst-arrival table), so its numbers cannot drift.
-- **0.5.0 — miss autopsy** (`metrics["autopsy"]`, `docs/autopsy.md`): 5-note shape
-  classes with n-gated off-300 rates, the press-time arrival margin, press vs
-  arrival timing, per-leg heading error and path efficiency, mid-travel
-  ("stutter") press share, and each miss with its own press and geometry; plus the
-  worst-stretch gallery (`out/<tag>_windows.png`) and `--no-autopsy` to skip it.
-- **0.6.0 — slider bodies and the edge guard** (`metrics.sliders`, the `slider_*`
-  record fields, `assignment.EDGE_GUARD_MS`): every slider's curve/ticks/tail are
-  measured, and the judgement windows gained the empirical 1 ms guard that makes
-  the 300/100 split agree with the game (14 plays exactly, total drift halved).
-- **0.7.0 — cross-attempt structure** (`attempts`, `metrics/attempts.py`):
-  metrics files grouped by `beatmap_md5` and ordered by the replay's `played_at`,
-  comparing family and shape rates across attempts into consistent weaknesses vs
-  swing ("one-off") buckets. New metrics fields `played_at` / `replay_md5` make
-  the grouping and de-duplication possible.
-- **0.10.0 — rolling baselines** (`report --history`, `metrics/baseline.py`): the
-  report now compares a run against the player's stored runs, difficulty-
-  normalised, instead of only quoting frozen thresholds. The `client.realm`
-  spike is answered (no per-object truth there) - see item 7.
-- **0.8.0 — two clocks, labelled** (`metrics.time_base`): when a replay's mod
-  flag and its frames disagree, the player-time windows are reported beside the
-  frames' ones and both readers say which base every ms is in.
+- **0.24.x — critique tab refinements.** The size threshold warns instead of
+  blocking; list pickers load 40 rows at a time on scroll; the mod filter covers
+  maps and ranges only; the LLM answer sits above the deterministic summary; each
+  replay row carries a dimmed beatmap cover. Static assets are content-fingerprinted
+  after an edited `app.js` was served from cache and looked like broken JavaScript.
+- **0.23.0 — the critique tab.** Select replays, whole maps and date ranges into
+  one additive, deduplicated selection; the page builds **one deterministic text**
+  and that text is the model's entire input. Up to 10 runs get full per-replay
+  reports, above that it degrades to overview + per-map table + per-run table +
+  cross-attempt stability, and the header counts what was left out. Stored at
+  `out/critiques/scope/<hash>.json`, hashed over text + prompt, with the text
+  inside. `index.sqlite` mirrors metadata only.
+- **0.22.x — decluttering.** A left rail and five folds; the run page dropped
+  from 7.5 screens with 715 numbers to 1.9 screens and 206 words with everything
+  folded. Peeks state the rule and the count, never a number the cards already
+  show. Also fixed a dead-JavaScript regression: an edit sliced `initAnnotations`
+  and `initBoards` out of `app.js`, so the page rendered while the playhead,
+  boards and critique stream were silently dead.
+- **0.21.x — the deterministic report as data.** `report_sections.py` builds
+  typed items (`kv`, `note` with a tone, `table`) and `render_report()` renders
+  them, so the CLI and the run page cannot drift. Found and fixed a latent crash
+  on runs that store `legs: null`, an empty `error_shape` or null stream
+  velocities; it now degrades per field.
+- **0.20.x — the feed as a page, and per-run near-miss boards.** Every digest is
+  written twice (`…md` canonical, `…json` structured); `/feed` renders the JSON.
+  `web/boards.py` ranks misses by closest approach and the browser draws zoomed
+  boards, a playfield-wide miss overview and the cleanest stretch. The digest now
+  runs export first when enabled, and tracks three markers: `.ingest` (newest
+  exported-file mtime seen), `.window` (newest **play** actually reported) and
+  `.last` (when the digest ran).
+- **0.16.x — index keys on the artifact, not the cwd.** `json_path` and every
+  other stored path are absolute. Running the CLI from the repo and the service
+  from somewhere else used to index every artifact twice.
+- **0.16.0 — export and the digest.** The opt-in `osu-critique export` drives
+  BeatmapExporter (MIT, sha256-pinned, vendored in this project's releases for
+  linux/win/mac, disabled until `export.enabled`). Its menu is text-driven
+  (`status …` / `reset`); the filter is **reset** when no status is configured,
+  which is the bug that had been hiding loved/graveyard plays.
+- **0.15.0 — stored critiques.** One canonical sidecar per run at
+  `out/critiques/<run_id>.json`, mirrored into the index. `run_hash` covers the
+  metrics **plus the player's notes**; `prompt_hash` covers the system prompt; a
+  different model is not staleness. The web streams the call as SSE; the key
+  never leaves the server.
+- **0.14.0 — annotations.** Notes scoped to a map or a run, optionally stamped
+  in map time. Canonical sidecars at `out/annotations/<beatmap_md5>.json`;
+  `coach`/`prompt` read them, `report` deliberately does not.
+- **0.13.0 — the web read path.** FastAPI + Jinja2 + htmx as the optional
+  `[web]` extra. Cover-card listing, map page, run page with the trust banner,
+  hit-error chart and the deterministic report.
+- **0.12.0 — the index.** A SQLite **projection** of `out/` at
+  `out/index.sqlite` — one row per artifact plus a `beatmaps` row parsed from the
+  `.osu`, with the `sr` / `pp` / `rank_status` caches joined on. `--rebuild`
+  drops and re-reads, `--check` reports drift and writes nothing.
+- **0.11.0 — breakdown, stars/pp, status.** The speed cliff, reversal × spacing
+  buckets, miss cascades and the worst ramp (`metrics/breakdown.py`); rosu-pp
+  star ratings and pp (`metrics/difficulty.py`, optional `[stars]` extra); the
+  ranked / leaderboard-only / unranked split via osu! API v2
+  (`io/status.py`). `batch` skips a bad replay instead of dying on it.
+- **0.4.0 → 0.10.0** — aim mode, miss autopsy, slider bodies, cross-attempt
+  structure, dual-window reporting, rhythm/velocity stream detection and rolling
+  baselines. Details below.
 
 ---
 
-## Known gaps in the critique tab
+## Backlog, in the order it was built
 
-- The model's answer is rendered in a `<pre>`, markdown and all, because the
-  project has no markdown renderer and adding a dependency for one panel was not
-  worth it in this pass. The deterministic side is text on purpose; the answer is
-  not, and it shows.
-- No "lens" selector (per-run / map / diet / timeframe) — one scope prompt serves
-  every selection, which works but blurs the wording for a one-replay critique.
-- The pickers show the 40 newest replays and the 40 busiest maps for the current
-  filter; there is no paging deeper than that yet.
-
-## The most useful thing about this tool
-
-**The value is not the verdicts, it is that the per-object record plus the raw
-cursor frames let you ask what the hand actually did — and every real question
-so far has been answered that way, not by the built-in metrics.**
-
-Concretely, in order of leverage:
-
-1. `out/<tag>_objects.json` (the frozen schema) is the spine. One row per
-   object: time, position, `result`, `error_ms`, `aim_r`, `cursor_speed`,
-   `spacing_r`, `snap` (in **quarter-beats**), `bpm_eff`, `angle_deg`,
-   `strain_aim`, `strain_speed`. Bucket it and you can answer almost anything
-   without touching the replay again.
-2. When the question is about the **hand** rather than the taps, the two
-   re-derivation blocks are now computed for every run: the cursor arrival
-   (`metrics.aim_mode`, docs/aim.md) and the miss autopsy (`metrics.autopsy`,
-   docs/autopsy.md — shape classes, arrival margin, press vs arrival, legs,
-   stutter, the misses themselves). Re-derive from the frames for anything they do
-   not cover; `scripts/autopsy.py` prints both for one replay, with the figures.
-3. The **trust block is what makes the output usable.** It states the per-count
-   deltas against the game and refuses to let an untrustworthy judgement read as
-   fact. Keep that discipline: every new block should carry its own sample size
-   and a population gate, and the reports should never state a rate from an
-   n<10 bucket.
-4. Every diagnosis of substance came from a **contrast**, not an absolute: same
-   map across attempts; shapes with corners vs shapes with reversals; cursor
-   arrival vs press timing. Prefer features that produce a contrast.
-
-Two examples of what that way of working produced (both reproduced by
-`metrics.aim_mode` + `metrics.autopsy`):
-
-- Three replays had misses at press-time aim of 1.07–1.45 r. The frames showed
-  the cursor's *closest approach* was 0.26–0.4 r (fine) but that it peaked
-  ~10 ms **after** the note, while the player's taps are 3–9 ms **early** — the
-  two biases conspire, and the press lands while the cursor is still travelling.
-  Not reading, not flicks: arrival timing.
-- The same replay family shows the failure is confined to **near-reversal chains**
-  (5-note windows with ≥2 turns >120°, 82–91 % of those maps' objects) while
-  cornered/box windows are 0 % off-300 — which retires the "I can't read
-  rectangles" hypothesis with data instead of opinion.
-
----
-
-## Working method
-
-```sh
-cd ~/Projects/code/osu-critique
-.venv/bin/python -m pytest -q                       # 300 tests (52 need [web]), no network
-.venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
-.venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
-.venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
-```
-
-Read `metrics["trust"]` first, always. Replays and maps are auto-paired by
-beatmap MD5 (lazer exports + its content-addressed store, stable on Windows, or
-`replays/` + `maps/` in the repo). Real replays are the author's: never commit an
-unanonymized `.osr` (`scripts/make_synthetic_fixtures.py --anonymize` exists),
-and keep personal coaching numbers in the vault, not in the public repo.
-
----
-
-## Backlog, in the order I would do it
-
-### 1. Aim mode — ✅ shipped in 0.4.0 (`docs/aim.md`, `metrics.aim`)
+### 1. Aim mode — ✅ shipped in 0.4.0 (`docs/aim.md`, `metrics/aim`)
 
 **Why.** The tool could not analyse a Relax replay at all — its own trust note
 said "aim data is meaningless" — and RX is the cleanest aim measurement there
@@ -375,12 +111,12 @@ half of every normal replay's diagnosis.
 6-panel figure. `scripts/autopsy.py` was the reference implementation; it now
 calls the library instead of duplicating the maths.
 
-**Acceptance.** Met: on the author's RX replay the block reproduces 0.72 r mean
-at the note, 0.26 r median closest approach, median peak +10 ms, 16.8 %
+**Acceptance.** Met: on a Relax reference replay the block reproduces 0.72 r
+mean at the note, 0.26 r median closest approach, median peak +10 ms, 16.8 %
 reached-not-on-time, ceiling 0.47 r at ≤1 px/ms rising to 1.19 r above
 3 px/ms. `tests/test_aim.py` pins a synthetic RX fixture (`synth_rx`) with a
-known cursor path exactly and checks these numbers when `OSU_TEST_RX_REPLAY` /
-`OSU_TEST_RX_MAP` are set (the replay itself is the author's, not committed).
+known cursor path exactly and checks these numbers when
+`OSU_TEST_RX_REPLAY` / `OSU_TEST_RX_MAP` are set.
 
 **Traps (learned).** Do not derive aim from presses for RX. Convert ms to the
 player time base before quoting (the block inherits the calibrated rows). Keep
@@ -401,13 +137,12 @@ distribution at press time; press-time vs arrival offset; per-leg heading error
 and path efficiency; mid-travel "stutter" press share; plus a report section and
 the worst-window gallery figure (`out/<tag>_windows.png`).
 
-**Acceptance.** Met: MONTAGEM reversals 17.5 % off-300 (n=143) vs cornered 0 %
-(n=14), 4ever 9.1 % (n=165) vs 0 % (n=9); the 4ever misses at 1.20 r (press
-−9 ms, aim 1.26 r) and 0.98 r (press +16 ms, aim 1.07 r) and MONTAGEM's three at
-1.32/1.30/1.07 r (presses +5/+2/−3 ms); per-leg heading error median 2-3°, p90
-6-8°, max 14° — no reading problem. `tests/test_autopsy.py` pins the helpers on
-synthetic frames and checks these numbers when the replays are pointed at with
-`OSU_TEST_MONTAGEM_*` / `OSU_TEST_4EVER_*`.
+**Acceptance.** Met on two reference replays: near-reversal chains are 17.5 %
+off-300 (n=143) vs 0 % for cornered windows (n=14) on one, and 9.1 % (n=165) vs
+0 % (n=9) on the other; per-leg heading error median 2-3°, p90 6-8°, max 14° —
+no reading problem. `tests/test_autopsy.py` pins the helpers on synthetic frames
+and checks these numbers when the reference replays are pointed at with the
+`OSU_TEST_*_REPLAY` / `_MAP` variables.
 
 **Traps (learned).** Legs shorter than ~1.5 circle radii have no meaningful
 direction (including them produced a 117° "heading error" on a leg where the
@@ -417,81 +152,64 @@ map); guard `k - 2 >= 0`.
 
 ### 3. Slider bodies, ends and ticks — ✅ shipped in 0.6.0 (`metrics.sliders`, edge guard)
 
-**Why.** 36–55 % of the objects on the author's maps are sliders, judged by their
-head only, and the 300/100 split drifted on the slider-heavy plays (5–22 objects
-per play with the miss count exact).
+**Why.** A large share of the objects on slider-heavy maps are judged by their
+head only, and the 300/100 split drifted on slider-heavy plays (5-22 objects per
+play with the miss count exact).
 
 **Spec.** Model the head + ticks + end (`slider` exposes the curve, length,
 repeat, duration and `true_tick_points`; its `Replay.hits()` is one strict
 implementation to borrow mechanics from). Emit `slider_break` as a first-class
 result distinct from `miss`.
 
-**Acceptance.** Met, but by a *different* mechanism than the plan assumed — see
-below. On `MONTAGEM BATCHI` and `4ever` the 300/100 split now matches the game
-exactly (`trust.within_tolerance` true); across the 55 stored replays the judged
-counts reproduce 14 plays exactly and the total weighted L1 fell from 1943 to
-1470.
-
 **What actually fixed the drift (measured, not assumed).** It was not the body —
 it was a **1 ms edge guard** on the hit windows (`assignment.EDGE_GUARD_MS`).
 A replay's frame clock is floored to the millisecond, so a stored press time can
 be up to 1 ms earlier than the time the game judged: an error measured at the
 window edge belongs to a press the game saw outside it. Ranking the candidate
-rules by total drift over all 55 replays: no guard 1943 L1 / 1 exact play, 0.5 ms
-1640 / 8, **1.0 ms 1470 / 14**, 1.5 ms 1998 / 6. Slider bodies were the wrong
-suspect: the excess 300s were objects sitting within ~1 ms of the window edge,
-circles included.
+rules by total drift over the reference corpus: no guard 1943 L1 / 1 exact play,
+0.5 ms 1640 / 8, **1.0 ms 1470 / 14**, 1.5 ms 1998 / 6. Slider bodies were the
+wrong suspect: the excess 300s were objects sitting within ~1 ms of the window
+edge, circles included.
 
 **The slider body is measured, not judged.** `metrics/sliders` follows every
-slider's curve (repeats folded back), its ticks (`true_tick_points`) and its tail,
-and records `slider_tail_off` / `slider_missed_ticks` / `slider_off_pct` per
-object. Using that to degrade a slider whose tail was dropped (the plan's
-`slider_break`) was tested and **rejected**: over 19 slider-heavy replays it makes
-15 worse and 1 better (L1 729 -> 920), because the cursor is *allowed* to cut the
-body — RASPUTIN alone has 179 cut sliders and 21 "dropped tails" on a play whose
-counts match the game exactly. So the fields are descriptive (coaching: "you cut
-25 % of sliders on 4ever"), and the judgement stays head-based. A small residual
-miss drift remains on a few plays (FOOL MOON 66 vs 55, Hot N Cold 48 vs 42) and
-those stay `trustworthy: false`.
+slider's curve (repeats folded back), its ticks (`true_tick_points`) and its
+tail, and records `slider_tail_off` / `slider_missed_ticks` / `slider_off_pct`
+per object. Using that to degrade a slider whose tail was dropped (the plan's
+`slider_break`) was tested and **rejected**: it made most slider-heavy replays
+worse, because the cursor is *allowed* to cut the body. So the fields are
+descriptive (coaching: "you cut 25 % of sliders on this map"), and the judgement
+stays head-based. A small residual miss drift remains on a few plays and those
+stay `trustworthy: false`.
 
-### 4. Tier 2a: cross-attempt structure — ✅ shipped in 0.7.0 (`attempts`)
+### 4. Cross-attempt structure — ✅ shipped in 0.7.0 (`attempts`)
 
 **Why.** The strongest signal available is the same structure across attempts
-(RASPUTIN, Passcode, overture, Domino are all repeated), and the schema already
-carried `beatmap_md5` for grouping.
+on one map, and the schema already carried `beatmap_md5` for grouping.
 
 **Spec / what shipped.** `osu-critique attempts [dir|file]` groups the metrics
-files by beatmap md5, orders the attempts by the replay's `played_at` (a new
-metrics field, with `replay_md5` for de-duplicating re-exports of one play),
-drops nothing silently, and compares family and shape rates across attempts:
+files by beatmap md5, orders the attempts by the replay's `played_at` (a metrics
+field, with `replay_md5` for de-duplicating re-exports of one play), drops
+nothing silently, and compares family and shape rates across attempts:
 
 - **consistent weakness** — worse than the play's own off-300 rate in *every*
   attempt by ≥1.5×, from buckets that are populated everywhere (an adaptive gate,
-  min(20, max(10, 3 % of the objects)), so a 150-object map is read from
-  10-object buckets and a 1000-object one from 20-object buckets);
+  min(20, max(10, 3 % of the objects)), so a short map is read from
+  10-object buckets and a long one from 20-object buckets);
 - **swings** — the rate moves ≥10 points between attempts, i.e. one-off or
   session noise until explained, *not* a stable weakness;
 - plus `--json` for the whole block, and `report <dir>` now points at it.
 
-**Acceptance.** The qualitative claim reproduces on RASPUTIN 09-01 → 09-22 (the
-duplicate 09-22 export is de-duplicated): `slider_1/2_jump` 29.3 % → 12.8 % and
-`slider_1/2_spaced` 43.0 % → 17.5 % (both roughly halve) while `slider_1/4_dense`
-22.8 % → 26.1 % (moves by 3 points — "barely moves"). The published figures
-(25.3→13.3, 34.3→17.1, 27.7→22.8) predate the 1 ms edge guard and the profile's
-current family bucketing, so the test pins today's numbers *and* the shape of the
-change.
-
 **Not done (deliberately).** The full version — a sqlite of per-object rows — is
-not needed at 22 stored runs over 9 repeated maps; the metrics files carry the
-family and shape rates already. Revisit when a single map has ~20-30 plays.
+not needed while corpora are small and the metrics files carry the family and
+shape rates already. Revisit when a single map has ~20-30 plays.
 
 ### 5. Dual-window reporting when calibration overrides a mod flag — ✅ shipped in 0.8.0
 
-**Why.** Some exports store frames in one clock while the mod flag claims another
-(Bang Bang, 4ever, Domino). Calibration then keeps the frames' scale and every ms
-in the metrics is that base — a silent 1.5x for a reader who believes the flag.
-`profile.py` already converted (`time_factor = mod_scale / scale`); the raw
-metrics and the console did not.
+**Why.** Some exports store frames in one clock while the mod flag claims another.
+Calibration then keeps the frames' scale and every ms in the metrics is that
+base — a silent 1.5x for a reader who believes the flag. `profile.py` already
+converted (`time_factor = mod_scale / scale`); the raw metrics and the console
+did not.
 
 **Spec / what shipped.** `metrics["time_base"]` is emitted on every run:
 `overridden`, `rows_scale`, `player_scale`, `rows_to_player`, `windows_ms_player`
@@ -503,89 +221,129 @@ warning against comparing ms across bases.
 
 **The invariant that makes it real** (and the test that pins it):
 ``windows_ms_player == od_windows(od, mod_scale)`` — the second base is exactly
-the windows of the mod the replay *claims*, multiplied through. On Domino (DT
-claimed, frames in map time) the 300-window is 29 ms of frames = 19 ms of real
-play, both present; on a play whose flag holds, nothing is printed at all.
-
-**Cost note.** Scoped "~2 hours" in the first pass; it took ~3 minutes of work,
-because the conversion already existed in `profile.py` and the Domino fixture
-already triggered the case. The estimates in this file are session budgets, not
-measurements — the expensive part of an item is the diagnosis, and this one had
-none.
+the windows of the mod the replay *claims*, multiplied through.
 
 ### 6. Stream detection by rhythm + velocity continuity — ✅ shipped in 0.9.0
 
 **Why.** The detector was still "≥4 consecutive circles with ≤4r spacing" —
-*spacing* standing in for speed. It called 1/2 filler runs streams on Bang Bang
-and was blind to slider-interleaved bursts: **0 segments on MONTAGEM**, whose
-runs are rhythmically tight (115 ms) but ~6r wide.
+*spacing* standing in for speed. It called wide-but-tight 1/2 filler runs
+streams and was blind to slider-interleaved bursts.
 
 **Spec / what shipped.** `metrics.streams.find_runs` is now the shared primitive:
 consecutive objects with a steady gap (within ±35 % of the running gap,
 ≤250 ms — the rule ``profile._chains`` already used) and a steady required cursor
 speed (`spacing/dt` within ±40 % of the run's median), **any object kind**;
 spinners break a run. `profile._chains` calls the same function with the velocity
-term off, so the profile's numbers are unchanged (verified run-for-run on six
-replays). `stream_stats` returns, per run: t_start/t_end, n, miss, mean/std err,
-alt_ratio, key_pattern — plus what the material *was*: `gap_ms`, `notes_per_s`,
-`velocity_r_ms`, `kinds`. `metrics.streams` also carries the aggregate
-(`notes`, `misses`, gap and speed percentiles, kind mix); the report, console and
-coach prompt quote the rate and the material instead of the word "streams".
+term off, so the profile's numbers are unchanged. `stream_stats` returns, per run:
+t_start/t_end, n, miss, mean/std err, alt_ratio, key_pattern — plus what the
+material *was*: `gap_ms`, `notes_per_s`, `velocity_r_ms`, `kinds`. The report,
+console and coach prompt quote the rate and the material instead of the word
+"streams".
 
-**Measured effect** (old → new segments/notes): MONTAGEM 0 → 19/100, 4ever
-0 → 12/59, Bang Bang 22 → 33/166, RASPUTIN 39 → 69/520, down 87 → 134/843. The
-misfire it retires is pinned by a test: steady 100 ms gaps with spacing swinging
-1r ↔ 3.9r (a 4x speed swing at constant rhythm) — the old rule called it a
-stream, the new one does not.
+The misfire it retires is pinned by a test: steady 100 ms gaps with spacing
+swinging 1r ↔ 3.9r (a 4x speed swing at constant rhythm) — the old rule called it
+a stream, the new one does not.
 
 ### 7. Optional / later
 
 **a. `client.realm` ground truth — SPIKE DONE (0.10.0), and the answer is no.**
-The premise was "lazer persists per-object hit events for local scores". For this
-install it does not: `client.realm` (14 MB) contains **no `HitEvent` type at all**
-(no such string anywhere; the schema stores `BeatmapInfo`, `Ruleset`,
-`TotalScore`, `MaxCombo`, `Accuracy`, `Statistics`...). What it *does* hold, per
-local score, is a **category-count map** of lazer's own hit results — e.g.
-`{"none":0,"miss":12,"meh":0,"ok":44,"great":406,"large_tick_hit":15,
-"ignore_hit":147,"slider_tail_hit":146}` — plus the **SHA-256 of the exported
-`.osr`** (89 of the author's exports match verbatim), so a score *can* in
-principle be linked to a replay.
+The premise was "lazer persists per-object hit events for local scores". It does
+not: `client.realm` contains **no `HitEvent` type at all** (no such string
+anywhere; the schema stores `BeatmapInfo`, `Ruleset`, `TotalScore`, `MaxCombo`,
+`Accuracy`, `Statistics`…). What it *does* hold, per local score, is a
+**category-count map** of lazer's own hit results — e.g.
+`{"none":0,"miss":12,"meh":0,"ok":44,"great":406,"large_tick_hit":15,`
+`"ignore_hit":147,"slider_tail_hit":146}` — plus the **SHA-256 of the exported
+`.osr`**, so a score *can* in principle be linked to a replay.
 
 Two things kill it as a practical source:
 
 1. **It is per category, not per object.** It could say "this play had 44 oks and
    146 slider tails", never *which* object was misjudged, so it cannot validate a
    per-object judgement — only the shape of the model.
-2. **Extracting it needs a Realm Core reader.** A strings-level harvest cannot pair
-   a stats map to its replay (verified: 32 candidate pairs, 0 matched their
-   replay's recorded counts — the file's string order is table-based, not
-   record-based), and the only Python package named `realm` on PyPI is an unrelated
-   project. A real reader means the .NET Realm SDK or hand-walking the file's
-   B-trees: a day's work for per-category data.
+2. **Extracting it needs a Realm Core reader.** A strings-level harvest cannot
+   pair a stats map to its replay (the file's string order is table-based, not
+   record-based), and the only Python package named `realm` on PyPI is an
+   unrelated project. A real reader means the .NET Realm SDK or hand-walking the
+   file's B-trees: a day's work for per-category data.
 
 **Decision: stop here.** The residual miss drift (a handful of plays, reported by
 `trust`) stays unexplained, and that is the honest state of the tool: the recorded
 counts are the only per-play truth available. One thing the spike *did* confirm in
 passing: `slider_tail_hit` exists as a first-class result type, separate from
-great/ok/meh/miss, which is consistent with the head-only model item 3 shipped
-(the .osr counts sum to the object count).
+great/ok/meh/miss, which is consistent with the head-only model item 3 shipped.
 
 **b. Percentile baselines — ✅ shipped in 0.10.0** (`report --history`,
 `metrics/baseline.py`). Three difficulty-normalised scalars with a rolling
 percentile over the stored runs: `timing_spread` (UR as a % of the 300-window —
 OD/DT-normalised), `miss_rate` (per 100 objects — length-normalised) and
 `aim_at_demand` (mean distance at the note, pooled over the 0.5-2.0 px/ms required
-speed band, so the demand is the same on every map). The report prints
-"No comparison: better than 87 % of 21 stored runs (median 63.6)" instead of only
-"UR 150 (good)", and says so plainly when there are fewer than 8 comparable runs.
-The frozen thresholds stay as the fallback (and as an absolute sanity check);
-`--no-history` turns the section off.
+speed band). The report prints "better than 87 % of 21 stored runs (median 63.6)"
+instead of only "UR 150 (good)", and says so plainly when there are fewer than 8
+comparable runs. The frozen thresholds stay as the fallback (and as an absolute
+sanity check); `--no-history` turns the section off.
 
 **c. Family taxonomy depth — not now.** With the judge validated and the
 cross-attempt layer in place this is the last structural item, but nothing in the
 data currently demands more taxonomy: the shape classes (item 2) plus
 `kind_divisor_spacing` already separate the material, and every extra bucket
 shrinks the n behind each rate. Revisit with a question, not a hunch.
+
+---
+
+## Known gaps in the critique tab
+
+- The model's answer is rendered in a `<pre>`, markdown and all, because the
+  project has no markdown renderer and adding a dependency for one panel was not
+  worth it in this pass. The deterministic side is text on purpose; the answer is
+  not, and it shows.
+- No "lens" selector (per-run / map / diet / timeframe) — one scope prompt serves
+  every selection, which works but blurs the wording for a one-replay critique.
+- The pickers page 40 rows at a time; deeper paging than the current filter has
+  no dedicated UI yet.
+
+## The most useful thing about this tool
+
+**The value is not the verdicts, it is that the per-object record plus the raw
+cursor frames let you ask what the hand actually did — and every real question
+so far has been answered that way, not by the built-in metrics.**
+
+Concretely, in order of leverage:
+
+1. `out/<tag>_objects.json` (the frozen schema) is the spine. One row per
+   object: time, position, `result`, `error_ms`, `aim_r`, `cursor_speed`,
+   `spacing_r`, `snap` (in **quarter-beats**), `bpm_eff`, `angle_deg`,
+   `strain_aim`, `strain_speed`. Bucket it and you can answer almost anything
+   without touching the replay again.
+2. When the question is about the **hand** rather than the taps, the two
+   re-derivation blocks are computed for every run: the cursor arrival
+   (`metrics.aim_mode`, docs/aim.md) and the miss autopsy (`metrics.autopsy`,
+   docs/autopsy.md — shape classes, arrival margin, press vs arrival, legs,
+   stutter, the misses themselves). Re-derive from the frames for anything they
+   do not cover; `scripts/autopsy.py` prints both for one replay, with figures.
+3. The **trust block is what makes the output usable.** It states the per-count
+   deltas against the game and refuses to let an untrustworthy judgement read as
+   fact. Keep that discipline: every new block should carry its own sample size
+   and a population gate, and the reports should never state a rate from an
+   n<10 bucket.
+4. Every diagnosis of substance comes from a **contrast**, not an absolute: same
+   map across attempts; shapes with corners vs shapes with reversals; cursor
+   arrival vs press timing. Prefer features that produce a contrast.
+
+## Working method
+
+```sh
+.venv/bin/python -m pytest -q                       # full suite, no network
+.venv/bin/osu-critique analyze <replay.osr> <map.osu> tag --charts
+.venv/bin/osu-critique report out/tag_metrics.json  # deterministic critique
+.venv/bin/python scripts/autopsy.py <replay.osr> --tag tag --out out/autopsy
+```
+
+Read `metrics["trust"]` first, always. Replays and maps are auto-paired by
+beatmap MD5 (lazer exports + its content-addressed store, stable on Windows, or
+`replays/` + `maps/` in the repo). Never commit an unanonymized `.osr`
+(`scripts/make_synthetic_fixtures.py --anonymize` exists), and keep personal
+coaching numbers out of the repo.
 
 ## Traps and environment quirks (learned the hard way)
 
@@ -602,21 +360,16 @@ shrinks the n behind each rate. Revisit with a question, not a hunch.
   written records rename them to `error_ms` / `aim_px` / `end_t`. `profile.py`
   has tolerant accessors (`hit_error`, `aim_px`, `end_time`) — reuse them.
 - **The judgement is measured, not argued**: `scripts/judge_drift.py` reports
-  the drift against the game's recorded counts over every replay it can pair
-  (55 on the author's box) and can sweep alternative rules. Change `classify()`
-  or the calibration only with that number in hand — the guard sweep is how the
-  1 ms edge guard was chosen (1470 L1 / 14 exact, vs 1943 / 1 with no guard).
+  the drift against the game's recorded counts over every replay it can pair and
+  can sweep alternative rules. Change `classify()` or the calibration only with
+  that number in hand — the guard sweep is how the 1 ms edge guard was chosen
+  (1470 L1 / 14 exact, vs 1943 / 1 with no guard).
 - **Population gates** must scale down on short maps: `min(20, max(8, 3 % of
-  objects))`. A fixed 20 hid the real target on a 174-object map.
+  objects))`. A fixed 20 hid the real target on a short map.
 - **Never conclude from n<10**, and quote n with every rate.
-- **git**: no global identity here — commits *and* annotated tags need
-  `-c user.name=ran -c user.email=id+ranelb@users.noreply.github.com`.
-  Push to `main`; the release workflow runs on tags.
-- **`Developer.shell` inside `execute_typescript` loses stdout** in this
-  environment; use the standalone shell tool for output-critical commands.
-- **Fixtures**: `tests/fixtures/` holds the author's anonymized replays and
-  synthetic edge cases. New features need new fixtures — ask for an export +
-  anonymize; do not commit unanonymized replays, and do not put personal
-  coaching numbers in the public repo. `out/` (analysis JSON/PNG) and
-  `tmp_maps/` (extracted `.osu`) hold the author's real numbers; both are
-  gitignored (`.gitignore:12-13`) and must never be committed.
+- **git**: push to `main`; the release workflow runs on tags.
+- **Fixtures**: `tests/fixtures/` holds anonymized replays and synthetic edge
+  cases. New features need new fixtures — ask for an export + anonymize; do not
+  commit unanonymized replays, and do not put personal coaching numbers in the
+  repo. `out/` (analysis JSON/PNG) and `tmp_maps/` (extracted `.osu`) hold real
+  numbers; both are gitignored and must never be committed.

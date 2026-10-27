@@ -206,8 +206,8 @@ block. Full pipeline: [docs/internals.md](docs/internals.md).
 
 ## Validation and trust
 
-`counts_detected` is judged against the game's own recorded counts: across the
-author's 55 stored replays the judgement reproduces **14 plays exactly** and
+`counts_detected` is judged against the game's own recorded counts: across a
+55-replay reference corpus the judgement reproduces **14 plays exactly** and
 drifts by a handful of objects on the rest. A 1 ms **edge guard** on the hit
 windows — the frame clock is floored to the millisecond — is what makes the
 slider-heavy plays agree. Where it cannot be sure, the `trust` block says so
@@ -229,7 +229,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 345 tests (6 need the author's replays, 76 need [web])
+pytest -q                     # 345 tests (6 need real replays, 76 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
@@ -245,7 +245,7 @@ pytest -q                     # 345 tests (6 need the author's replays, 76 need 
 - `scripts/judge_drift.py` — how far the judgement sits from the game's own
   counts, per replay and in total, with `--guard-sweep` to see what alternative
   window guards would do. This is the measurement every judgement change must be
-  re-run against (it is a development tool: it needs the author's replays).
+  re-run against (it is a development tool: it needs real replays).
 - `scripts/make_synthetic_fixtures.py` — regenerates the synthetic fixtures
   (including the Relax `synth_rx` pair) and can anonymize `.osr` player names
   (`--anonymize`).
@@ -261,7 +261,7 @@ convention, the calibration override, population gates).
 ## Privacy, attribution, and terms
 
 - Developed with heavy use of AI coding assistance.
-- Real replay fixtures are the author's own plays, **anonymized**
+- Real replay fixtures are locally captured plays, **anonymized**
   (`TestPlayer`); beatmap extracts are credited to their mappers in
   `tests/fixtures/ATTRIBUTION.md`.
 - The `profile` HTML-scrape fallback is **unofficial and opt-in only**

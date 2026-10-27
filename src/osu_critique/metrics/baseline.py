@@ -26,7 +26,7 @@ from __future__ import annotations
 
 MIN_RUNS = 8                # below this, "your history" is not a baseline
 AIM_BAND = (0.5, 2.0)       # the required-speed band aim is compared at, px/ms
-                            # (the "usable range" the author's own data ends at)
+                            # (the "usable range" the reference data ends at)
 
 METRICS = ("timing_spread", "miss_rate", "aim_at_demand")
 

@@ -37,7 +37,7 @@ def classify(error, w300, w100, w50, guard=EDGE_GUARD_MS):
     earlier than the time the game actually judged, so an error we measure at the
     window edge belongs to a press the game saw outside it.
 
-    The value is empirical and measured on the author's 55 stored replays: it is
+    The value is empirical and measured on a 55-replay reference corpus: it is
     the difference between 1 and 14 plays whose counts the tool reproduces
     *exactly*, and it halves the total drift (weighted L1 1943 -> 1470). The same
     evidence rejects a 0.5 ms guard (8 exact) and no guard at all (1 exact). See

@@ -24,7 +24,7 @@ scalars a list or map page filters, sorts and charts on**. The heavy blocks —
 `patterns`, `streams`, `sliders` — and the per-object records stay in the JSON
 artifact and are read on demand for exactly one run.
 
-Measured on the author's corpus (3 171 runs over 792 beatmaps): cold rebuild
+Measured on a 3 000-run reference corpus (792 beatmaps): cold rebuild
 4 s, no-op incremental sweep 0.1 s, 3.7 MB on disk. The first build walks the
 lazer content store once (~9 GB, reads 32 bytes per file) to resolve each
 beatmap md5 to its `.osu`; the resolved path is cached in `beatmaps.map_path`,
@@ -34,7 +34,7 @@ so later sweeps never pay it.
 
 | table | key | what |
 |---|---|---|
-| `runs` | `json_path` | one row per **artifact**. `run_id` is the replay md5 (or `tag:<tag>` for pre-schema files) and is **not** unique: 36 artifacts in the author's corpus are re-exports of 32 plays. |
+| `runs` | `json_path` | one row per **artifact**. `run_id` is the replay md5 (or `tag:<tag>` for pre-schema files) and is **not** unique: re-exports of one play produce several artifacts. |
 | `beatmaps` | `beatmap_md5` | `[Metadata]` + `[Events]` parsed from the `.osu` (title, artist, creator, version, ids, background, audio, mode) and the cover cache path. |
 | `annotations` | `note_id` | mirror of `out/annotations/<beatmap_md5>.json` (authored, canonical there; re-mirrored on every sweep). |
 | `critiques` | `run_id` | mirror of `out/critiques/<run_id>.json` (authored, canonical there; re-mirrored on every sweep). |

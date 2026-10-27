@@ -1,8 +1,8 @@
 """Stream detection by rhythm + velocity continuity (the spacing proxy retired).
 
 The old rule was ">=4 consecutive circles with <=4r spacing". These tests pin the
-two ways it misfired: it rejected wide-but-tight patterns (MONTAGEM's runs are ~6r
-wide, so it found 0 segments there) and it accepted runs whose *spacing* was
+two ways it misfired: it rejected wide-but-tight patterns (runs ~6r wide, where
+it found 0 segments) and it accepted runs whose *spacing* was
 small while the required speed swung wildly (spacing is a proxy for speed that
 only works when the gap is constant - which is exactly when it is not needed).
 """

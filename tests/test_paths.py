@@ -112,9 +112,9 @@ def test_batch_tags_are_unique_per_attempt():
     attempt's metrics and the cross-attempt view saw one play instead of two.
     """
     from osu_critique.cli import _tag_from_replay
-    a = "ran27 playing X - Song (Mapper) [Insane] (2026-09-15_16-54).osr"
-    b = "ran27 playing X - Song (Mapper) [Insane] (2026-09-24_17-39).osr"
-    c = "ran27 playing X - Song (Mapper) [Insane] (2026-09-24_17-39) (1).osr"
+    a = "TestPlayer playing X - Song (Mapper) [Insane] (2026-09-15_16-54).osr"
+    b = "TestPlayer playing X - Song (Mapper) [Insane] (2026-09-24_17-39).osr"
+    c = "TestPlayer playing X - Song (Mapper) [Insane] (2026-09-24_17-39) (1).osr"
     taken = set()                      # exactly how `batch` calls it
     tags = [_tag_from_replay(x, taken) for x in (a, b, c)]
     assert len(set(tags)) == 3
@@ -132,8 +132,8 @@ def test_batch_keeps_every_attempt_of_one_map(tmp_path):
     """The same map twice through `batch` leaves two metrics files behind."""
     from osu_critique.cli import _tag_from_replay
     taken = set()
-    names = ["ran27 playing X [Insane] (2026-09-15_16-54).osr",
-             "ran27 playing X [Insane] (2026-09-24_17-39).osr"]
+    names = ["TestPlayer playing X [Insane] (2026-09-15_16-54).osr",
+             "TestPlayer playing X [Insane] (2026-09-24_17-39).osr"]
     tags = [_tag_from_replay(n, taken) for n in names]
     for tag in tags:
         (tmp_path / f"{tag}_metrics.json").write_text("{}")

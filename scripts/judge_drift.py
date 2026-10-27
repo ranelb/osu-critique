@@ -12,7 +12,7 @@ request, what alternative window guards would do.
 
 Read it before touching ``classify()`` or the calibration: the counts are the
 only ground truth we have per play, and the drift is where a change shows up as
-a number. Note that the population is the *author's* replays, so this script is
+a number. Note that the population is a local replay corpus, so this script is
 a development tool, not something CI can run.
 """
 from __future__ import annotations

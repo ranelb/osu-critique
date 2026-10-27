@@ -1,8 +1,8 @@
 """Cross-attempt structure: is a weakness stable, or one-off noise?
 
 A single play says "these buckets were bad"; it cannot say whether they are a
-*weakness*. The author has repeated plays of the same maps (RASPUTIN, Passcode,
-overture), and the per-object schema carries ``beatmap_md5``, so the same map
+*weakness*. Players repeat the same maps, and the per-object schema carries
+``beatmap_md5``, so the same map
 across attempts is the strongest contrast the tool has (docs/ROADMAP.md item 4).
 
 This layer groups the metrics files by beatmap, orders the attempts by play time,

@@ -12,7 +12,7 @@ from osu_critique import profile as P
 # a trimmed real GET /users/{id}/osu response
 API_USER = {
     "id": 37788237,
-    "username": "ran27",
+    "username": "TestPlayer",
     "country_code": "DE",
     "join_date": "2025-04-21T16:42:13+00:00",
     "rank_highest": {"rank": 203418, "updated_at": "2026-10-06T12:48:49Z"},
@@ -50,13 +50,13 @@ def test_fetch_profile_api_flattens_statistics(monkeypatch):
             return payload
 
     monkeypatch.setattr(P.urllib.request, "urlopen", lambda *a, **k: _Resp())
-    st = P.fetch_profile_api("ran27", "id", "secret")
+    st = P.fetch_profile_api("TestPlayer", "id", "secret")
 
     assert st["pp"] == 3765.74
     assert st["global_rank"] == 203898
     assert st["play_count"] == 8730
     assert st["count_miss"] == 101925
-    assert st["username"] == "ran27"
+    assert st["username"] == "TestPlayer"
 
 
 def test_summarize_reads_the_flat_shape():

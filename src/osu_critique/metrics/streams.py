@@ -1,9 +1,9 @@
 """Stream/burst detection: rhythm continuity and velocity continuity.
 
 The old rule was ">=4 consecutive circles with <=4r spacing" - *spacing* standing
-in for speed, which misfires in both directions: it called 1/2 filler runs streams
-on Bang Bang (where the real speed material is 1/8 slider-jumps) and it was blind
-to slider-interleaved bursts (0 segments on MONTAGEM, whose runs are ~6r wide).
+in for speed, which misfires in both directions: it called wide-but-tight runs
+streams (where the real speed material is 1/8 slider-jumps) and it was blind to
+slider-interleaved bursts (0 segments on runs ~6r wide).
 
 A run is now found by what it *is*: consecutive objects whose gaps stay steady
 (within ``GAP_TOLERANCE`` of the running gap - the primitive the map profile

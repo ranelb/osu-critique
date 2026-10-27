@@ -16,7 +16,7 @@ osu-critique export                 # status: enabled? binary? how many .osr?
 osu-critique export --install       # fetch the pinned BeatmapExporter (sha256)
 osu-critique export --run           # actually export (needs export.enabled)
 osu-critique export --run --status ranked,loved
-osu-critique export --run --prune-player ran27
+osu-critique export --run --prune-player TestPlayer
 ```
 
 Why this exists: osu!lazer exposes no export interface — no CLI, no IPC — and
@@ -35,8 +35,8 @@ thousands of files:
 
 `export.statuses` empty means **no filter — export everything**. That matters:
 BeatmapExporter remembers its last filter, and a `status=ranked` left in its
-config silently hides loved/graveyard plays (it hid 171 of the author's plays
-from this corpus). With no statuses configured the command sends `reset` first,
+config silently hides loved/graveyard plays (it silently hid 171 plays from the
+reference corpus). With no statuses configured the command sends `reset` first,
 so the filter cannot linger.
 
 `--prune-player NAME` deletes exported replays whose filename does not start
@@ -83,8 +83,8 @@ timestamp — the late-export case (played last night, exported tonight).
 **Ingest** is the only expensive part: it lists exported `.osr` files newer than
 the marker, pairs them, analyses them and indexes them. A replay is skipped when
 its md5 is already in the index, so a second run is a no-op — that is what makes
-it safe on a timer. First-time backfill can be hundreds of replays (the author's
-was 171 replays / 156 s after the status filter was fixed).
+it safe on a timer. First-time backfill can be hundreds of replays (171 replays
+took 156 s once the status filter was fixed).
 
 The digest itself names the plays, compares a typical one against your history
 (timing spread as a share of the 300-window, and miss rate per 100 objects —

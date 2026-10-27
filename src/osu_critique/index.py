@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS meta (
 
 -- one row per analysed replay artifact; a projection, not a copy of the doc.
 -- The key is the artifact path, not the replay md5: re-exports of one play
--- exist (36 of them in the author's corpus) and dropping them silently would
+-- exist in real corpora) and dropping them silently would
 -- violate the tool's "drop nothing" rule. run_id is the query key (the replay
 -- md5, or "tag:<tag>" for pre-schema artifacts) and is not unique.
 CREATE TABLE IF NOT EXISTS runs (
@@ -290,7 +290,7 @@ def metrics_to_row(metrics: dict, json_path, objects_path=None,
         "time_base_overridden": 1 if tb.get("overridden") else 0,
         # absolute, always: the same artifact must not get two rows because the
         # CLI ran from the repo (``out/x``) and the service from anywhere
-        # (``/home/.../out/x``). This bit the systemd unit on first boot.
+        # (an absolute path from another cwd). This bit a long-running service.
         "json_path": os.path.abspath(os.fspath(json_path)) if json_path else None,
         "objects_path": os.path.abspath(os.fspath(objects_path)) if objects_path else None,
         "objects_missing": 0 if objects_path and os.path.isfile(objects_path) else 1,

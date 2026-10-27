@@ -16,9 +16,9 @@ all query these rows rather than re-deriving them. Skip it with `--no-objects`.
 ```json
 {
   "schema_version": 1,
-  "tag": "overture",
-  "player": "ran27",
-  "map": "overture [nymphe's extreme]",
+  "tag": "example",
+  "player": "TestPlayer",
+  "map": "Example Song [Extra]",
   "beatmap_md5": "413d503c3415f7626fbe5208a2d74c31",
   "mod_string": "NM",
   "counts_recorded": {"300": 161, "100": 18, "50": 0, "miss": 5},
@@ -56,7 +56,7 @@ all query these rows rather than re-deriving them. Skip it with `--no-objects`.
 | `slider_off_pct` | % | slider only: share of the slider body spent outside the follow circle; null on circles |
 
 The three `slider_*` fields are **measurements of the body**, not verdicts: the
-game does not degrade a slider whose body was cut on any of the author's replays
+game does not degrade a slider whose body was cut on any of the reference plays
 (measured: degrading them makes 15 of 19 slider-heavy plays worse), so they are
 reported and never change the judgement. See `docs/ROADMAP.md` item 3.
 
