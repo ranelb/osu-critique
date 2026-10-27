@@ -465,20 +465,20 @@ def llm(monkeypatch):
 
 def test_the_run_page_links_to_the_tab_and_has_no_generate_route(client):
     page = client.get("/run/" + "2" * 32).text
-    assert "/critique?runs=" + "2" * 32 in page
+    assert "/ask?runs=" + "2" * 32 in page
     assert 'id="critique-form"' not in page
     # generation lives in the tab now: the old route is gone, not merely hidden
-    assert client.post("/run/" + "2" * 32 + "/critique",
+    assert client.post("/run/" + "2" * 32 + "/ask",
                        follow_redirects=False).status_code == 404
 
 
 def test_a_critique_generated_in_the_tab_shows_on_the_run_page(client, llm):
-    client.post("/critique/generate", data={"runs": "2" * 32},
+    client.post("/ask/generate", data={"runs": "2" * 32},
                 headers={"accept": "text/event-stream"})
     page = client.get("/run/" + "2" * 32).text
     assert FAKE_TEXT in page
     assert "test-model" in page
-    assert "generated in the critique tab" in page
+    assert "generated on the ask page" in page
     assert "permalink" in page
     # nothing was written under the old per-run key
     assert not (Path(client.app.state.outdir) / "critiques" / ("2" * 32 + ".json")).exists()
@@ -486,7 +486,7 @@ def test_a_critique_generated_in_the_tab_shows_on_the_run_page(client, llm):
 
 def legacy_sidecar(client, run_id="2" * 32, body=FAKE_TEXT):
     """What the old framework left behind: written directly, never regenerated."""
-    from osu_critique import critiques
+    from osu_critique import answers, critiques
 
     out = Path(client.app.state.outdir)
     doc = json.loads((out / "a2_metrics.json").read_text())
@@ -504,7 +504,7 @@ def test_a_legacy_per_run_critique_is_read_only(client):
     assert FAKE_TEXT in page
     assert "older per-run framework" in page
     assert 'id="critique-form"' not in page          # no regenerate button
-    assert ("/critique?runs=" + "2" * 32) in page    # and the way out of here
+    assert ("/ask?runs=" + "2" * 32) in page    # and the way out of here
 
 
 def test_a_changed_run_marks_a_legacy_critique_stale(client):
@@ -553,14 +553,14 @@ def test_llm_remote_false_refuses_non_loopback_clients(tmp_path, monkeypatch, ll
     app = create_app(outdir=out, index_on_boot=False)
 
     remote = TestClient(app)                      # host "testclient"
-    r = remote.post("/critique/generate", data={"maps": MAP_A},
+    r = remote.post("/ask/generate", data={"maps": MAP_A},
                     headers={"accept": "text/event-stream"}, follow_redirects=False)
     assert r.status_code == 403 and "local-only" in r.json()["detail"]
     # reading is still open
     assert remote.get("/run/" + "2" * 32).status_code == 200
 
     local = TestClient(app, client=("127.0.0.1", 5000))
-    r = local.post("/critique/generate", data={"maps": MAP_A},
+    r = local.post("/ask/generate", data={"maps": MAP_A},
                    headers={"accept": "text/event-stream"}, follow_redirects=False)
     assert r.status_code == 200
 
@@ -813,7 +813,7 @@ def test_static_assets_are_cache_busted_by_version(client):
 # -------------------------------------------------------- critique tab -----
 
 def test_the_tab_offers_the_pickers_and_an_empty_selection(client):
-    resp = client.get("/critique")
+    resp = client.get("/ask")
     assert resp.status_code == 200
     page = resp.text
     assert 'id="tray"' in page
@@ -828,7 +828,7 @@ def test_a_selection_renders_the_summary_and_an_add_url_per_row(client):
     assert "range" in page and "everything since 2026-09-01" in page
     assert "## Overview" in page
     assert "## Maps, busiest first" in page
-    assert 'href="/critique?runs=' in page          # an add link per replay row
+    assert 'href="/ask?runs=' in page          # an add link per replay row
 
 
 def test_a_map_selection_expands_to_every_attempt(client):
@@ -838,50 +838,50 @@ def test_a_map_selection_expands_to_every_attempt(client):
 
 
 def test_generating_stores_the_answer_and_the_summary(client, llm):
-    r = client.post("/critique/generate",
+    r = client.post("/ask/generate",
                     data={"runs": "", "maps": MAP_A, "since": "", "until": ""},
                     headers={"accept": "text/event-stream"})
     assert r.status_code == 200
     assert "data: " in r.text and "[DONE]" in r.text
-    from osu_critique import critiques, index as index_mod
+    from osu_critique import answers, critiques, index as index_mod
 
-    scopes = critiques.all_scopes(client.app.state.outdir)
+    scopes = answers.all_answers(client.app.state.outdir)
     assert len(scopes) == 1
     doc = scopes[0]
     assert doc["n_runs"] == 3
     assert "## Overview" in doc["text"]             # the summary is stored
     assert doc["body"]                              # and so is the answer
 
-    page = client.get("/critique/" + doc["hash"])
+    page = client.get("/ask/" + doc["hash"])
     assert page.status_code == 200
     assert "the summary it read" in page.text
     assert doc["body"][:40] in page.text
 
     # the saved list reads the (disposable) mirror, so generating must refresh it
-    tab = client.get("/critique").text
-    assert "saved critiques" in tab
+    tab = client.get("/ask").text
+    assert "saved answers" in tab
     assert doc["hash"] in tab
 
 
 def test_the_same_selection_does_not_pay_twice(client, llm):
-    first = client.post("/critique/generate",
+    first = client.post("/ask/generate",
                         data={"maps": MAP_A}, headers={"accept": "text/event-stream"})
     assert first.status_code == 200
-    second = client.post("/critique/generate", data={"maps": MAP_A},
+    second = client.post("/ask/generate", data={"maps": MAP_A},
                          follow_redirects=False)
     assert second.status_code in (303, 307)         # straight to the stored artifact
 
 
 def test_a_stored_critique_can_be_deleted(client, llm):
-    client.post("/critique/generate", data={"maps": MAP_A},
+    client.post("/ask/generate", data={"maps": MAP_A},
                 headers={"accept": "text/event-stream"})
-    from osu_critique import critiques
+    from osu_critique import answers, critiques
 
-    digest = critiques.all_scopes(client.app.state.outdir)[0]["hash"]
-    r = client.post(f"/critique/{digest}/delete", follow_redirects=False)
+    digest = answers.all_answers(client.app.state.outdir)[0]["hash"]
+    r = client.post(f"/ask/{digest}/delete", follow_redirects=False)
     assert r.status_code in (303, 307)
-    assert critiques.load_scope(client.app.state.outdir, digest) is None
-    assert client.get("/critique/" + digest).status_code == 404
+    assert answers.load(client.app.state.outdir, digest) is None
+    assert client.get("/ask/" + digest).status_code == 404
 
 
 def test_generating_without_a_key_says_why(client, monkeypatch):
@@ -889,7 +889,7 @@ def test_generating_without_a_key_says_why(client, monkeypatch):
     monkeypatch.setattr(config_mod, "llm_key", lambda: None)
     page = client.get("/critique?maps=" + MAP_A).text
     assert "No LLM key configured" in page
-    r = client.post("/critique/generate", data={"maps": MAP_A},
+    r = client.post("/ask/generate", data={"maps": MAP_A},
                     headers={"accept": "text/event-stream"})
     assert r.status_code == 400 and "OSU_LLM_KEY" in r.json()["detail"]
 
@@ -900,7 +900,7 @@ def test_an_oversized_selection_warns_and_still_sends(client, llm, monkeypatch):
     page = client.get("/critique?maps=" + MAP_A).text
     assert "above the" in page and "guideline" in page
     assert "generate anyway" in page                 # the button is still there
-    r = client.post("/critique/generate", data={"maps": MAP_A},
+    r = client.post("/ask/generate", data={"maps": MAP_A},
                     headers={"accept": "text/event-stream"})
     assert r.status_code == 200                      # warned, not blocked
     assert "[DONE]" in r.text
@@ -953,21 +953,21 @@ def test_a_picked_replay_is_excluded_in_the_query_not_after_it(client):
 def test_the_fragment_route_returns_rows_and_a_fresh_sentinel(client, monkeypatch):
     import osu_critique.web.app as app_mod
     monkeypatch.setattr(app_mod, "PICKER_PAGE", 2)
-    page = client.get("/critique").text
+    page = client.get("/ask").text
     assert "data-more=" in page                     # the sentinel that arms scroll
-    r = client.get("/critique/rows", params={"kind": "runs", "offset": 0, "mq": ""})
+    r = client.get("/ask/rows", params={"kind": "runs", "offset": 0, "mq": ""})
     assert r.status_code == 200
     assert 'class="pick"' in r.text
     # the next sentinel keeps the selection and moves the offset
     assert "offset=2" in r.text
-    last = client.get("/critique/rows", params={"kind": "runs", "offset": 2})
+    last = client.get("/ask/rows", params={"kind": "runs", "offset": 2})
     assert "data-more=" not in last.text            # nothing left to fetch
     assert "that is everything" in last.text
-    assert client.get("/critique/rows", params={"kind": "nope"}).status_code == 400
+    assert client.get("/ask/rows", params={"kind": "nope"}).status_code == 400
 
 
 def test_the_fragment_route_keeps_the_current_selection(client):
-    r = client.get("/critique/rows", params={"kind": "maps", "offset": 0,
+    r = client.get("/ask/rows", params={"kind": "maps", "offset": 0,
                                              "maps": MAP_A, "mods": "NM"})
     assert r.status_code == 200
     assert "mods=NM" in r.text                       # add links keep the filter
@@ -992,3 +992,37 @@ def test_a_duplicate_export_appears_once_in_the_picker(tmp_path):
     ids = [r["run_id"] for r in page["runs"]]
     assert len(ids) == len(set(ids))
     assert ids.count("2" * 32) == 1
+
+
+def test_the_answer_keeps_the_question_it_was_asked(client, llm):
+    r = client.post("/ask/generate",
+                    data={"maps": MAP_A, "q": "did I get better at 1/2 jumps?"},
+                    headers={"accept": "text/event-stream"})
+    assert r.status_code == 200
+    from osu_critique import answers
+
+    doc = answers.all_answers(client.app.state.outdir)[0]
+    assert doc["question"] == "did I get better at 1/2 jumps?"
+    assert "## The question" in doc["text"]
+    page = client.get("/ask/" + doc["hash"]).text
+    assert "did I get better at 1/2 jumps?" in page
+    assert 'class="question"' in page
+    # the same selection without the question is a different artifact
+    plain = client.post("/ask/generate", data={"maps": MAP_A},
+                        headers={"accept": "text/event-stream"})
+    assert plain.status_code == 200
+    assert len(answers.all_answers(client.app.state.outdir)) == 2
+
+
+def test_the_old_critique_urls_redirect_and_keep_the_query(client):
+    r = client.get("/critique?since=7d&q=hello", follow_redirects=False)
+    assert r.status_code == 301
+    assert r.headers["location"] == "/ask?since=7d&q=hello"
+    r = client.get("/critique/" + "a" * 64, follow_redirects=False)
+    assert r.status_code == 301 and r.headers["location"] == "/ask/" + "a" * 64
+
+
+def test_the_tab_is_named_ask_and_the_run_page_points_at_it(client):
+    assert '<a href="/ask">ask</a>' in client.get("/").text
+    page = client.get("/run/" + "2" * 32).text
+    assert "/ask?runs=" + "2" * 32 in page

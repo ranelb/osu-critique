@@ -1,3 +1,3 @@
 """osu-critique: data-driven osu! replay analysis."""
 
-__version__ = "0.24.3"
+__version__ = "0.25.0"

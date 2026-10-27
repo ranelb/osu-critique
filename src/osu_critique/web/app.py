@@ -27,7 +27,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import __version__, annotations, coach, covers, critiques, digest, index, scope
+from .. import (__version__, annotations, answers, coach, covers, critiques,
+                digest, index, scope)
 from ..config import outdir as default_outdir
 from . import data
 
@@ -225,7 +226,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             stored, page["metrics"], flat, load_system_prompt())
         # the tab is the only generator: for a one-run selection it stores a scope
         # artifact, and that is what this page shows when it exists
-        system = coach.load_scope_prompt()
+        system = coach.load_ask_prompt()
         scope_conn = index.open_readonly(out)
         built = None
         if scope_conn is not None:
@@ -237,8 +238,8 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             finally:
                 scope_conn.close()
         page["scope_hash"] = built["hash"] if built else None
-        page["scope_critique"] = (critiques.load_scope(out, built["hash"])
-                                  if built else None)
+        page["scope_answer"] = (answers.load(out, built["hash"])
+                                if built else None)
         page["llm_available"] = bool(_llm_key())
         page["llm_allowed"] = _llm_allowed(request)
         page["toc"] = data.run_toc(page)
@@ -268,74 +269,75 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             text, headers={"Content-Disposition": f'inline; filename="{run_id}.txt"'})
 
 
-    # ----------------------------------------------------------- critique --
+    # ---------------------------------------------------------------- ask --
 
     def _selection_state(request: Request, **extra):
-        """Resolve the query into a selection, the built text, and every URL.
+        """Resolve the query into a selection, the built summary, and every URL.
 
-        The selection is the URL; nothing is remembered between requests. Each
-        candidate row carries the link that adds it, each tray chip the link
-        that removes it, so the picker needs no client-side state.
+        The selection and the question are the URL; nothing is remembered between
+        requests. Each candidate row carries the link that adds it, each tray chip
+        the link that removes it, so the picker needs no client-side state.
         """
         selection = scope.from_query(request.query_params)
         conn = index.open_readonly(out)
         if conn is None:
             return None
         try:
-            built = scope.build(conn, out, selection, system=coach.load_scope_prompt())
+            built = scope.build(conn, out, selection, system=coach.load_ask_prompt())
             picked = {r["run_id"] for r in built["rows"]}
             picked_maps = {r["beatmap_md5"] for r in built["rows"]}
             mq = request.query_params.get("mq") or ""
             candidates = data.critique_candidates(
                 conn, picked, picked_maps, mq, limit=PICKER_PAGE)
-            saved = data.scope_critiques(conn)
+            saved = data.answers(conn)
         finally:
             conn.close()
 
-        def url(**changes):
+        def query_for(changes):
             merged = dict(selection)
             merged.update(changes)
-            return "/critique?" + urlencode(
+            return "/ask?" + urlencode(
                 {k: ",".join(v) if isinstance(v, list) else (v or "")
                  for k, v in merged.items() if v})
 
         tray = []
         for run_id in selection["runs"]:
             tray.append({"label": run_id, "kind": "replay",
-                         "remove": url(runs=[r for r in selection["runs"]
-                                             if r != run_id])})
+                         "remove": query_for({"runs": [r for r in selection["runs"]
+                                                       if r != run_id]})})
         for md5 in selection["maps"]:
             row = next((r for r in built["rows"] if r["beatmap_md5"] == md5), None)
             tray.append({"label": (row or {}).get("map_name") or md5, "kind": "map",
-                         "remove": url(maps=[m for m in selection["maps"]
-                                             if m != md5])})
+                         "remove": query_for({"maps": [m for m in selection["maps"]
+                                                       if m != md5]})})
         if selection["since"] or selection["until"]:
             tray.append({"label": " · ".join(x for x in (
                 scope._PRESET_LABEL.get(selection["since"], selection["since"])
                 or "", selection["until"] and f"until {selection['until']}" or "")
-                if x), "kind": "range", "remove": url(since=None, until=None)})
-
-        for row in candidates["runs"]:
-            row["add"] = url(runs=selection["runs"] + [row["run_id"]])
-        for row in candidates["maps"]:
-            row["add"] = url(maps=selection["maps"] + [row["md5"]])
+                if x), "kind": "range", "remove": query_for({"since": None, "until": None})})
         if selection["mods"]:
             tray.append({"label": f"only {selection['mods']} plays", "kind": "mods",
-                         "remove": url(mods=None)})
-        mod_chips = [{"label": "any", "add": url(mods=None),
+                         "remove": query_for({"mods": None})})
+
+        for row in candidates["runs"]:
+            row["add"] = query_for({"runs": selection["runs"] + [row["run_id"]]})
+        for row in candidates["maps"]:
+            row["add"] = query_for({"maps": selection["maps"] + [row["md5"]]})
+        mod_chips = [{"label": "any", "add": query_for({"mods": None}),
                       "on": not selection["mods"]}]
         for key in scope.MOD_FILTERS:
-            mod_chips.append({"label": key, "add": url(mods=key),
+            mod_chips.append({"label": key, "add": query_for({"mods": key}),
                               "on": selection["mods"] == key})
+        presets = [{"label": label, "add": query_for({"since": key, "until": None})}
+                   for key, label in (("today", "today"), ("session", "this session"),
+                                      ("7d", "last 7 days"), ("30d", "last 30 days"))]
+
         def rows_url(kind, offset):
             params = {"kind": kind, "offset": offset, "mq": mq}
             params.update({k: (",".join(v) if isinstance(v, list) else (v or ""))
                            for k, v in selection.items() if v})
-            return "/critique/rows?" + urlencode(params)
+            return "/ask/rows?" + urlencode(params)
 
-        presets = [{"label": label, "add": url(since=key, until=None)}
-                   for key, label in (("today", "today"), ("session", "this session"),
-                                      ("7d", "last 7 days"), ("30d", "last 30 days"))]
         return {"selection": selection, "built": built, "tray": tray,
                 "candidates": candidates, "saved": saved, "presets": presets,
                 "mod_chips": mod_chips,
@@ -345,26 +347,29 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
                               if candidates["runs_more"] else None),
                 "maps_next": (rows_url("maps", PICKER_PAGE)
                               if candidates["maps_more"] else None),
-                "clear": "/critique", "mq": mq,
+                "clear": "/ask", "mq": mq,
+                "question": selection.get("question") or "",
+                "clear_question": query_for({"question": None}),
                 "form": {"runs": ",".join(selection["runs"]),
                          "maps": ",".join(selection["maps"]),
                          "since": selection["since"] or "",
-                         "until": selection["until"] or ""}}
+                         "until": selection["until"] or "",
+                         "q": selection.get("question") or ""}}
 
-    @app.get("/critique", response_class=HTMLResponse)
-    def critique_page(request: Request):
+    @app.get("/ask", response_class=HTMLResponse)
+    def ask_page(request: Request):
         state = _selection_state(request)
         if state is None:
             return render("empty.html", request)
-        return render("critique.html", request, **state,
+        return render("ask.html", request, **state,
                       max_bytes=scope.MAX_TEXT_BYTES,
-                      stored=critiques.load_scope(out, state["built"]["hash"]) is not None,
+                      stored=answers.load(out, state["built"]["hash"]) is not None,
                       llm_available=bool(_llm_key()),
                       llm_allowed=_llm_allowed(request))
 
-    @app.get("/critique/rows", response_class=HTMLResponse)
-    def critique_rows(request: Request, kind: str = "runs", offset: int = 0,
-                      mq: str = ""):
+    @app.get("/ask/rows", response_class=HTMLResponse)
+    def ask_rows(request: Request, kind: str = "runs", offset: int = 0,
+                 mq: str = ""):
         """The next page of one picker list, as HTML rows plus a fresh sentinel."""
         if kind not in ("runs", "maps"):
             raise HTTPException(status_code=400, detail="kind is 'runs' or 'maps'")
@@ -385,7 +390,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         rows = page["runs"] if kind == "runs" else page["maps"]
         more = page["runs_more"] if kind == "runs" else page["maps_more"]
         for row in rows:
-            row["add"] = "/critique?" + urlencode(
+            row["add"] = "/ask?" + urlencode(
                 {k: ",".join(v) if isinstance(v, list) else (v or "")
                  for k, v in dict(selection,
                                   runs=(selection["runs"] + [row["run_id"]]) if kind == "runs"
@@ -397,32 +402,32 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
                        for k, v in selection.items() if v})
         return render("partials/pickrows_body.html", request, rows=rows,
                       more=more, kind=kind,
-                      next_url="/critique/rows?" + urlencode(params))
+                      next_url="/ask/rows?" + urlencode(params))
 
-    @app.get("/critique/{digest}", response_class=HTMLResponse)
-    def critique_artifact(request: Request, digest: str):
-        doc = critiques.load_scope(out, digest)
+    @app.get("/ask/{digest}", response_class=HTMLResponse)
+    def ask_artifact(request: Request, digest: str):
+        doc = answers.load(out, digest)
         if doc is None:
-            raise HTTPException(status_code=404, detail="no such critique")
-        return render("critique_artifact.html", request, doc=doc,
+            raise HTTPException(status_code=404, detail="no such answer")
+        return render("ask_artifact.html", request, doc=doc,
                       selection=doc.get("selection") or {},
-                      reopen="/critique?" + urlencode(
+                      reopen="/ask?" + urlencode(
                           {k: ",".join(v) if isinstance(v, list) else (v or "")
                            for k, v in (doc.get("selection") or {}).items() if v}))
 
-    @app.post("/critique/generate")
-    def critique_generate(request: Request, runs: str = Form(""),
-                          maps: str = Form(""), since: str = Form(""),
-                          until: str = Form("")):
+    @app.post("/ask/generate")
+    def ask_generate(request: Request, runs: str = Form(""),
+                     maps: str = Form(""), since: str = Form(""),
+                     until: str = Form(""), q: str = Form("")):
         if not _llm_allowed(request):
             raise HTTPException(status_code=403,
                                 detail="LLM routes are local-only (web.llm_remote = false)")
         if not _llm_key():
             raise HTTPException(status_code=400, detail=(
                 "no LLM key configured: run `osu-critique setup` or set OSU_LLM_KEY"))
-        selection = scope.from_query({"runs": runs, "maps": maps,
-                                      "since": since, "until": until})
-        system = coach.load_scope_prompt()
+        selection = scope.from_query({"runs": runs, "maps": maps, "since": since,
+                                      "until": until, "q": q})
+        system = coach.load_ask_prompt()
         conn = index.open_readonly(out)
         if conn is None:
             raise HTTPException(status_code=404, detail="no index")
@@ -431,28 +436,31 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         finally:
             conn.close()
         # A large selection is sent anyway: the owner asked for a warning, not a
-        # gate. The panel shows the number before the click; the model decides.
+        # gate. The panel shows the number before the click.
         digest = built["hash"]
-        if critiques.load_scope(out, digest) is not None:
-            return _redirect(f"/critique/{digest}")
+        if answers.load(out, digest) is not None:
+            return _redirect(f"/ask/{digest}")
         if "text/event-stream" in request.headers.get("accept", ""):
             return StreamingResponse(
-                _stream_scope(digest, built, selection, system),
+                _stream_answer(digest, built, selection, system),
                 media_type="text/event-stream",
                 headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-        from ..coach import generate_critique
         try:
-            text, model = generate_critique(system, built["text"])
+            text, model = coach.generate_critique(system, built["text"])
         except RuntimeError as exc:
             raise HTTPException(status_code=502, detail=str(exc))
-        critiques.save_scope(out, critiques.build_scope(
-            digest=digest, text=built["text"], selection=selection, system=system,
-            model=model, body=text, n_runs=built["n_runs"],
-            n_maps=built["n_maps"], first=built["first"], last=built["last"]))
-        _sync_notes()
-        return _redirect(f"/critique/{digest}")
+        _save_answer(digest, built, selection, system, model, text)
+        return _redirect(f"/ask/{digest}")
 
-    def _stream_scope(digest, built, selection, system):
+    def _save_answer(digest, built, selection, system, model, text):
+        answers.save(out, answers.build(
+            digest=digest, text=built["text"], selection=selection,
+            system=system, model=model, body=text, n_runs=built["n_runs"],
+            n_maps=built["n_maps"], first=built["first"], last=built["last"],
+            question=selection.get("question")))
+        _sync_notes()
+
+    def _stream_answer(digest, built, selection, system):
         q: queue.Queue = queue.Queue()
         result: dict = {}
 
@@ -476,21 +484,26 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             yield "data: " + json.dumps({"error": result["error"]}) + "\n\n"
             yield "data: [DONE]\n\n"
             return
-        critiques.save_scope(out, critiques.build_scope(
-            digest=digest, text=built["text"], selection=selection, system=system,
-            model=result.get("model"), body=result.get("text") or "",
-            n_runs=built["n_runs"], n_maps=built["n_maps"],
-            first=built["first"], last=built["last"]))
-        _sync_notes()
+        _save_answer(digest, built, selection, system, result.get("model"),
+                     result.get("text") or "")
         yield "data: " + json.dumps({"done": True, "hash": digest,
-                                     "url": f"/critique/{digest}"}) + "\n\n"
+                                     "url": f"/ask/{digest}"}) + "\n\n"
         yield "data: [DONE]\n\n"
 
-    @app.post("/critique/{digest}/delete")
-    def critique_delete(digest: str):
-        critiques.remove_scope(out, digest)
+    @app.post("/ask/{digest}/delete")
+    def ask_delete(digest: str):
+        answers.remove(out, digest)
         _sync_notes()
-        return _redirect("/critique")
+        return _redirect("/ask")
+
+    # Old links and bookmarks keep working: the page changed its name, not its job.
+    @app.get("/critique")
+    def old_critique(request: Request):
+        return RedirectResponse("/ask?" + request.url.query, status_code=301)
+
+    @app.get("/critique/{digest}")
+    def old_critique_artifact(digest: str):
+        return RedirectResponse(f"/ask/{digest}", status_code=301)
 
     # -------------------------------------------------------------- json --
 
@@ -594,7 +607,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             try:
                 index.sync_annotations(conn, out)
                 index.sync_critiques(conn, out)
-                index.sync_scope_critiques(conn, out)
+                index.sync_answers(conn, out)
                 conn.commit()
             finally:
                 conn.close()

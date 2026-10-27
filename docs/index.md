@@ -37,7 +37,8 @@ so later sweeps never pay it.
 | `runs` | `json_path` | one row per **artifact**. `run_id` is the replay md5 (or `tag:<tag>` for pre-schema files) and is **not** unique: re-exports of one play produce several artifacts. |
 | `beatmaps` | `beatmap_md5` | `[Metadata]` + `[Events]` parsed from the `.osu` (title, artist, creator, version, ids, background, audio, mode) and the cover cache path. |
 | `annotations` | `note_id` | mirror of `out/annotations/<beatmap_md5>.json` (authored, canonical there; re-mirrored on every sweep). |
-| `critiques` | `run_id` | mirror of `out/critiques/<run_id>.json` (authored, canonical there; re-mirrored on every sweep). |
+| `critiques` | `run_id` | mirror of `out/critiques/<run_id>.json` — the legacy per-run critiques (authored, canonical there; re-mirrored on every sweep). |
+| `answers` | `hash` | metadata mirror of `out/answers/<hash>.json` — the summaries and answers the ask page stores. Bodies stay on disk and are read when opened. |
 
 Authored data is the one thing that is not derived. Deleting the database does
 not delete an annotation or a stored critique; they are re-read from their

@@ -1,19 +1,23 @@
-# Stored critiques
+# Ask, and the answers it stores
 
-There are two kinds, and they are not the same artifact:
+`/ask` is the page; the text it builds is the **summary**; what a model says about
+it is the **answer**. "Critique" below means the older, per-run thing.
 
-- **A scope critique** — the critique tab, `osu-critique critique`. It is about a
-  *selection*: replays, whole maps, a date range, or any mix. The model reads one
-  deterministic text and nothing else. This is the current path (0.23.0).
+There are two kinds of stored artifact, and they are not the same:
+
+- **An answer** — the ask page, `osu-critique ask`. It is about a *selection*:
+  replays, whole maps, a date range, or any mix, plus an optional question. The
+  model reads one deterministic text and nothing else. This is the current path
+  (0.25.0).
 - **A per-run critique** — `osu-critique coach --save`, written before 0.23.0. It
   was built from a metrics-JSON prompt. The web no longer generates these; it
   still shows the ones that exist, read-only and labelled, because they are
   authored text that was paid for.
 
-The run page's **critique this run** button is gone: it now links into the tab
-with the run pre-selected, and shows whatever is stored for that run.
+The run page's **critique this run** button is gone: it links to `/ask` with the
+run pre-selected, and shows whatever is stored for that run.
 
-## Scope critiques
+## The summary, and the question
 
 A selection is additive and deduplicated: `--runs a,b`, `--maps <md5>,<md5>`
 (every attempt of those maps), and a range that reads **`played_at`** — when you
@@ -27,6 +31,13 @@ a filter, and silently dropping it would be a bug you only notice from the count
 `NM` means *no mods at all*; every other value is a substring of the stored
 `mod_string`, so `DT` also catches `HDDT`.
 
+A question is optional and lives in the URL (`?q=`). It is written into the text
+as `## The question`, **before** the header and the tables: it is what the text is
+for, and a model told "here is a wall of tables, the question is at the end"
+treats the question as an afterthought. It is therefore also part of the hash —
+the same selection with a different question is a different artifact, which is
+correct, because it is a different request.
+
 `scope.py` resolves the selection and renders **one text**. That text is the
 page's summary section, the model's entire input, and the thing stored in the
 artifact — there is no second formatter and no raw metrics in the prompt.
@@ -35,13 +46,15 @@ Sizing, because a selection has no natural bound:
 
 | | |
 |---|---|
+| patterns over time | per family and shape class, first third vs last third, gated at 20 objects per end — the evidence a "did I get better" question needs |
 | full per-replay reports | up to 10 runs |
 | above that | overview + per-map table (top 40 by plays) + per-run table (newest 120) + the cross-attempt stability block |
 | omission | counted in the header, so the model knows what it was not given |
 | warning | above 300 KB of text: the page says so and the button reads "generate anyway" — nothing is blocked, because a big selection is the owner's call, not the tool's |
 
-Stored at `out/critiques/scope/<hash>.json`, where the hash covers **the text and
-the system prompt**. The same selection over the same corpus is the same artifact,
+Stored at `out/answers/<hash>.json` (before 0.25.0: `out/critiques/scope/`; those
+files are moved, not rewritten, the first time the directory is touched, and both
+locations are read), where the hash covers **the text and the system prompt**. The same selection over the same corpus is the same artifact,
 so a second click opens the stored answer instead of paying again; a re-analysed
 replay or a new note changes the text, which is a different artifact by
 definition. There is no "stale" state for these — that is the point of hashing.
@@ -51,16 +64,17 @@ later next to exactly the input it was given.
 
 ```json
 {
- "schema_version": 1, "kind": "scope", "hash": "…",
+ "schema_version": 1, "kind": "answer", "hash": "…",
  "created": "…", "model": "deepseek-v4-flash", "prompt_hash": "…", "system": "…",
  "selection": {"runs": [], "maps": ["7f2830e4…"], "since": "7d", "until": null},
+ "question": "did I get better at 1/2 jumps?",
  "n_runs": 47, "n_maps": 39, "first_played": "…", "last_played": "…",
- "bytes": 18301, "text": "# Critique selection …", "body": "…"
+ "bytes": 18301, "text": "# Selection summary …", "body": "…"
 }
 ```
 
-`index.sqlite` mirrors the **metadata only** (`scope_critiques`: hash, created,
-model, counts, span, size, path — schema v5): the bodies are tens of kilobytes
+`index.sqlite` mirrors the **metadata only** (`answers`: hash, created, model,
+question, counts, span, size, path — schema v6): the bodies are tens of kilobytes
 and are read from the file when a critique is opened. An index from an older
 release is rebuilt on the next server start; `osu-critique index --rebuild` does
 it by hand.
@@ -68,9 +82,10 @@ it by hand.
 ### From a terminal
 
 ```bash
-osu-critique critique --since 7d                    # the deterministic text
-osu-critique critique --maps <md5> --until 2026-10-20
-osu-critique critique --maps <md5> --llm            # call + store + print
+osu-critique ask --since 7d                          # the summary text
+osu-critique ask --maps <md5> --until 2026-10-20 \
+    -q "did I get better at 1/2 jumps?"              # the question goes in the text
+osu-critique ask --maps <md5> --llm                  # call + store + print
 ```
 
 Same builder, same hash, same sidecar as the tab.

@@ -4,7 +4,7 @@ For contributors picking this up. Read this file, then `docs/profile.md` and
 `docs/object_schema.md`. It records the decisions already made, the items still
 open, and the traps that have bitten.
 
-State: **0.24.3** (tag `v0.24.3` is the last published release); 345 tests green
+State: **0.25.0** (tag `v0.25.0` is the last published release); 351 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need real replays), CI on Python
 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
@@ -19,7 +19,7 @@ stored LLM critiques with staleness hashes, an opt-in export and a deterministic
 digest with a real feed, and per-run near-miss boards.
 
 Where each piece lives: `docs/index.md` (the projection), `docs/web.md` (pages,
-routes, boards), `docs/annotations.md`, `docs/critiques.md`, `docs/export.md`
+routes, boards), `docs/annotations.md`, `docs/ask.md`, `docs/export.md`
 (export, digest, feed).
 
 **Not now, deliberately** — the fence, so scope cannot quietly grow: replay
@@ -41,7 +41,7 @@ it does not need a schema change.
   and that text is the model's entire input. Up to 10 runs get full per-replay
   reports, above that it degrades to overview + per-map table + per-run table +
   cross-attempt stability, and the header counts what was left out. Stored at
-  `out/critiques/scope/<hash>.json`, hashed over text + prompt, with the text
+  `out/critiques/scope/<hash>.json` (now `out/answers/<hash>.json`), hashed over text + prompt, with the text
   inside. `index.sqlite` mirrors metadata only.
 - **0.22.x — decluttering.** A left rail and five folds; the run page dropped
   from 7.5 screens with 715 numbers to 1.9 screens and 206 words with everything

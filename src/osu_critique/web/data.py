@@ -313,14 +313,14 @@ def critique_candidates(conn, picked_runs: set, picked_maps: set, query: str = "
             "runs_more": runs_more, "maps_more": maps_more}
 
 
-def scope_critiques(conn, limit: int = 50) -> list[dict]:
-    """Stored scope critiques, newest first — the metadata mirror, not the files."""
+def answers(conn, limit: int = 50) -> list[dict]:
+    """Stored answers, newest first — the metadata mirror, not the files."""
     try:
         rows = conn.execute(
-            "SELECT hash, created, model, n_runs, n_maps, first_played, last_played, "
-            "bytes FROM scope_critiques ORDER BY created DESC, hash LIMIT ?",
+            "SELECT hash, created, model, question, n_runs, n_maps, first_played, "
+            "last_played, bytes FROM answers ORDER BY created DESC, hash LIMIT ?",
             (limit,)).fetchall()
-    except Exception:      # an index from before the scope table existed
+    except Exception:      # an index from before the answers table existed
         return []
     out = []
     for row in rows:

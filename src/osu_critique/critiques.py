@@ -41,23 +41,6 @@ def path_for(outdir, run_id: str) -> Path:
     return critiques_dir(outdir) / f"{_safe(run_id)}.json"
 
 
-# --------------------------------------------------------------- scopes -----
-#
-# A scope critique is about a *selection*, not a run: several replays, whole
-# maps, a date range, or any mix. Its identity is a hash over the deterministic
-# text plus the system prompt, so the same selection with the same corpus is the
-# same artifact, and a changed corpus is a different one. The text is stored
-# inside the sidecar: it is the model's entire input, and an answer next to
-# inputs it never saw would be a lie.
-
-def scope_dir(outdir) -> Path:
-    return critiques_dir(outdir) / "scope"
-
-
-def scope_path(outdir, digest: str) -> Path:
-    return scope_dir(outdir) / f"{_safe(digest)}.json"
-
-
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -119,82 +102,6 @@ def remove(outdir, run_id: str) -> bool:
         return True
     except FileNotFoundError:
         return False
-
-
-SCOPE_VERSION = 1
-
-
-def build_scope(*, digest: str, text: str, selection: dict, system: str,
-                model: str, body: str, n_runs: int, n_maps: int,
-                first: str | None, last: str | None) -> dict:
-    """The sidecar for a scope critique. Authored: never recomputed."""
-    return {
-        "schema_version": SCOPE_VERSION,
-        "kind": "scope",
-        "hash": digest,
-        "created": _now(),
-        "model": model,
-        "prompt_hash": prompt_hash(system),
-        "system": system,
-        "selection": selection,
-        "n_runs": n_runs,
-        "n_maps": n_maps,
-        "first_played": first,
-        "last_played": last,
-        "bytes": len(text.encode("utf-8")),
-        "text": text[:MAX_BODY],
-        "body": body[:MAX_BODY],
-    }
-
-
-def save_scope(outdir, doc: dict) -> Path:
-    path = scope_path(outdir, doc["hash"])
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".json.tmp")
-    with open(tmp, "w") as fh:
-        json.dump(doc, fh, ensure_ascii=False, indent=1)
-    os.replace(tmp, path)
-    return path
-
-
-def load_scope(outdir, digest: str) -> dict | None:
-    path = scope_path(outdir, digest)
-    if not path.is_file():
-        return None
-    try:
-        with open(path) as fh:
-            return json.load(fh)
-    except (OSError, ValueError):
-        return None
-
-
-def remove_scope(outdir, digest: str) -> bool:
-    path = scope_path(outdir, digest)
-    try:
-        path.unlink()
-        return True
-    except OSError:
-        return False
-
-
-def all_scopes(outdir) -> list[dict]:
-    """Every stored scope critique, newest first (for the index mirror)."""
-    directory = scope_dir(outdir)
-    if not directory.is_dir():
-        return []
-    out = []
-    for path in sorted(directory.glob("*.json")):
-        try:
-            with open(path) as fh:
-                doc = json.load(fh)
-        except (OSError, ValueError):
-            continue
-        if doc.get("kind") != "scope":
-            continue
-        doc["source_path"] = os.fspath(path)
-        out.append(doc)
-    out.sort(key=lambda d: d.get("created") or "", reverse=True)
-    return out
 
 
 def all_critiques(outdir) -> list[dict]:

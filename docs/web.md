@@ -23,8 +23,8 @@ skip), then serves until interrupted.
 | `/api/objects/<run_id>` | the per-object JSON, verbatim as `analyze` wrote it. |
 | `/api/map/<md5>`, `/api/runs` | the same data the pages render, for anything that wants JSON. |
 | `/api/cover/<md5>?size=card\|hero` | the cached cover, fetched once from `assets.ppy.sh`. |
-| `/critique` | the selection picker (replays, whole maps, time ranges, a mod filter), the generate button, the deterministic summary as text, and the stored critiques — the answer first, the input it read underneath. See `docs/critiques.md`. |
-| `/critique/<hash>` | one stored scope critique: the answer, the exact summary it read, and the selection. |
+| `/ask` | the selection picker (replays, whole maps, time ranges, a mod filter), an optional question, the generate button, the summary as text, and the stored answers — the answer first, the input it read underneath. Old `/critique` links 301 here. See `docs/ask.md`. |
+| `/ask/<hash>` | one stored answer: the question, the answer, the exact summary it read, and the selection. |
 | `/feed` | the written digests as pages — stat cards, linked plays, map cards with art, and a **digest now** button (see [export.md](export.md)). |
 | `/run/<id>/frames` | **501** — reserved for replay playback, deliberately unimplemented. |
 
@@ -72,10 +72,15 @@ always works. Copy is the convenience, not the only access.
 - **Server-rendered.** Jinja templates and one `app.js` (a few canvases and a
   lazy table). htmx handles the one partial (attempt sorting). No npm, no
   bundler, no serialising the corpus into the client.
-- **The tab is the only place a critique is generated.** The run page shows what
-  is stored for that run — a scope artifact when one exists, an older per-run one
-  read-only otherwise — and links into the tab with the run pre-selected. Two
-  generation paths meant two prompts for the same replay.
+- **The ask page is the only place an answer is generated.** The run page shows
+  what is stored for that run — an answer when one exists, an older per-run
+  critique read-only otherwise — and links to `/ask` with the run pre-selected.
+  Two generation paths meant two prompts for the same replay.
+- **A question is part of the input, not a UI overlay.** `?q=` is written into the
+  text as `## The question` before the header, and therefore into the hash; the
+  same selection with a different question is a different artifact. The page
+  keeps the summarise-then-ask order: set the question, read the exact text that
+  will be sent, then generate.
 - **The answer sits above the numbers.** On the run page and on the tab, the LLM
   critique comes before the deterministic report: the answer is what you read
   first, the tables are what you check it against. The rail follows the same
@@ -112,8 +117,8 @@ always works. Copy is the convenience, not the only access.
   JSON blob in the page and nothing until you open it.
 - **Critiques are stored, not recomputed.** The tab streams one LLM call per
   selection and keeps the answer *and the summary it read* in
-  `out/critiques/scope/`, keyed by a hash over both; the same selection opens the
-  stored one instead of paying twice. See [critiques.md](critiques.md).
+  `out/answers/`, keyed by a hash over both; the same selection opens the
+  stored one instead of paying twice. See [ask.md](ask.md).
 - **Annotations are written here, in map time.** The run page's playhead stamps
   `t_map` (seconds on the `.osu` clock) so a note lands on the same objects on
   every attempt, even when the run's own rows are in another clock. See

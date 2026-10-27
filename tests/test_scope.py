@@ -233,7 +233,7 @@ def test_an_oversized_selection_is_flagged_not_refused(corpus, monkeypatch):
                                     "until": None}, system="SYS")
     assert built["oversized"] is True
     assert built["bytes"] > 100
-    assert built["text"].startswith("# Critique selection")
+    assert built["text"].startswith("# Selection summary")
 
     monkeypatch.setattr(scope, "MAX_TEXT_BYTES", 10_000_000)
     assert scope.build(conn, out, {"runs": [], "maps": [MAP_A], "since": None,
@@ -248,3 +248,28 @@ def test_window_presets_resolve_against_now():
     assert start == "2026-10-20T12:00:00"
     start, end = scope.window(None, "2026-10-20", now)
     assert end == "2026-10-21T00:00:00"     # the named day is included
+
+
+def test_a_question_opens_the_summary_and_changes_the_hash(corpus):
+    out, conn = corpus
+    plain = {"runs": [], "maps": [MAP_A], "since": None, "until": None}
+    asked = dict(plain, question="did I get better at 1/2 jumps?")
+    without = scope.build(conn, out, plain, system="SYS")
+    with_q = scope.build(conn, out, asked, system="SYS")
+    assert with_q["hash"] != without["hash"]              # a different artifact
+    assert with_q["text"].startswith("# Selection summary\n\n## The question\n\n"
+                                     "did I get better at 1/2 jumps?")
+    assert "## The question" not in without["text"]
+
+
+def test_from_query_keeps_the_question_but_trims_it():
+    sel = scope.from_query({"maps": "a", "q": "  did I improve?  "})
+    assert sel["question"] == "did I improve?"
+    assert scope.from_query({"maps": "a"})["question"] is None
+
+
+def test_the_trend_block_appears_only_with_enough_plays(corpus):
+    out, conn = corpus
+    small = scope.build(conn, out, {"maps": [MAP_A, MAP_B], "runs": [], "since": None,
+                                    "until": None}, system="SYS")
+    assert "## Patterns over time" not in small["text"]     # three plays is not a trend

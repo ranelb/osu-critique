@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.24.3** — 345 tests (269 run anywhere without optional extras), CI on
+> **Status: 0.25.0** — 351 tests (272 run anywhere without optional extras), CI on
 > Python 3.10-3.14. The judgement is validated against the game's own recorded
 > counts; see [Validation and trust](#validation-and-trust).
 
@@ -93,7 +93,7 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 | **Breakdown** | `breakdown` | no | speed cliff, cascades, worst ramp |
 | **Report** | `report` | no | deterministic, rule-based critique |
 | **Coach** | `coach` | LLM key (BYO) | full natural-language critique of one run |
-| **Critique** | `critique` | optional (LLM key for the answer) | one critique of a *selection*: replays, whole maps, a date range, or any mix |
+| **Ask** | `ask` | optional (LLM key for the answer) | ask a question of a *selection*: replays, whole maps, a date range, or any mix |
 | **Stars/pp** | `stars`, `pp` | optional extra (`[stars]`) | star ratings and pp per play |
 | **Profile** | `profile` | osu! API creds (BYO, optional) | player stats for context |
 | **Status** | `status` | osu! API creds (BYO, optional) | pp-eligible vs unranked split |
@@ -105,8 +105,8 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 One run becomes a critique three ways: `report` (rule-based, offline), `coach`
 (one LLM API call, streamed live), or `prompt` (the framework plus your data, to
 paste into any AI). A *selection* of runs — a map's whole history, a week, a mix
-of both — goes through `critique` (or the web critique tab): deterministic text
-first, and that text is the model's entire input. `coach` and `prompt` take the same
+of both — goes through `ask` (or the ask page): a deterministic summary first,
+optionally with a question on top, and that text is the model's entire input. `coach` and `prompt` take the same
 optional `--baseline` (an earlier run, for improvement/regression) and
 `--profile <username>` (player context). Both feed the model every analytic
 block (including `breakdown`) — the bulky, redundant parts are trimmed, never
@@ -119,7 +119,7 @@ streams, tapping, sections, whiffs, map profile, trust — are catalogued in
 [docs/metrics.md](docs/metrics.md). The SQLite projection the web frontend
 reads is [docs/index.md](docs/index.md); the frontend itself (pages, bind rules,
 testing) is [docs/web.md](docs/web.md), and annotations in [docs/annotations.md](docs/annotations.md), and stored critiques in
-[docs/critiques.md](docs/critiques.md). Export and the digest are
+[docs/ask.md](docs/ask.md). Export and the digest are
 [docs/export.md](docs/export.md).
 
 The AI coach is tested with **one model: DeepSeek V4 Flash**
@@ -174,9 +174,10 @@ osu-critique coach out/<tag>_metrics.json \
     [--model <any-model-name>] [--prompt <custom-prompt-file>] [--save]
 
 # one critique of a selection: replays, whole maps, a range — or all three
-osu-critique critique --since 7d                 # deterministic summary text
-osu-critique critique --maps <md5> --until 2026-10-20
-osu-critique critique --maps <md5> --llm         # also call, store, print
+osu-critique ask --since 7d                      # the summary text
+osu-critique ask --maps <md5> --until 2026-10-20 \
+    -q "did I get better at 1/2 jumps?"
+osu-critique ask --maps <md5> --llm              # also call, store, print
 
 # bring your own AI: the framework prompt, or framework + your metrics
 osu-critique prompt

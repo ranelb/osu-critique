@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}critique {{ doc.hash[:8] }} · osu-critique{% endblock %}
+{% block title %}answer {{ doc.hash[:8] }} · osu-critique{% endblock %}
 {% block body %}
-<article class="critique">
+<article class="ask">
   <div class="crumbs"><a href="/">maps</a><span>/</span>
-    <a href="/critique">critique</a><span>/</span>{{ doc.hash[:8] }}</div>
+    <a href="/ask">ask</a><span>/</span>{{ doc.hash[:8] }}</div>
 
   <header class="run-head">
-    <h1>a critique of {{ doc.n_runs }} run{{ '' if doc.n_runs == 1 else 's' }}</h1>
+    <h1>an answer about {{ doc.n_runs }} run{{ '' if doc.n_runs == 1 else 's' }}</h1>
     <p class="meta">
       <span class="pill">{{ doc.model or 'model' }}</span>
       <span class="muted">{{ doc.created | when }}</span>
@@ -15,14 +15,17 @@
         → {{ doc.last_played[:16].replace('T', ' ') if doc.last_played else '—' }}</span>
       <span class="muted">{{ (doc.bytes / 1024) | num(0) }} KB of summary</span>
     </p>
+    {% if doc.question %}
+    <p class="question">“{{ doc.question }}”</p>
+    {% endif %}
   </header>
 
   <section class="panel">
     <h2>the answer</h2>
     <p class="fineprint">Stored: this text and the summary it was given. Both are
-      immutable — a changed corpus is a different critique, not a stale one.
+      immutable — a changed corpus is a different answer, not a stale one.
       <a href="{{ reopen }}">reopen this selection</a> to build it again with today's data.</p>
-    <pre class="report" id="critique-body">{{ doc.body }}</pre>
+    <pre class="report" id="answer-body">{{ doc.body }}</pre>
   </section>
 
   <details class="panel fold" id="input">
@@ -54,8 +57,8 @@
     </ul>
     <p class="fineprint">Hashes: text <code>{{ doc.hash[:16] }}</code> · prompt
       <code>{{ doc.prompt_hash[:16] }}</code>.</p>
-    <form method="post" action="/critique/{{ doc.hash }}/delete" class="inline">
-      <button class="link danger" type="submit">delete this critique</button>
+    <form method="post" action="/ask/{{ doc.hash }}/delete" class="inline">
+      <button class="link danger" type="submit">delete this answer</button>
     </form>
   </section>
 </article>

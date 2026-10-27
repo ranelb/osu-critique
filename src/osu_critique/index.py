@@ -33,7 +33,7 @@ DB_FILENAME = "index.sqlite"
 
 class SchemaMismatch(RuntimeError):
     """The DB was written by another build; it is derived, so rebuild it."""
-SCHEMA_VERSION = 5  # v5: scope critiques mirrored (metadata only, bodies stay on disk)
+SCHEMA_VERSION = 6  # v6: answers mirrored (metadata only, bodies stay on disk)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -152,13 +152,14 @@ CREATE TABLE IF NOT EXISTS critiques (
     source_path TEXT
 );
 
--- authored, canonical in out/critiques/scope/<hash>.json. Metadata only: the
--- text and the answer are large and are read from the file when opened.
-CREATE TABLE IF NOT EXISTS scope_critiques (
+-- authored, canonical in out/answers/<hash>.json. Metadata only: the summary
+-- and the answer are large and are read from the file when opened.
+CREATE TABLE IF NOT EXISTS answers (
     hash        TEXT PRIMARY KEY,
     created     TEXT,
     model       TEXT,
     prompt_hash TEXT,
+    question    TEXT,
     n_runs      INTEGER,
     n_maps      INTEGER,
     first_played TEXT,
@@ -609,7 +610,7 @@ def sweep(outdir=None, rebuild: bool = False, quiet: bool = False,
         if not check:
             sync_annotations(conn, root)
             sync_critiques(conn, root)
-            sync_scope_critiques(conn, root)
+            sync_answers(conn, root)
             conn.commit()
         stats["beatmaps"] = conn.execute("SELECT COUNT(*) FROM beatmaps").fetchone()[0]
         stats["runs"] = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
@@ -685,20 +686,20 @@ def sync_critiques(conn: sqlite3.Connection, outdir) -> int:
     return len(rows)
 
 
-def sync_scope_critiques(conn: sqlite3.Connection, outdir) -> int:
-    """Replace the scope mirror from ``out/critiques/scope/*.json`` (canonical)."""
-    from . import critiques
+def sync_answers(conn: sqlite3.Connection, outdir) -> int:
+    """Replace the answers mirror from ``out/answers/*.json`` (canonical)."""
+    from . import answers
 
-    rows = critiques.all_scopes(outdir)
-    conn.execute("DELETE FROM scope_critiques")
+    rows = answers.all_answers(outdir)
+    conn.execute("DELETE FROM answers")
     for doc in rows:
         conn.execute(
-            "INSERT OR REPLACE INTO scope_critiques (hash, created, model, "
-            "prompt_hash, n_runs, n_maps, first_played, last_played, bytes, "
-            "source_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO answers (hash, created, model, prompt_hash, "
+            "question, n_runs, n_maps, first_played, last_played, bytes, "
+            "source_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (doc["hash"], doc.get("created"), doc.get("model"),
-             doc.get("prompt_hash"), doc.get("n_runs"), doc.get("n_maps"),
-             doc.get("first_played"), doc.get("last_played"),
+             doc.get("prompt_hash"), doc.get("question"), doc.get("n_runs"),
+             doc.get("n_maps"), doc.get("first_played"), doc.get("last_played"),
              doc.get("bytes"), doc.get("source_path")))
     return len(rows)
 

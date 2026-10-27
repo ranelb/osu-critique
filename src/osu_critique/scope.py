@@ -29,6 +29,7 @@ FULL_REPORT_LIMIT = 10       # above this, per-replay reports are dropped
 MAP_TABLE_LIMIT = 40         # maps in the table, by play count
 RUN_TABLE_LIMIT = 120        # rows in the per-run table, most recent first
 MAX_TEXT_BYTES = 300_000     # warn above this; never block
+TREND_MIN_N = 20             # objects in one third before a trend rate is reported
 
 PRESETS = ("today", "session", "7d", "30d")
 SESSION_GAP_HOURS = 3        # a longer silence starts a new session
@@ -53,7 +54,8 @@ def _mod_clause(mods: str | None):
 
 
 def empty_selection() -> dict:
-    return {"runs": [], "maps": [], "since": None, "until": None, "mods": None}
+    return {"runs": [], "maps": [], "since": None, "until": None, "mods": None,
+            "question": None}
 
 
 def from_query(query) -> dict:
@@ -79,9 +81,11 @@ def from_query(query) -> dict:
         return raw or None
 
     mods = stamp("mods")
+    question = (stamp("q") or "").strip()[:2000]
     return {"runs": ids("runs"), "maps": ids("maps"),
             "since": stamp("since"), "until": stamp("until"),
-            "mods": mods.upper() if mods else None}
+            "mods": mods.upper() if mods else None,
+            "question": question or None}
 
 
 # ------------------------------------------------------------------ window --
@@ -371,10 +375,81 @@ def _per_run_reports(rows: list[dict], metrics: dict[str, dict]) -> str:
     return "\n\n".join(blocks)
 
 
+def _trend_block(rows: list[dict], metrics: dict[str, dict]) -> str:
+    """First third versus last third, per family and per shape class.
+
+    A single selection cannot say whether a weakness is *improving*; splitting it
+    by play time can. Rates are the non-300 share weighted by objects, and a name
+    is only reported when both ends are solid enough to compare — a trend drawn
+    from nine objects is noise wearing a sign.
+    """
+    usable = [r for r in rows if r["run_id"] in metrics]
+    if len(usable) < 6:
+        return ""
+    third = max(2, len(usable) // 3)
+    early, late = usable[:third], usable[-third:]
+
+    def collect(bucket, kind):
+        acc: dict[str, list] = {}
+        for row in bucket:
+            doc = metrics[row["run_id"]]
+            if kind == "families":
+                items = (doc.get("profile") or {}).get("composition") or []
+                key = "family"
+            else:
+                items = ((doc.get("autopsy") or {}).get("shapes") or {}).get("classes") or []
+                key = "class"
+            for item in items:
+                name, rate, n = item.get(key), item.get("non300_rate"), item.get("n") or 0
+                if not name or rate is None or not n:
+                    continue
+                slot = acc.setdefault(name, [0.0, 0])
+                slot[0] += rate * n
+                slot[1] += n
+        return acc
+
+    blocks = []
+    for kind, title in (("families", "families"), ("shapes", "shape classes")):
+        before, after = collect(early, kind), collect(late, kind)
+        rows_out = []
+        for name in sorted(set(before) & set(after)):
+            nb, na = before[name][1], after[name][1]
+            if nb < TREND_MIN_N or na < TREND_MIN_N:
+                continue
+            rb, ra = before[name][0] / nb, after[name][0] / na
+            rows_out.append((name, rb, ra, (ra - rb) * 100, nb, na))
+        if not rows_out:
+            continue
+        rows_out.sort(key=lambda r: -r[3])
+        block = [f"### {title}", "| name | early | late | Δ | n early / late |",
+                 "|---|---|---|---|---|"]
+        for name, rb, ra, delta, nb, na in rows_out[:12]:
+            block.append(f"| {name} | {rb * 100:.1f}% | {ra * 100:.1f}% | "
+                         f"{delta:+.1f} pts | {nb} / {na} |")
+        if len(rows_out) > 12:
+            block.append(f"| … {len(rows_out) - 12} more | | | | |")
+        blocks.append("\n".join(block))
+
+    if not blocks:
+        return ""
+    head = (f"## Patterns over time (first {third} plays vs last {third})\n"
+            f"Early: {early[0].get('played_at', '?')[:10]} → "
+            f"{early[-1].get('played_at', '?')[:10]}; late: "
+            f"{late[0].get('played_at', '?')[:10]} → {late[-1].get('played_at', '?')[:10]}. "
+            f"Rates are the non-300 share per bucket, weighted by objects; a name "
+            f"appears only when both ends hold at least {TREND_MIN_N} objects. "
+            f"A positive Δ means worse, a negative one means better.")
+    return head + "\n\n" + "\n\n".join(blocks)
+
+
 def render(rows: list[dict], metrics: dict[str, dict], selection: dict,
            outdir) -> str:
     """The whole deterministic text for a resolved selection."""
-    parts: list[str] = ["# Critique selection", ""]
+    parts: list[str] = ["# Selection summary", ""]
+
+    question = (selection.get("question") or "").strip()
+    if question:
+        parts += ["## The question", "", question, ""]
 
     span = (f"{(rows[0].get('played_at') or '?')[:16].replace('T', ' ')} → "
             f"{(rows[-1].get('played_at') or '?')[:16].replace('T', ' ')}"
@@ -414,6 +489,11 @@ def render(rows: list[dict], metrics: dict[str, dict], selection: dict,
            f"counts them)." if run_omitted else "")
     parts.append("## Runs, newest first\n" + "\n".join(table) + cap)
     parts.append("")
+
+    trend = _trend_block(rows, metrics)
+    if trend:
+        parts.append(trend)
+        parts.append("")
 
     stability = _stability_block(rows, metrics)
     if stability:

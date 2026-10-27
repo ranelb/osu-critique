@@ -158,22 +158,22 @@
     {% endif %}
   </details>
 
-  <details class="panel fold" id="critique"{% if scope_critique or critique %} open{% endif %}>
+  <details class="panel fold" id="critique"{% if scope_answer or critique %} open{% endif %}>
     <summary>
-      <span class="st">llm critique</span>
-      <span class="peek">{% if scope_critique %}{{ scope_critique.model or 'model' }} · {{ scope_critique.created | when }} — generated in the critique tab{% elif critique %}{{ critique.model or 'model' }} · {{ critique.created | when }} — the older per-run framework{% if critique_stale %} · <b class="warn">stale</b>{% endif %}{% else %}nothing stored yet; the critique tab generates it from the deterministic summary{% endif %}</span>
+      <span class="st">answer</span>
+      <span class="peek">{% if scope_answer %}{{ scope_answer.model or 'model' }} · {{ scope_answer.created | when }} — generated on the ask page{% if scope_answer.question %} · “{{ scope_answer.question[:70] }}”{% endif %}{% elif critique %}{{ critique.model or 'model' }} · {{ critique.created | when }} — the older per-run framework{% if critique_stale %} · <b class="warn">stale</b>{% endif %}{% else %}nothing stored yet; the ask page builds it from the deterministic summary{% endif %}</span>
     </summary>
-    {% if scope_critique %}
+    {% if scope_answer %}
     <div class="critique-meta">
-      <span class="pill">{{ scope_critique.model or 'model' }}</span>
-      <span class="muted">{{ scope_critique.created | when }}</span>
-      <a href="/critique/{{ scope_hash }}">permalink</a>
+      <span class="pill">{{ scope_answer.model or 'model' }}</span>
+      <span class="muted">{{ scope_answer.created | when }}</span>
+      <a href="/ask/{{ scope_hash }}">permalink</a>
     </div>
-    <pre class="report" id="critique-body">{{ scope_critique.body }}</pre>
+    <pre class="report" id="critique-body">{{ scope_answer.body }}</pre>
     {% elif critique %}
     <p class="fineprint">Written by the older per-run framework, from the metrics JSON.
-      Kept exactly as it was made; new critiques come from the critique tab, which sends
-      the deterministic summary instead.</p>
+      Kept exactly as it was made; new answers come from the ask page, which sends the
+      deterministic summary instead.</p>
     <div class="critique-meta">
       <span class="pill">{{ critique.model or 'model' }}</span>
       <span class="muted">{{ critique.created | when }}</span>
@@ -187,8 +187,8 @@
     {% else %}
     <p class="muted" id="critique-empty">Nothing stored for this run.</p>
     {% endif %}
-    <p class="fineprint"><a href="/critique?runs={{ run.run_id }}">open this run in the
-      critique tab →</a> — pick more replays, whole maps or a range there.</p>
+    <p class="fineprint"><a href="/ask?runs={{ run.run_id }}">open this run on the ask
+      page →</a> — pick more replays, whole maps or a range, and ask a question there.</p>
   </details>
 
   <details class="panel fold" id="report">
