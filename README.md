@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.22.1** — 310 tests (251 run anywhere without optional extras), CI on
+> **Status: 0.23.0** — 336 tests (267 run anywhere without optional extras), CI on
 > Python 3.10-3.14. The judgement is validated against the game's own recorded
 > counts; see [Validation and trust](#validation-and-trust).
 
@@ -92,18 +92,21 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 | **Core** | `analyze`, `pair`, `batch` | no | per-object metrics JSON + charts |
 | **Breakdown** | `breakdown` | no | speed cliff, cascades, worst ramp |
 | **Report** | `report` | no | deterministic, rule-based critique |
-| **Coach** | `coach` | LLM key (BYO) | full natural-language critique |
+| **Coach** | `coach` | LLM key (BYO) | full natural-language critique of one run |
+| **Critique** | `critique` | optional (LLM key for the answer) | one critique of a *selection*: replays, whole maps, a date range, or any mix |
 | **Stars/pp** | `stars`, `pp` | optional extra (`[stars]`) | star ratings and pp per play |
 | **Profile** | `profile` | osu! API creds (BYO, optional) | player stats for context |
 | **Status** | `status` | osu! API creds (BYO, optional) | pp-eligible vs unranked split |
-| **Web** | `serve` | optional extra (`[web]`) | local frontend: map showcase, run pages with near-miss boards, feed, stored critiques |
+| **Web** | `serve` | optional extra (`[web]`) | local frontend: map showcase, run pages with near-miss boards, a critique tab that composes selections, the feed |
 | **Annotate** | `annotate` | no | notes the coach reads, in map time |
 | **Export** | `export` | optional binary + opt-in | replay export from the osu! database |
 | **Digest** | `digest` | no | what's new since your last visit; no LLM |
 
-The same metrics JSON becomes a critique three ways: `report` (rule-based,
-offline), `coach` (one LLM API call, streamed live), or `prompt` (the framework
-plus your data, to paste into any AI). `coach` and `prompt` take the same
+One run becomes a critique three ways: `report` (rule-based, offline), `coach`
+(one LLM API call, streamed live), or `prompt` (the framework plus your data, to
+paste into any AI). A *selection* of runs — a map's whole history, a week, a mix
+of both — goes through `critique` (or the web critique tab): deterministic text
+first, and that text is the model's entire input. `coach` and `prompt` take the same
 optional `--baseline` (an earlier run, for improvement/regression) and
 `--profile <username>` (player context). Both feed the model every analytic
 block (including `breakdown`) — the bulky, redundant parts are trimmed, never
@@ -170,6 +173,11 @@ osu-critique coach out/<tag>_metrics.json \
     [--baseline out/<other>_metrics.json] [--profile <username>] \
     [--model <any-model-name>] [--prompt <custom-prompt-file>] [--save]
 
+# one critique of a selection: replays, whole maps, a range — or all three
+osu-critique critique --since 7d                 # deterministic summary text
+osu-critique critique --maps <md5> --until 2026-10-20
+osu-critique critique --maps <md5> --llm         # also call, store, print
+
 # bring your own AI: the framework prompt, or framework + your metrics
 osu-critique prompt
 osu-critique prompt out/<tag>_metrics.json [--baseline ...] [--profile <username>]
@@ -221,7 +229,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 310 tests (6 need the author's replays, 62 need [web])
+pytest -q                     # 336 tests (6 need the author's replays, 69 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

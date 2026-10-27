@@ -442,10 +442,81 @@
     });
   }
 
+  /* ------------------------------------------------------- scope critique -- */
+
+  function initScope() {
+    const form = document.getElementById("scope-form");
+    const body = document.getElementById("scope-body");
+    const summary = document.getElementById("copy-summary");
+    const text = (document.getElementById("scope-text") || {}).textContent || "";
+    if (summary) {
+      summary.addEventListener("click", async (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        const label = summary.textContent;
+        const ok = await copyText(text);
+        summary.textContent = ok ? "copied" : "select + ctrl+c";
+        setTimeout(() => { summary.textContent = label; }, 1600);
+      });
+    }
+    if (!form || !body) return;
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      const button = form.querySelector("button[type=submit]");
+      const label = button.textContent;
+      button.disabled = true;
+      button.textContent = "thinking…";
+      body.hidden = false;
+      body.textContent = "";
+      try {
+        const res = await fetch(form.action, {
+          method: "POST",
+          headers: { "Accept": "text/event-stream" },
+          body: new URLSearchParams(new FormData(form)),
+        });
+        if (!res.ok || !res.body) {
+          const detail = await res.text();
+          body.textContent = "[" + res.status + "] " + detail.slice(0, 400);
+          button.disabled = false;
+          button.textContent = label;
+          return;
+        }
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let url = null;
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split("\n\n");
+          buffer = frames.pop() || "";
+          for (const frame of frames) {
+            if (!frame.startsWith("data: ")) continue;
+            const payload = frame.slice(6).trim();
+            if (payload === "[DONE]") continue;
+            let obj;
+            try { obj = JSON.parse(payload); } catch (err) { continue; }
+            if (obj.delta) body.textContent += obj.delta;
+            else if (obj.error) body.textContent += "\n\n[error] " + obj.error;
+            else if (obj.done) { url = obj.url; button.textContent = "open"; }
+          }
+        }
+        if (url) window.location.assign(url);
+      } catch (err) {
+        body.textContent += "\n\n[network error] " + err.message;
+      } finally {
+        button.disabled = false;
+        if (button.textContent === "thinking…") button.textContent = label;
+      }
+    });
+  }
+
   /* --------------------------------------------------------------- init -- */
 
   document.addEventListener("DOMContentLoaded", () => {
     initRail();
+    initScope();
     const run = document.querySelector("[data-run-id]");
     if (run) {
       const canvas = document.getElementById("hiterror");

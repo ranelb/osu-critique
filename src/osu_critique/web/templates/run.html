@@ -202,12 +202,22 @@
     <script type="application/json" id="report-text">{{ report_text | tojson }}</script>
   </details>
 
-  <details class="panel fold" id="critique"{% if not critique %} open{% endif %}>
+  <details class="panel fold" id="critique"{% if scope_critique or critique %} open{% endif %}>
     <summary>
       <span class="st">llm critique</span>
-      <span class="peek">{% if critique %}{{ critique.model or 'model' }} · {{ critique.created | when }}{% if critique_stale %} · <b class="warn">stale</b>{% endif %}{% else %}nothing stored yet — one call, saved with this run{% endif %}</span>
+      <span class="peek">{% if scope_critique %}{{ scope_critique.model or 'model' }} · {{ scope_critique.created | when }} — generated in the critique tab{% elif critique %}{{ critique.model or 'model' }} · {{ critique.created | when }} — the older per-run framework{% if critique_stale %} · <b class="warn">stale</b>{% endif %}{% else %}nothing stored yet; the critique tab generates it from the deterministic summary{% endif %}</span>
     </summary>
-    {% if critique %}
+    {% if scope_critique %}
+    <div class="critique-meta">
+      <span class="pill">{{ scope_critique.model or 'model' }}</span>
+      <span class="muted">{{ scope_critique.created | when }}</span>
+      <a href="/critique/{{ scope_hash }}">permalink</a>
+    </div>
+    <pre class="report" id="critique-body">{{ scope_critique.body }}</pre>
+    {% elif critique %}
+    <p class="fineprint">Written by the older per-run framework, from the metrics JSON.
+      Kept exactly as it was made; new critiques come from the critique tab, which sends
+      the deterministic summary instead.</p>
     <div class="critique-meta">
       <span class="pill">{{ critique.model or 'model' }}</span>
       <span class="muted">{{ critique.created | when }}</span>
@@ -219,24 +229,10 @@
     </div>
     <pre class="report" id="critique-body">{{ critique.body }}</pre>
     {% else %}
-    <p class="muted" id="critique-empty">No stored critique for this run yet.</p>
-    <pre class="report" id="critique-body" hidden></pre>
+    <p class="muted" id="critique-empty">Nothing stored for this run.</p>
     {% endif %}
-
-    {% if not llm_allowed %}
-    <p class="notice">LLM routes are local-only here (<code>web.llm_remote = false</code>).</p>
-    {% elif not llm_available %}
-    <p class="notice">No LLM key configured — run <code>osu-critique setup</code> or set
-      <code>OSU_LLM_KEY</code>. Everything above this panel works without one.</p>
-    {% else %}
-    <form method="post" action="/run/{{ run.run_id }}/critique" id="critique-form" class="note-form">
-      <div class="note-form-row">
-        <button type="submit">{{ 'regenerate' if critique else 'critique this run' }}</button>
-        <span class="fineprint">one call; the answer is stored with this run and marked
-          stale when the metrics or the notes change.</span>
-      </div>
-    </form>
-    {% endif %}
+    <p class="fineprint"><a href="/critique?runs={{ run.run_id }}">open this run in the
+      critique tab →</a> — pick more replays, whole maps or a range there.</p>
   </details>
 
   <details class="panel fold" id="annotations">

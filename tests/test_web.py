@@ -463,54 +463,52 @@ def llm(monkeypatch):
     return monkeypatch
 
 
-def test_without_a_key_the_button_says_why_and_the_route_refuses(client, monkeypatch):
-    import osu_critique.config as config_mod
-    monkeypatch.setattr(config_mod, "llm_key", lambda: None)
-    page = client.get("/run/" + "2" * 32)
-    assert "No LLM key configured" in page.text
-    assert 'id="critique-form"' not in page.text
-    r = client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
-    assert r.status_code == 400
-    assert "OSU_LLM_KEY" in r.text
-    # the streaming client (the browser's fetch) gets JSON
-    r = client.post("/run/" + "2" * 32 + "/critique",
-                    headers={"accept": "text/event-stream"}, follow_redirects=False)
-    assert r.status_code == 400 and "OSU_LLM_KEY" in r.json()["detail"]
+def test_the_run_page_links_to_the_tab_and_has_no_generate_route(client):
+    page = client.get("/run/" + "2" * 32).text
+    assert "/critique?runs=" + "2" * 32 in page
+    assert 'id="critique-form"' not in page
+    # generation lives in the tab now: the old route is gone, not merely hidden
+    assert client.post("/run/" + "2" * 32 + "/critique",
+                       follow_redirects=False).status_code == 404
 
 
-def test_a_blocking_critique_is_stored_and_shown(client, llm):
-    r = client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
-    assert r.status_code == 303
+def test_a_critique_generated_in_the_tab_shows_on_the_run_page(client, llm):
+    client.post("/critique/generate", data={"runs": "2" * 32},
+                headers={"accept": "text/event-stream"})
     page = client.get("/run/" + "2" * 32).text
     assert FAKE_TEXT in page
     assert "test-model" in page
-    assert "No stored critique" not in page
-
-    sidecar = Path(client.app.state.outdir) / "critiques" / ("2" * 32 + ".json")
-    assert json.loads(sidecar.read_text())["body"] == FAKE_TEXT
-
-    conn = index.connect(Path(client.app.state.outdir) / index.DB_FILENAME)
-    try:
-        assert conn.execute("SELECT COUNT(*) FROM critiques").fetchone()[0] == 1
-    finally:
-        conn.close()
+    assert "generated in the critique tab" in page
+    assert "permalink" in page
+    # nothing was written under the old per-run key
+    assert not (Path(client.app.state.outdir) / "critiques" / ("2" * 32 + ".json")).exists()
 
 
-def test_the_streaming_path_emits_sse_and_stores_the_result(client, llm):
-    r = client.post("/run/" + "3" * 32 + "/critique",
-                    headers={"accept": "text/event-stream"},
-                    follow_redirects=False)
-    assert r.status_code == 200
-    assert r.headers["content-type"].startswith("text/event-stream")
-    body = r.text
-    assert '"delta": "Your timing "' in body
-    assert '"done": true' in body
-    assert body.rstrip().endswith("data: [DONE]")
-    assert FAKE_TEXT in client.get("/run/" + "3" * 32).text
+def legacy_sidecar(client, run_id="2" * 32, body=FAKE_TEXT):
+    """What the old framework left behind: written directly, never regenerated."""
+    from osu_critique import critiques
+
+    out = Path(client.app.state.outdir)
+    doc = json.loads((out / "a2_metrics.json").read_text())
+    from osu_critique.coach import load_system_prompt
+
+    side = critiques.build(doc, [], load_system_prompt(), "old-model", body,
+                           run_id=run_id)
+    critiques.save(out, side)
+    return side
 
 
-def test_a_changed_run_marks_the_critique_stale(client, llm):
-    client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+def test_a_legacy_per_run_critique_is_read_only(client):
+    legacy_sidecar(client)
+    page = client.get("/run/" + "2" * 32).text
+    assert FAKE_TEXT in page
+    assert "older per-run framework" in page
+    assert 'id="critique-form"' not in page          # no regenerate button
+    assert ("/critique?runs=" + "2" * 32) in page    # and the way out of here
+
+
+def test_a_changed_run_marks_a_legacy_critique_stale(client):
+    legacy_sidecar(client)
     assert "stale — the run" not in client.get("/run/" + "2" * 32).text
 
     # edit the artifact: the stored critique no longer describes this play
@@ -523,22 +521,22 @@ def test_a_changed_run_marks_the_critique_stale(client, llm):
     assert "stale — the run or its notes changed" in page
 
 
-def test_adding_a_note_marks_the_critique_stale(client, llm):
-    client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+def test_adding_a_note_marks_a_legacy_critique_stale(client):
+    legacy_sidecar(client)
     assert "stale — the run" not in client.get("/run/" + "2" * 32).text
     post_note(client, f"/map/{MAP_A}/annotations", body="this is the hard part")
     assert "stale — the run or its notes changed" in client.get("/run/" + "2" * 32).text
 
 
-def test_deleting_a_critique(client, llm):
-    client.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
+def test_deleting_a_legacy_critique(client):
+    legacy_sidecar(client)
     sidecar = Path(client.app.state.outdir) / "critiques" / ("2" * 32 + ".json")
     assert sidecar.exists()
     r = client.post("/run/" + "2" * 32 + "/critique/delete",
                     data={"next": "/run/" + "2" * 32}, follow_redirects=False)
     assert r.status_code == 303
     assert not sidecar.exists()
-    assert "No stored critique" in client.get("/run/" + "2" * 32).text
+    assert "Nothing stored for this run" in client.get("/run/" + "2" * 32).text
 
 
 def test_llm_remote_false_refuses_non_loopback_clients(tmp_path, monkeypatch, llm):
@@ -555,18 +553,16 @@ def test_llm_remote_false_refuses_non_loopback_clients(tmp_path, monkeypatch, ll
     app = create_app(outdir=out, index_on_boot=False)
 
     remote = TestClient(app)                      # host "testclient"
-    r = remote.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
-    assert r.status_code == 403
-    assert "local-only" in r.text
-    r = remote.post("/run/" + "2" * 32 + "/critique",
+    r = remote.post("/critique/generate", data={"maps": MAP_A},
                     headers={"accept": "text/event-stream"}, follow_redirects=False)
     assert r.status_code == 403 and "local-only" in r.json()["detail"]
     # reading is still open
     assert remote.get("/run/" + "2" * 32).status_code == 200
 
     local = TestClient(app, client=("127.0.0.1", 5000))
-    r = local.post("/run/" + "2" * 32 + "/critique", follow_redirects=False)
-    assert r.status_code == 303
+    r = local.post("/critique/generate", data={"maps": MAP_A},
+                   headers={"accept": "text/event-stream"}, follow_redirects=False)
+    assert r.status_code == 200
 
 
 # ------------------------------------------------------------------- feed ----
@@ -695,9 +691,9 @@ def test_the_report_renders_as_cards_not_a_text_blob(client):
     assert 'class="rsection"' in page
     assert "Map profile" in page or "Timing" in page
     assert 'class="rnote ' in page or 'class="rkv"' in page
-    # the deterministic report is no longer a <pre>; only the LLM critique is
-    assert page.count('<pre class="report"') <= 1
-    assert page.index('id="report"') < page.index('<pre class="report"')
+    # the deterministic report is cards, never a <pre>
+    assert 'class="rsections"' in page
+    assert 'id="rs-summary"' not in page            # headline-only, dropped
 
 
 # ------------------------------------------------------- rail and folds ----
@@ -719,9 +715,9 @@ def test_heavy_blocks_start_collapsed(client):
     for block in ("objects", "report", "annotations"):
         opening = page.split(f'<details class="panel fold" id="{block}"')[1].split(">")[0]
         assert "open" not in opening, block
-    # the llm panel is open when there is nothing stored: the form is the point
+    # nothing stored to read, so the llm fold stays shut and only links out
     opening = page.split('<details class="panel fold" id="critique"')[1].split(">")[0]
-    assert "open" in opening
+    assert "open" not in opening
 
 
 def test_peeks_name_the_rule_not_a_number_from_the_cards(client):
@@ -812,3 +808,97 @@ def test_static_assets_are_cache_busted_by_version(client):
     page = client.get("/run/" + "2" * 32).text
     assert "/static/style.css?v=" in page
     assert "/static/app.js?v=" in page
+
+
+# -------------------------------------------------------- critique tab -----
+
+def test_the_tab_offers_the_pickers_and_an_empty_selection(client):
+    resp = client.get("/critique")
+    assert resp.status_code == 200
+    page = resp.text
+    assert 'id="tray"' in page
+    assert "Nothing selected yet" in page
+    assert "Nothing matches this selection" in page
+    assert 'id="scope-form"' not in page           # nothing to send yet
+
+
+def test_a_selection_renders_the_summary_and_an_add_url_per_row(client):
+    page = client.get("/critique?since=2026-09-01").text
+    assert 'class="tray"' in page
+    assert "range" in page and "everything since 2026-09-01" in page
+    assert "## Overview" in page
+    assert "## Maps, busiest first" in page
+    assert 'href="/critique?runs=' in page          # an add link per replay row
+
+
+def test_a_map_selection_expands_to_every_attempt(client):
+    page = client.get("/critique?maps=" + MAP_A).text
+    assert "3 runs" in page                          # a1, a2, a3 — not b1
+    assert "1 map(s), every attempt" in page
+
+
+def test_generating_stores_the_answer_and_the_summary(client, llm):
+    r = client.post("/critique/generate",
+                    data={"runs": "", "maps": MAP_A, "since": "", "until": ""},
+                    headers={"accept": "text/event-stream"})
+    assert r.status_code == 200
+    assert "data: " in r.text and "[DONE]" in r.text
+    from osu_critique import critiques, index as index_mod
+
+    scopes = critiques.all_scopes(client.app.state.outdir)
+    assert len(scopes) == 1
+    doc = scopes[0]
+    assert doc["n_runs"] == 3
+    assert "## Overview" in doc["text"]             # the summary is stored
+    assert doc["body"]                              # and so is the answer
+
+    page = client.get("/critique/" + doc["hash"])
+    assert page.status_code == 200
+    assert "the summary it read" in page.text
+    assert doc["body"][:40] in page.text
+
+    # the saved list reads the (disposable) mirror, so generating must refresh it
+    tab = client.get("/critique").text
+    assert "saved critiques" in tab
+    assert doc["hash"] in tab
+
+
+def test_the_same_selection_does_not_pay_twice(client, llm):
+    first = client.post("/critique/generate",
+                        data={"maps": MAP_A}, headers={"accept": "text/event-stream"})
+    assert first.status_code == 200
+    second = client.post("/critique/generate", data={"maps": MAP_A},
+                         follow_redirects=False)
+    assert second.status_code in (303, 307)         # straight to the stored artifact
+
+
+def test_a_stored_critique_can_be_deleted(client, llm):
+    client.post("/critique/generate", data={"maps": MAP_A},
+                headers={"accept": "text/event-stream"})
+    from osu_critique import critiques
+
+    digest = critiques.all_scopes(client.app.state.outdir)[0]["hash"]
+    r = client.post(f"/critique/{digest}/delete", follow_redirects=False)
+    assert r.status_code in (303, 307)
+    assert critiques.load_scope(client.app.state.outdir, digest) is None
+    assert client.get("/critique/" + digest).status_code == 404
+
+
+def test_generating_without_a_key_says_why(client, monkeypatch):
+    import osu_critique.config as config_mod
+    monkeypatch.setattr(config_mod, "llm_key", lambda: None)
+    page = client.get("/critique?maps=" + MAP_A).text
+    assert "No LLM key configured" in page
+    r = client.post("/critique/generate", data={"maps": MAP_A},
+                    headers={"accept": "text/event-stream"})
+    assert r.status_code == 400 and "OSU_LLM_KEY" in r.json()["detail"]
+
+
+def test_an_oversized_selection_is_refused_not_truncated(client, llm, monkeypatch):
+    import osu_critique.scope as scope_mod
+    monkeypatch.setattr(scope_mod, "MAX_TEXT_BYTES", 100)
+    page = client.get("/critique?maps=" + MAP_A).text
+    assert "above the" in page
+    r = client.post("/critique/generate", data={"maps": MAP_A},
+                    headers={"accept": "text/event-stream"})
+    assert r.status_code == 413

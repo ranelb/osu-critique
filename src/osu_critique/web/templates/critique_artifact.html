@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}critique {{ doc.hash[:8] }} · osu-critique{% endblock %}
+{% block body %}
+<article class="critique">
+  <div class="crumbs"><a href="/">maps</a><span>/</span>
+    <a href="/critique">critique</a><span>/</span>{{ doc.hash[:8] }}</div>
+
+  <header class="run-head">
+    <h1>a critique of {{ doc.n_runs }} run{{ '' if doc.n_runs == 1 else 's' }}</h1>
+    <p class="meta">
+      <span class="pill">{{ doc.model or 'model' }}</span>
+      <span class="muted">{{ doc.created | when }}</span>
+      <span class="muted">{{ doc.n_maps }} map{{ '' if doc.n_maps == 1 else 's' }}</span>
+      <span class="muted">{{ doc.first_played[:16].replace('T', ' ') if doc.first_played else '—' }}
+        → {{ doc.last_played[:16].replace('T', ' ') if doc.last_played else '—' }}</span>
+      <span class="muted">{{ (doc.bytes / 1024) | num(0) }} KB of summary</span>
+    </p>
+  </header>
+
+  <section class="panel">
+    <h2>the answer</h2>
+    <p class="fineprint">Stored: this text and the summary it was given. Both are
+      immutable — a changed corpus is a different critique, not a stale one.
+      <a href="{{ reopen }}">reopen this selection</a> to build it again with today's data.</p>
+    <pre class="report" id="critique-body">{{ doc.body }}</pre>
+  </section>
+
+  <details class="panel fold" id="input">
+    <summary>
+      <span class="st">the summary it read</span>
+      <span class="peek">{{ (doc.bytes / 1024) | num(0) }} KB, exactly as sent — nothing
+        else went into the prompt</span>
+      <span class="acts"><button class="ghost small" type="button" id="copy-summary">copy</button></span>
+    </summary>
+    <pre class="report scope-text" id="scope-text">{{ doc.text }}</pre>
+  </details>
+
+  <section class="panel">
+    <h2>selection</h2>
+    <ul class="tray">
+      {% for run_id in selection.get('runs') or [] %}
+      <li class="tray-chip kind-replay"><span class="tray-kind">replay</span>
+        <span class="tray-label">{{ run_id }}</span></li>
+      {% endfor %}
+      {% for md5 in selection.get('maps') or [] %}
+      <li class="tray-chip kind-map"><span class="tray-kind">map</span>
+        <span class="tray-label">{{ md5 }}</span></li>
+      {% endfor %}
+      {% if selection.get('since') or selection.get('until') %}
+      <li class="tray-chip kind-range"><span class="tray-kind">range</span>
+        <span class="tray-label">{{ selection.get('since') or 'beginning' }} →
+          {{ selection.get('until') or 'now' }}</span></li>
+      {% endif %}
+    </ul>
+    <p class="fineprint">Hashes: text <code>{{ doc.hash[:16] }}</code> · prompt
+      <code>{{ doc.prompt_hash[:16] }}</code>.</p>
+    <form method="post" action="/critique/{{ doc.hash }}/delete" class="inline">
+      <button class="link danger" type="submit">delete this critique</button>
+    </form>
+  </section>
+</article>
+{% endblock %}
+{% block scripts %}<script src="/static/app.js?v={{ version }}" defer></script>{% endblock %}

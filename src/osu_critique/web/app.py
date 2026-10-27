@@ -16,6 +16,7 @@ import sys
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
@@ -25,7 +26,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import __version__, annotations, covers, critiques, digest, index
+from .. import __version__, annotations, coach, covers, critiques, digest, index, scope
 from ..config import outdir as default_outdir
 from . import data
 
@@ -204,6 +205,22 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         page["critique"] = stored
         page["critique_stale"] = critiques.is_stale(
             stored, page["metrics"], flat, load_system_prompt())
+        # the tab is the only generator: for a one-run selection it stores a scope
+        # artifact, and that is what this page shows when it exists
+        system = coach.load_scope_prompt()
+        scope_conn = index.open_readonly(out)
+        built = None
+        if scope_conn is not None:
+            try:
+                built = scope.build(
+                    scope_conn, out,
+                    {"runs": [run_id], "maps": [], "since": None, "until": None},
+                    system=system)
+            finally:
+                scope_conn.close()
+        page["scope_hash"] = built["hash"] if built else None
+        page["scope_critique"] = (critiques.load_scope(out, built["hash"])
+                                  if built else None)
         page["llm_available"] = bool(_llm_key())
         page["llm_allowed"] = _llm_allowed(request)
         page["toc"] = data.run_toc(page)
@@ -231,6 +248,176 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             raise HTTPException(status_code=404, detail="no metrics for this run")
         return PlainTextResponse(
             text, headers={"Content-Disposition": f'inline; filename="{run_id}.txt"'})
+
+
+    # ----------------------------------------------------------- critique --
+
+    def _selection_state(request: Request, **extra):
+        """Resolve the query into a selection, the built text, and every URL.
+
+        The selection is the URL; nothing is remembered between requests. Each
+        candidate row carries the link that adds it, each tray chip the link
+        that removes it, so the picker needs no client-side state.
+        """
+        selection = scope.from_query(request.query_params)
+        conn = index.open_readonly(out)
+        if conn is None:
+            return None
+        try:
+            built = scope.build(conn, out, selection, system=coach.load_scope_prompt())
+            picked = {r["run_id"] for r in built["rows"]}
+            picked_maps = {r["beatmap_md5"] for r in built["rows"]}
+            mq = request.query_params.get("mq") or ""
+            candidates = data.critique_candidates(conn, picked, picked_maps, mq)
+            saved = data.scope_critiques(conn)
+        finally:
+            conn.close()
+
+        def url(**changes):
+            merged = dict(selection)
+            merged.update(changes)
+            return "/critique?" + urlencode(
+                {k: ",".join(v) if isinstance(v, list) else (v or "")
+                 for k, v in merged.items() if v})
+
+        tray = []
+        for run_id in selection["runs"]:
+            tray.append({"label": run_id, "kind": "replay",
+                         "remove": url(runs=[r for r in selection["runs"]
+                                             if r != run_id])})
+        for md5 in selection["maps"]:
+            row = next((r for r in built["rows"] if r["beatmap_md5"] == md5), None)
+            tray.append({"label": (row or {}).get("map_name") or md5, "kind": "map",
+                         "remove": url(maps=[m for m in selection["maps"]
+                                             if m != md5])})
+        if selection["since"] or selection["until"]:
+            tray.append({"label": " · ".join(x for x in (
+                scope._PRESET_LABEL.get(selection["since"], selection["since"])
+                or "", selection["until"] and f"until {selection['until']}" or "")
+                if x), "kind": "range", "remove": url(since=None, until=None)})
+
+        for row in candidates["runs"]:
+            row["add"] = url(runs=selection["runs"] + [row["run_id"]])
+        for row in candidates["maps"]:
+            row["add"] = url(maps=selection["maps"] + [row["md5"]])
+        presets = [{"label": label, "add": url(since=key, until=None)}
+                   for key, label in (("today", "today"), ("session", "this session"),
+                                      ("7d", "last 7 days"), ("30d", "last 30 days"))]
+        return {"selection": selection, "built": built, "tray": tray,
+                "candidates": candidates, "saved": saved, "presets": presets,
+                "clear": "/critique", "mq": mq,
+                "form": {"runs": ",".join(selection["runs"]),
+                         "maps": ",".join(selection["maps"]),
+                         "since": selection["since"] or "",
+                         "until": selection["until"] or ""}}
+
+    @app.get("/critique", response_class=HTMLResponse)
+    def critique_page(request: Request):
+        state = _selection_state(request)
+        if state is None:
+            return render("empty.html", request)
+        return render("critique.html", request, **state,
+                      max_bytes=scope.MAX_TEXT_BYTES,
+                      stored=critiques.load_scope(out, state["built"]["hash"]) is not None,
+                      llm_available=bool(_llm_key()),
+                      llm_allowed=_llm_allowed(request))
+
+    @app.get("/critique/{digest}", response_class=HTMLResponse)
+    def critique_artifact(request: Request, digest: str):
+        doc = critiques.load_scope(out, digest)
+        if doc is None:
+            raise HTTPException(status_code=404, detail="no such critique")
+        return render("critique_artifact.html", request, doc=doc,
+                      selection=doc.get("selection") or {},
+                      reopen="/critique?" + urlencode(
+                          {k: ",".join(v) if isinstance(v, list) else (v or "")
+                           for k, v in (doc.get("selection") or {}).items() if v}))
+
+    @app.post("/critique/generate")
+    def critique_generate(request: Request, runs: str = Form(""),
+                          maps: str = Form(""), since: str = Form(""),
+                          until: str = Form("")):
+        if not _llm_allowed(request):
+            raise HTTPException(status_code=403,
+                                detail="LLM routes are local-only (web.llm_remote = false)")
+        if not _llm_key():
+            raise HTTPException(status_code=400, detail=(
+                "no LLM key configured: run `osu-critique setup` or set OSU_LLM_KEY"))
+        selection = scope.from_query({"runs": runs, "maps": maps,
+                                      "since": since, "until": until})
+        system = coach.load_scope_prompt()
+        conn = index.open_readonly(out)
+        if conn is None:
+            raise HTTPException(status_code=404, detail="no index")
+        try:
+            built = scope.build(conn, out, selection, system=system)
+        finally:
+            conn.close()
+        if built["refused"]:
+            raise HTTPException(
+                status_code=413,
+                detail=(f"this selection is {built['bytes'] // 1024} KB of summary; "
+                        f"the limit is {scope.MAX_TEXT_BYTES // 1024} KB. "
+                        "Narrow it and try again."))
+        digest = built["hash"]
+        if critiques.load_scope(out, digest) is not None:
+            return _redirect(f"/critique/{digest}")
+        if "text/event-stream" in request.headers.get("accept", ""):
+            return StreamingResponse(
+                _stream_scope(digest, built, selection, system),
+                media_type="text/event-stream",
+                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        from ..coach import generate_critique
+        try:
+            text, model = generate_critique(system, built["text"])
+        except RuntimeError as exc:
+            raise HTTPException(status_code=502, detail=str(exc))
+        critiques.save_scope(out, critiques.build_scope(
+            digest=digest, text=built["text"], selection=selection, system=system,
+            model=model, body=text, n_runs=built["n_runs"],
+            n_maps=built["n_maps"], first=built["first"], last=built["last"]))
+        _sync_notes()
+        return _redirect(f"/critique/{digest}")
+
+    def _stream_scope(digest, built, selection, system):
+        q: queue.Queue = queue.Queue()
+        result: dict = {}
+
+        def worker():
+            try:
+                text, model = coach.generate_critique(system, built["text"],
+                                                      on_delta=q.put)
+                result["text"], result["model"] = text, model
+            except Exception as exc:
+                result["error"] = f"{type(exc).__name__}: {exc}"
+            finally:
+                q.put(None)
+
+        threading.Thread(target=worker, daemon=True).start()
+        while True:
+            chunk = q.get()
+            if chunk is None:
+                break
+            yield "data: " + json.dumps({"delta": chunk}) + "\n\n"
+        if result.get("error"):
+            yield "data: " + json.dumps({"error": result["error"]}) + "\n\n"
+            yield "data: [DONE]\n\n"
+            return
+        critiques.save_scope(out, critiques.build_scope(
+            digest=digest, text=built["text"], selection=selection, system=system,
+            model=result.get("model"), body=result.get("text") or "",
+            n_runs=built["n_runs"], n_maps=built["n_maps"],
+            first=built["first"], last=built["last"]))
+        _sync_notes()
+        yield "data: " + json.dumps({"done": True, "hash": digest,
+                                     "url": f"/critique/{digest}"}) + "\n\n"
+        yield "data: [DONE]\n\n"
+
+    @app.post("/critique/{digest}/delete")
+    def critique_delete(digest: str):
+        critiques.remove_scope(out, digest)
+        _sync_notes()
+        return _redirect("/critique")
 
     # -------------------------------------------------------------- json --
 
@@ -334,6 +521,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             try:
                 index.sync_annotations(conn, out)
                 index.sync_critiques(conn, out)
+                index.sync_scope_critiques(conn, out)
                 conn.commit()
             finally:
                 conn.close()
@@ -435,68 +623,6 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             raise HTTPException(status_code=409, detail="the metrics artifact is missing")
         notes = annotations.for_map(out, run["beatmap_md5"], run["replay_md5"])
         return run, metrics, notes["map"] + notes["run"]
-
-    @app.post("/run/{run_id}/critique")
-    def make_critique(request: Request, run_id: str):
-        if not _llm_allowed(request):
-            raise HTTPException(status_code=403,
-                                detail="LLM routes are local-only (web.llm_remote = false)")
-        if not _llm_key():
-            raise HTTPException(status_code=400, detail=(
-                "no LLM key configured: run `osu-critique setup` or set OSU_LLM_KEY"))
-        _run, metrics, notes = _critique_inputs(run_id)
-
-        from ..coach import generate_critique, load_system_prompt, prepare_critique
-        system, user, _notes = prepare_critique(metrics, out)
-
-        if "text/event-stream" in request.headers.get("accept", ""):
-            return StreamingResponse(
-                _stream_critique(run_id, metrics, notes, system, user),
-                media_type="text/event-stream",
-                headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
-        try:
-            text, model = generate_critique(system, user)
-        except RuntimeError as exc:
-            raise HTTPException(status_code=502, detail=str(exc))
-        doc = critiques.build(metrics, notes, system, model, text, run_id=run_id)
-        critiques.save(out, doc)
-        _sync_notes()
-        return _redirect(f"/run/{run_id}")
-
-    def _stream_critique(run_id, metrics, notes, system, user):
-        """SSE: deltas as they arrive, then the saved sidecar's metadata."""
-        q: queue.Queue = queue.Queue()
-        result: dict = {}
-
-        def worker():
-            try:
-                from ..coach import generate_critique
-                text, model = generate_critique(system, user, on_delta=q.put)
-                result["text"] = text
-                result["model"] = model
-            except Exception as exc:  # surfaced to the browser, never silent
-                result["error"] = f"{type(exc).__name__}: {exc}"
-            finally:
-                q.put(None)
-
-        threading.Thread(target=worker, daemon=True).start()
-        while True:
-            chunk = q.get()
-            if chunk is None:
-                break
-            yield "data: " + json.dumps({"delta": chunk}) + "\n\n"
-        if result.get("error"):
-            yield "data: " + json.dumps({"error": result["error"]}) + "\n\n"
-            yield "data: [DONE]\n\n"
-            return
-        doc = critiques.build(metrics, notes, system, result.get("model"), 
-                              result.get("text") or "", run_id=run_id)
-        critiques.save(out, doc)
-        _sync_notes()
-        yield "data: " + json.dumps({"done": True, "model": doc["model"],
-                                     "created": doc["created"]}) + "\n\n"
-        yield "data: [DONE]\n\n"
 
     @app.post("/run/{run_id}/critique/delete")
     def delete_critique(run_id: str, next: str = Form("/")):

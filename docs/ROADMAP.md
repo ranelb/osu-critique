@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.22.1** (tag `v0.22.1` is the last published release); 310 tests green
+State: **0.23.0** (tag `v0.23.0` is the last published release); 336 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
@@ -38,6 +38,21 @@ numbers), and one 2020 replay that trips a pre-existing analyser `TypeError`
 and is skipped by the digest.
 
 ## Shipped since the handoff
+
+- **0.23.0 — the critique tab.** A third page, plus the CLI command behind it.
+  Select replays, whole maps (every attempt) and date ranges into one additive,
+  deduplicated selection; the page builds **one deterministic text** and that
+  text is the model's entire input — no metrics JSON, no second formatter. Up to
+  10 runs get their full per-replay reports, above that it degrades to
+  overview + per-map table (top 40) + per-run table (newest 120) + the
+  cross-attempt stability block, and the header counts what was left out; above
+  300 KB of summary the preview stays and generation is refused with the reason.
+  Stored at `out/critiques/scope/<hash>.json`, hashed over text + prompt, with
+  the text inside so a stored answer always sits next to the input it was given;
+  `index.sqlite` mirrors metadata only (schema v5, auto-rebuilt by the server).
+  The run page stops generating: it shows a stored critique read-only (or an
+  older per-run one, labelled) and links into the tab. New scope system prompt,
+  framed for a selection rather than a play.
 
 - **0.22.1 — the dead-JavaScript fix.** 0.22.0 shipped with `initAnnotations`
   and `initBoards` missing from `app.js`: an edit sliced a range of the file and

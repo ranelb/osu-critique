@@ -559,6 +559,66 @@ def cmd_coach(args):
     return 0
 
 
+def cmd_critique(args):
+    """The same builder the critique tab uses, without a browser."""
+    from . import critiques, index, scope
+    from .coach import load_scope_prompt
+    from .config import outdir
+
+    out = outdir()
+    try:
+        conn = index.open_readonly(index.db_path(out))
+    except index.SchemaMismatch as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if conn is None:
+        print("error: no index — run `osu-critique index` first", file=sys.stderr)
+        return 2
+    selection = {"runs": [x.strip() for x in args.runs.split(",") if x.strip()],
+                 "maps": [x.strip() for x in args.maps.split(",") if x.strip()],
+                 "since": args.since, "until": args.until}
+    system = load_scope_prompt(args.prompt)
+    try:
+        built = scope.build(conn, out, selection, system=system)
+    finally:
+        conn.close()
+    if not built["n_runs"]:
+        print("error: nothing matches that selection", file=sys.stderr)
+        return 2
+    if not args.llm:
+        print(built["text"], end="")
+        return 0
+    if built["refused"]:
+        print(f"error: {built['bytes'] // 1024} KB of summary, the limit is "
+              f"{scope.MAX_TEXT_BYTES // 1024} KB — narrow the selection",
+              file=sys.stderr)
+        return 2
+
+    from .coach import generate_critique
+    try:
+        text, model = generate_critique(system, built["text"], model=args.model)
+    except RuntimeError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    doc = critiques.build_scope(
+        digest=built["hash"], text=built["text"], selection=selection,
+        system=system, model=model, body=text, n_runs=built["n_runs"],
+        n_maps=built["n_maps"], first=built["first"], last=built["last"])
+    path = critiques.save_scope(out, doc)
+    try:
+        mirror = index.connect(index.db_path(out))
+        try:
+            index.sync_scope_critiques(mirror, out)
+            mirror.commit()
+        finally:
+            mirror.close()
+    except Exception:
+        pass
+    print(text)
+    print(f"\n— stored: {path} ({model})", file=sys.stderr)
+    return 0
+
+
 def _save_critique(args, text):
     """Store the critique next to the run: out/critiques/<run_id>.json."""
     import os as _os
@@ -902,6 +962,19 @@ def main(argv=None):
     p.add_argument("--prompt", default=None,
                    help="custom critique-framework prompt file (overrides built-in)")
     p.set_defaults(func=cmd_coach)
+
+    p = sub.add_parser("critique", help="a critique of a *selection*: replays, "
+                                        "whole maps, a date range, or any mix")
+    p.add_argument("--runs", default="", help="comma-separated run ids")
+    p.add_argument("--maps", default="", help="comma-separated beatmap md5s (every attempt)")
+    p.add_argument("--since", default=None,
+                   help="today | session | 7d | 30d | YYYY-MM-DD (played_at, not export time)")
+    p.add_argument("--until", default=None, help="YYYY-MM-DD, inclusive")
+    p.add_argument("--llm", action="store_true",
+                   help="call the model too, and store the answer with the summary it read")
+    p.add_argument("--model", default=None, help="LLM model (overrides config/env)")
+    p.add_argument("--prompt", default=None, help="custom scope-framework prompt file")
+    p.set_defaults(func=cmd_critique)
 
     p = sub.add_parser("prompt", help="print the critique-framework prompt (bring-your-own-AI)")
     p.add_argument("metrics_json", nargs="?", default=None,

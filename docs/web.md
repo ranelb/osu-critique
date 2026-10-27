@@ -19,10 +19,12 @@ skip), then serves until interrupted.
 |---|---|
 | `/` | one card per beatmap: cover, difficulty, star pill, ranked status, attempts, best accuracy, last played. Search by artist/title/difficulty; sort by recency, accuracy, SR, attempts or pp; filter by status or "trustworthy only". |
 | `/map/<beatmap_md5>` | hero cover + `[Metadata]` from the `.osu`, star/status pills, attempt table (sortable via htmx, no page reload), the cross-attempt block (first → latest per family/shape, with the `attempts` gate and verdict). |
-| `/run/<run_id>` | the trust banner **first**, then accuracy/UR/counts/combo/hit-error/aim cards, a hit-error-over-time chart, and then five folds: "where it went wrong", the objects worth looking at, the deterministic report as **cards with tables** (see below), the LLM critique, and the notes. A left rail jumps between them. |
+| `/run/<run_id>` | the trust banner **first**, then accuracy/UR/counts/combo/hit-error/aim cards, a hit-error-over-time chart, and then five folds: "where it went wrong", the objects worth looking at, the deterministic report as **cards with tables** (see below), the stored LLM critique (read-only, with a link into the tab), and the notes. A left rail jumps between them. |
 | `/api/objects/<run_id>` | the per-object JSON, verbatim as `analyze` wrote it. |
 | `/api/map/<md5>`, `/api/runs` | the same data the pages render, for anything that wants JSON. |
 | `/api/cover/<md5>?size=card\|hero` | the cached cover, fetched once from `assets.ppy.sh`. |
+| `/critique` | the selection picker (replays, whole maps, time ranges), the deterministic summary as text, the generate button, and the stored critiques. See `docs/critiques.md`. |
+| `/critique/<hash>` | one stored scope critique: the answer, the exact summary it read, and the selection. |
 | `/feed` | the written digests as pages — stat cards, linked plays, map cards with art, and a **digest now** button (see [export.md](export.md)). |
 | `/run/<id>/frames` | **501** — reserved for replay playback, deliberately unimplemented. |
 
@@ -70,6 +72,14 @@ always works. Copy is the convenience, not the only access.
 - **Server-rendered.** Jinja templates and one `app.js` (a few canvases and a
   lazy table). htmx handles the one partial (attempt sorting). No npm, no
   bundler, no serialising the corpus into the client.
+- **The tab is the only place a critique is generated.** The run page shows what
+  is stored for that run — a scope artifact when one exists, an older per-run one
+  read-only otherwise — and links into the tab with the run pre-selected. Two
+  generation paths meant two prompts for the same replay.
+- **Selection state is the URL.** `/critique?runs=…&maps=…&since=…`: every "add"
+  and "remove" is a link, the page is server-rendered on each change, and a
+  selection can be bookmarked or pasted into a chat. Nothing is remembered
+  between requests, so nothing can desync.
 - **One report, two renderers.** `report_sections.py` builds the deterministic
   critique as data — `kv` rows, notes with a tone (trust, time base, primary
   target), and tables — and `render_report()` is its terminal rendering, so the
@@ -82,9 +92,10 @@ always works. Copy is the convenience, not the only access.
   streams). The browser only draws circles and lines: no matplotlib, no frames,
   no extra request. The whole panel is a collapsed `<details>` — it costs one
   JSON blob in the page and nothing until you open it.
-- **Critiques are stored, not recomputed.** The run page streams one LLM call
-  and keeps the answer in `out/critiques/` with the hashes that say what it was
-  made from; see [critiques.md](critiques.md).
+- **Critiques are stored, not recomputed.** The tab streams one LLM call per
+  selection and keeps the answer *and the summary it read* in
+  `out/critiques/scope/`, keyed by a hash over both; the same selection opens the
+  stored one instead of paying twice. See [critiques.md](critiques.md).
 - **Annotations are written here, in map time.** The run page's playhead stamps
   `t_map` (seconds on the `.osu` clock) so a note lands on the same objects on
   every attempt, even when the run's own rows are in another clock. See

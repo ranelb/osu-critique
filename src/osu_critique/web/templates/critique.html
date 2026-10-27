@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% from "partials/rail.html" import rail with context %}
+{% block title %}critique · osu-critique{% endblock %}
+{% block main_class %}has-rail{% endblock %}
+{% block rail %}{{ rail([{'id': 'tray', 'label': 'selection', 'count': built.n_runs},
+                         {'id': 'summary', 'label': 'summary'},
+                         {'id': 'generate', 'label': 'llm'},
+                         {'id': 'saved', 'label': 'saved', 'count': saved | length}],
+                        'this critique') }}{% endblock %}
+{% block body %}
+<article class="critique">
+  <section class="page-head">
+    <div>
+      <h1>critique <span class="count">{{ built.n_runs }} runs</span></h1>
+      <p class="muted">Pick replays, whole maps and time ranges into one selection.
+        The summary below is the <b>only</b> thing the model gets — no raw metrics.</p>
+    </div>
+  </section>
+
+  <section class="panel" id="tray">
+    <h2>selection <span class="count">{{ tray | length }} selector{{ '' if tray | length == 1 else 's' }}</span></h2>
+    {% if tray %}
+    <ul class="tray">
+      {% for chip in tray %}
+      <li class="tray-chip kind-{{ chip.kind }}"><span class="tray-kind">{{ chip.kind }}</span>
+        <span class="tray-label">{{ chip.label }}</span>
+        <a class="tray-x" href="{{ chip.remove }}" title="remove">×</a></li>
+      {% endfor %}
+      <li class="tray-clear"><a class="link" href="{{ clear }}">clear all</a></li>
+    </ul>
+    {% else %}
+    <p class="muted">Nothing selected yet. Add a replay, a map, or a range below —
+      they add up.</p>
+    {% endif %}
+
+    <form class="filters picker-search" method="get" action="/critique">
+      {% for k, v in form.items() %}{% if v and k in ('runs', 'maps') %}
+      <input type="hidden" name="{{ k }}" value="{{ v }}">{% endif %}{% endfor %}
+      <input type="search" name="mq" value="{{ mq }}"
+             placeholder="filter both lists by map title" aria-label="filter replays and maps">
+      <button type="submit" class="ghost medium">filter</button>
+    </form>
+
+    <div class="picker-grid">
+      <div class="picker">
+        <h3>replays</h3>
+        <ul class="picklist">
+          {% for r in candidates.runs %}
+          <li><a class="pick" href="{{ r.add }}">+</a>
+            <span class="pick-main">{{ r.map_name }}</span>
+            <span class="pick-meta">{{ r.when }} · {{ r.mod_string or 'NM' }} ·
+              {{ (r.accuracy * 100) | num(1) }}%</span></li>
+          {% endfor %}
+          {% if not candidates.runs %}<li class="muted">no replays match</li>{% endif %}
+        </ul>
+      </div>
+
+      <div class="picker">
+        <h3>maps <span class="muted">(every attempt)</span></h3>
+        <ul class="picklist">
+          {% for m in candidates.maps %}
+          <li><a class="pick" href="{{ m.add }}">+</a>
+            <span class="pick-main">{{ m.name }}</span>
+            <span class="pick-meta">{{ m.plays }} play{{ '' if m.plays == 1 else 's' }} ·
+              best {{ (m.best * 100) | num(1) }}% · {{ m.when }}</span></li>
+          {% endfor %}
+          {% if not candidates.maps %}<li class="muted">no maps match</li>{% endif %}
+        </ul>
+      </div>
+
+      <div class="picker">
+        <h3>time range</h3>
+        <p class="fineprint">Ranges read <b>when you played</b>, not when the replay
+          was exported. A range adds its runs to the selection.</p>
+        <ul class="presets">
+          {% for p in presets %}
+          <li><a class="pill-link" href="{{ p.add }}">{{ p.label }}</a></li>
+          {% endfor %}
+        </ul>
+        <form class="filters range-form" method="get" action="/critique">
+          {% if form.runs %}<input type="hidden" name="runs" value="{{ form.runs }}">{% endif %}
+          {% if form.maps %}<input type="hidden" name="maps" value="{{ form.maps }}">{% endif %}
+          <label class="range-field">from
+            <input type="date" name="since" value="{{ form.since if form.since[:1].isdigit() else '' }}"></label>
+          <label class="range-field">to
+            <input type="date" name="until" value="{{ form.until }}"></label>
+          <button type="submit" class="ghost medium">apply range</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel" id="summary">
+    <h2>deterministic summary <span class="count">{{ (built.bytes / 1024) | num(0) }} KB</span></h2>
+    {% if built.n_runs %}
+    <p class="fineprint">Built from the artifacts, offline, no model. This exact text is
+      what a critique is asked to read — <b>copy</b> it if you would rather paste it
+      somewhere else.</p>
+    <div class="summary-acts">
+      <button class="ghost small" type="button" id="copy-summary">copy</button>
+    </div>
+    <pre class="report scope-text" id="scope-text">{{ built.text }}</pre>
+    {% else %}
+    <p class="muted">Nothing matches this selection yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="panel" id="generate">
+    <h2>llm critique</h2>
+    {% if not built.n_runs %}
+    <p class="muted">Select something first.</p>
+    {% elif built.refused %}
+    <p class="notice">This selection is {{ (built.bytes / 1024) | num(0) }} KB of summary,
+      above the {{ (max_bytes / 1024) | num(0) }} KB limit. Narrow it to send it to a model.</p>
+    {% elif not llm_allowed %}
+    <p class="notice">LLM routes are local-only here (<code>web.llm_remote = false</code>).</p>
+    {% elif not llm_available %}
+    <p class="notice">No LLM key configured — run <code>osu-critique setup</code> or set
+      <code>OSU_LLM_KEY</code>. The summary above works without one.</p>
+    {% else %}
+    <form method="post" action="/critique/generate" id="scope-form" class="note-form"
+          data-hash="{{ built.hash }}">
+      <input type="hidden" name="runs" value="{{ form.runs }}">
+      <input type="hidden" name="maps" value="{{ form.maps }}">
+      <input type="hidden" name="since" value="{{ form.since }}">
+      <input type="hidden" name="until" value="{{ form.until }}">
+      <div class="note-form-row">
+        <button type="submit" id="scope-run">{{ 'open the stored critique' if stored else 'generate' }}</button>
+        <span class="fineprint">one call,
+          {{ '≈ ' ~ (built.text | length // 4) ~ ' tokens of summary' }}. The answer is
+          stored with the summary it was given.</span>
+      </div>
+    </form>
+    <pre class="report" id="scope-body" hidden></pre>
+    {% endif %}
+  </section>
+
+  <section class="panel" id="saved">
+    <h2>saved critiques <span class="count">{{ saved | length }}</span></h2>
+    {% if saved %}
+    <table class="data tight">
+      <thead><tr><th>when</th><th>runs</th><th>maps</th><th>span</th><th>model</th>
+        <th class="num">size</th><th></th></tr></thead>
+      <tbody>
+      {% for c in saved %}
+        <tr>
+          <td><a href="/critique/{{ c.hash }}">{{ c.created | when }}</a></td>
+          <td class="num">{{ c.n_runs }}</td>
+          <td class="num">{{ c.n_maps }}</td>
+          <td class="muted">{{ c.span }}</td>
+          <td class="muted">{{ c.model or '—' }}</td>
+          <td class="num muted">{{ (c.bytes / 1024) | num(0) }} KB</td>
+          <td><form method="post" action="/critique/{{ c.hash }}/delete" class="inline">
+            <button class="link danger" type="submit">delete</button></form></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">No stored critiques yet. Generating one stores both the answer and
+      the summary it read, keyed by their hash — the same selection will not pay twice.</p>
+    {% endif %}
+  </section>
+</article>
+{% endblock %}
+{% block scripts %}<script src="/static/app.js?v={{ version }}" defer></script>{% endblock %}

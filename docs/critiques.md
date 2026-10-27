@@ -1,11 +1,78 @@
 # Stored critiques
 
-The LLM critique of a run is **stored with that run**, not regenerated every
-time you open the page. One call, one artifact, and a clear mark when the
-artifact no longer describes the data.
+There are two kinds, and they are not the same artifact:
 
-`osu-critique coach --save out/<tag>_metrics.json` stores it from the CLI; the
-run page's **critique this run** button stores it from the browser.
+- **A scope critique** — the critique tab, `osu-critique critique`. It is about a
+  *selection*: replays, whole maps, a date range, or any mix. The model reads one
+  deterministic text and nothing else. This is the current path (0.23.0).
+- **A per-run critique** — `osu-critique coach --save`, written before 0.23.0. It
+  was built from a metrics-JSON prompt. The web no longer generates these; it
+  still shows the ones that exist, read-only and labelled, because they are
+  authored text that was paid for.
+
+The run page's **critique this run** button is gone: it now links into the tab
+with the run pre-selected, and shows whatever is stored for that run.
+
+## Scope critiques
+
+A selection is additive and deduplicated: `--runs a,b`, `--maps <md5>,<md5>`
+(every attempt of those maps), and a range that reads **`played_at`** — when you
+played, not when the replay was exported. Presets: `today`, `session` (since the
+last gap longer than three hours), `7d`, `30d`; or `--since YYYY-MM-DD [--until]`.
+
+`scope.py` resolves the selection and renders **one text**. That text is the
+page's summary section, the model's entire input, and the thing stored in the
+artifact — there is no second formatter and no raw metrics in the prompt.
+
+Sizing, because a selection has no natural bound:
+
+| | |
+|---|---|
+| full per-replay reports | up to 10 runs |
+| above that | overview + per-map table (top 40 by plays) + per-run table (newest 120) + the cross-attempt stability block |
+| omission | counted in the header, so the model knows what it was not given |
+| refusal | above 300 KB of text: the preview is still shown, generation is off with the reason |
+
+Stored at `out/critiques/scope/<hash>.json`, where the hash covers **the text and
+the system prompt**. The same selection over the same corpus is the same artifact,
+so a second click opens the stored answer instead of paying again; a re-analysed
+replay or a new note changes the text, which is a different artifact by
+definition. There is no "stale" state for these — that is the point of hashing.
+
+The sidecar keeps the text as well as the answer, so an artifact can be read years
+later next to exactly the input it was given.
+
+```json
+{
+ "schema_version": 1, "kind": "scope", "hash": "…",
+ "created": "…", "model": "deepseek-v4-flash", "prompt_hash": "…", "system": "…",
+ "selection": {"runs": [], "maps": ["7f2830e4…"], "since": "7d", "until": null},
+ "n_runs": 47, "n_maps": 39, "first_played": "…", "last_played": "…",
+ "bytes": 18301, "text": "# Critique selection …", "body": "…"
+}
+```
+
+`index.sqlite` mirrors the **metadata only** (`scope_critiques`: hash, created,
+model, counts, span, size, path — schema v5): the bodies are tens of kilobytes
+and are read from the file when a critique is opened. An index from an older
+release is rebuilt on the next server start; `osu-critique index --rebuild` does
+it by hand.
+
+### From a terminal
+
+```bash
+osu-critique critique --since 7d                    # the deterministic text
+osu-critique critique --maps <md5> --until 2026-10-20
+osu-critique critique --maps <md5> --llm            # call + store + print
+```
+
+Same builder, same hash, same sidecar as the tab.
+
+## Per-run critiques (legacy)
+
+Written before 0.23.0 from a `metrics`-JSON prompt by `osu-critique coach --save`.
+The web reads them and never regenerates them: the answers exist, they were made
+from different input, and pretending otherwise would be a lie.
 
 ## What is stored
 
