@@ -769,3 +769,46 @@ def test_the_map_page_has_a_rail_too(client):
     for anchor in ("attempts", "annotations"):
         assert f'data-spy="{anchor}"' in page
         assert f'id="{anchor}"' in page
+
+
+# ------------------------------------------------------------ client side ----
+
+APP_JS = Path(__file__).parent.parent / "src/osu_critique/web/static/app.js"
+
+
+def test_app_js_defines_every_function_it_calls():
+    """A deleted function definition is invisible to a server-rendered test.
+
+    0.22.0 shipped with initAnnotations and initBoards sliced out of app.js: the
+    page rendered, the rail worked, and the playhead, the boards and the copy
+    button were silently dead. Cheapest possible guard: every init*() that is
+    called must have a definition in the same file.
+    """
+    import re
+
+    src = APP_JS.read_text()
+    defined = set(re.findall(r"(?:async\s+)?function\s+(\w+)", src))
+    called = set(re.findall(r"\b(init[A-Z]\w*)\(\)", src))
+    assert called, "no init* calls found — the regex or the file changed"
+    assert called <= defined, f"called but never defined: {sorted(called - defined)}"
+
+
+def test_the_report_text_is_inlined_and_matches_the_endpoint(client):
+    import re
+
+    page = client.get("/run/" + "2" * 32).text
+    assert 'id="report-text"' in page
+    assert '/report.txt"' in page                    # the always-available link
+    block = re.search(r'<script type="application/json" id="report-text">(.*?)</script>',
+                      page, re.S)
+    assert block is not None
+    inlined = json.loads(block.group(1))
+    served = client.get("/run/" + "2" * 32 + "/report.txt").text
+    assert inlined == served
+    assert "Report" in inlined
+
+
+def test_static_assets_are_cache_busted_by_version(client):
+    page = client.get("/run/" + "2" * 32).text
+    assert "/static/style.css?v=" in page
+    assert "/static/app.js?v=" in page

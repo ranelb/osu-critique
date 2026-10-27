@@ -74,8 +74,8 @@ main { flex: 1; width: min(1180px, 100%); margin: 0 auto;
   padding: clamp(1.2rem, 3vw, 2.4rem) clamp(1rem, 3vw, 2rem) 3rem; }
 
 /* rail + content. Pages without a rail keep the old single column. */
-main.has-rail { display: grid; grid-template-columns: 178px minmax(0, 1fr);
-  gap: 2.2rem; align-items: start; }
+main.has-rail { display: grid; grid-template-columns: 172px minmax(0, 1fr);
+  gap: 2rem; align-items: start; }
 .page { min-width: 0; }
 .rail { position: sticky; top: 4.2rem; align-self: start;
   max-height: calc(100vh - 6rem); overflow: auto; font-size: .85rem; }
@@ -256,7 +256,18 @@ details.all-objects summary { cursor: pointer; color: var(--muted); font-size: .
 
 /* --------------------------------------------------------------- rail --- */
 
-@media (max-width: 1080px) {
+/* The rail holds until a window is genuinely narrow: a chip strip pinned above
+   the title is worse than a thin column beside it. */
+@media (max-width: 1160px) {
+  main.has-rail { grid-template-columns: 142px minmax(0, 1fr); gap: 1.3rem; }
+  .rail { font-size: .82rem; }
+  main.has-rail .statcard { padding: .55rem .6rem; }
+  main.has-rail .statcard .v { font-size: 1.02rem; }
+  main.has-rail .statcard .v.small { font-size: .86rem; }
+  main.has-rail .statcard .k2 { font-size: .62rem; }
+}
+
+@media (max-width: 880px) {
   main.has-rail { grid-template-columns: 1fr; gap: .7rem; }
   .rail { position: sticky; top: 0; z-index: 6; max-height: none; display: flex;
     gap: .4rem; overflow-x: auto; padding: .45rem 0; background: var(--bg);
@@ -305,9 +316,14 @@ button.link.danger:hover { color: var(--red); }
 .note-form-row input[name=tag], .note-form-row input[name=t] { flex: 0 1 14rem; }
 .playhead { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 .playhead input[type=range] { flex: 1 1 18rem; accent-color: var(--pink); }
-button.ghost { background: none; border: 1px solid var(--line); color: #cbd4e6;
-  font-weight: 600; }
-button.ghost:hover { border-color: var(--pink); color: var(--pink); }
+button.ghost, a.ghost { background: none; border: 1px solid var(--line);
+  color: #cbd4e6; font-weight: 600; }
+button.ghost:hover, a.ghost:hover { border-color: var(--pink); color: var(--pink); }
+a.ghost { border-radius: 8px; padding: .28rem .6rem; font-size: .78rem;
+  display: inline-block; }
+.small, button.small { font-size: .76rem; padding: .22rem .55rem; }
+.summary-acts, .acts { display: flex; gap: .35rem; align-items: center;
+  grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 button:disabled { opacity: .45; cursor: not-allowed; }
 .panel h3 { font-size: .74rem; text-transform: uppercase; letter-spacing: .07em;
   color: var(--muted); margin: 1rem 0 .4rem; font-weight: 600; }
@@ -357,8 +373,7 @@ details.fold[open] > summary .st::before { content: "▾ "; }
 details.fold > summary .peek { grid-column: 1; font-weight: 400; font-size: .78rem;
   line-height: 1.45; color: #6d778c; }
 details.fold > summary .peek code { font-size: .95em; }
-details.fold > summary .copy { grid-column: 2; grid-row: 1 / span 2; align-self: center;
-  margin: 0; }
+details.fold > summary .copy { margin: 0; }
 details.fold[open] > summary { margin-bottom: .9rem; }
 details.panel > summary::marker { color: var(--pink); }
 details.panel[open] > summary { margin-bottom: .8rem; }

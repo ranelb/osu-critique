@@ -194,62 +194,6 @@
     pick();
   }
 
-  /* ---------------------------------------------------------------- copy -- */
-
-  async function copyText(text) {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    } catch (err) {
-      /* plain-http LAN pages have no clipboard API — fall back to the old way */
-    }
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.setAttribute("readonly", "");
-    ta.style.cssText = "position:fixed;top:-1000px;opacity:0";
-    document.body.appendChild(ta);
-    ta.select();
-    let ok = false;
-    try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
-    ta.remove();
-    return ok;
-  }
-
-  function initCopy() {
-    const button = document.getElementById("copy-report");
-    if (!button) return;
-    const label = button.textContent;
-    button.addEventListener("click", async (ev) => {
-      ev.preventDefault();      // a button inside <summary> would toggle the fold
-      ev.stopPropagation();
-      let text = "";
-      button.disabled = true;
-      try {
-        const res = await fetch(button.dataset.copy);
-        if (!res.ok) throw new Error(res.status);
-        text = await res.text();
-      } catch (err) {
-        button.textContent = "could not load the text";
-        button.disabled = false;
-        return;
-      }
-      const ok = await copyText(text);
-      button.disabled = false;
-      if (ok) {
-        button.textContent = "copied";
-        setTimeout(() => { button.textContent = label; }, 1600);
-      } else {
-        /* last resort: show it, the user selects and copies */
-        button.textContent = "select + ctrl+c";
-        const pre = document.createElement("pre");
-        pre.className = "report";
-        pre.id = "report-copy";
-        pre.textContent = text;
-        button.closest("details").appendChild(pre);
-      }
-    });
-  }
-
   /* -------------------------------------------------------- annotations -- */
 
   function mapClock(ms, scale) {
@@ -433,55 +377,69 @@
     }
   }
 
-  /* ---------------------------------------------------------- critiques -- */
+  /* ---------------------------------------------------------------- copy -- */
 
-  async function streamCritique(form, body, button) {
-    const empty = document.getElementById("critique-empty");
-    if (empty) empty.hidden = true;
-    body.hidden = false;
-    if (!body.dataset.kept) body.textContent = "";
-    body.dataset.kept = "1";
-    button.disabled = true;
-    const label = button.textContent;
-    button.textContent = "thinking…";
+  async function copyText(text) {
     try {
-      const res = await fetch(form.action, {
-        method: "POST",
-        headers: { Accept: "text/event-stream" },
-      });
-      if (!res.ok || !res.body) {
-        const detail = await res.text();
-        if (empty) { empty.hidden = false; empty.textContent = "the critique failed:"; }
-        body.textContent = detail || String(res.status);
-        return;
-      }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let cut;
-        while ((cut = buf.indexOf("\n\n")) >= 0) {
-          const frame = buf.slice(0, cut);
-          buf = buf.slice(cut + 2);
-          if (!frame.startsWith("data: ")) continue;
-          const payload = frame.slice(6).trim();
-          if (payload === "[DONE]") continue;
-          let obj;
-          try { obj = JSON.parse(payload); } catch (e) { continue; }
-          if (obj.delta) body.textContent += obj.delta;
-          else if (obj.error) body.textContent += "\n\n[error] " + obj.error;
-          else if (obj.done) button.textContent = "regenerate";
-        }
-      }
+      await navigator.clipboard.writeText(text);
+      return true;
     } catch (err) {
-      body.textContent += "\n\n[network error] " + err.message;
-    } finally {
-      button.disabled = false;
-      if (button.textContent === "thinking…") button.textContent = label;
+      /* plain-http LAN pages have no clipboard API — fall back to the old way */
     }
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-1000px;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (err) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+
+  function initCopy() {
+    const button = document.getElementById("copy-report");
+    const holder = document.getElementById("report-text");
+    if (!button || !holder) return;
+    let text = "";
+    try {
+      text = JSON.parse(holder.textContent || '""');
+    } catch (err) {
+      text = holder.textContent || "";
+    }
+    const label = button.textContent;
+
+    const showText = () => {
+      const fold = button.closest("details");
+      if (!fold) return;
+      let pre = fold.querySelector("#report-copy");
+      if (!pre) {
+        pre = document.createElement("pre");
+        pre.className = "report";
+        pre.id = "report-copy";
+        pre.textContent = text;
+        fold.appendChild(pre);
+      }
+      fold.open = true;
+      pre.scrollIntoView({ block: "nearest" });
+    };
+
+    button.addEventListener("click", async (ev) => {
+      ev.preventDefault();      // a button inside <summary> would toggle the fold
+      ev.stopPropagation();
+      if (!text) { showText(); return; }
+      const ok = await copyText(text);
+      if (ok) {
+        button.textContent = "copied";
+        setTimeout(() => { button.textContent = label; }, 1600);
+      } else {
+        /* no clipboard at all: put the text on screen instead of failing quietly */
+        button.textContent = "select + ctrl+c";
+        setTimeout(() => { button.textContent = label; }, 4000);
+        showText();
+      }
+    });
   }
 
   /* --------------------------------------------------------------- init -- */

@@ -191,6 +191,7 @@ def run_page(conn, run_id: str) -> dict | None:
     if metrics:
         try:
             from ..report_sections import sections as build_sections
+            from ..report_sections import to_text
             report_sections = build_sections(metrics)
         except Exception:
             report_sections = []
@@ -213,6 +214,8 @@ def run_page(conn, run_id: str) -> dict | None:
         "duration_ms": duration,
         "boards": boards,
         "report_sections": report_sections,
+        "report_text": (to_text(metrics, report_sections)
+                        if report_sections else ""),
         "n_report_sections": sum(1 for sec in report_sections
                                  if any(item.get("tone") != "headline"
                                         for item in sec["items"])),

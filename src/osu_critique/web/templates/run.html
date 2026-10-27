@@ -163,8 +163,11 @@
       <span class="st">deterministic critique</span>
       <span class="peek">{{ n_report_sections }} sections of tables and thresholds — the same text
         <code>osu-critique report</code> prints</span>
-      <button class="ghost small copy" type="button" id="copy-report"
-              data-copy="/run/{{ run.run_id }}/report.txt">copy</button>
+      <span class="acts">
+        <button class="ghost small" type="button" id="copy-report">copy</button>
+        <a class="ghost small" href="/run/{{ run.run_id }}/report.txt"
+           target="_blank" rel="noopener">text</a>
+      </span>
     </summary>
     <div class="rsections">
     {% for s in report_sections %}
@@ -194,7 +197,9 @@
     {% endfor %}
     </div>
     <p class="fineprint">Rule-based, offline, no keys. <b>copy</b> puts the plain-text
-      version on the clipboard — paste it into a model if you want a second opinion.</p>
+      version on the clipboard, <b>text</b> opens it in a tab — paste either into a
+      model if you want a second opinion.</p>
+    <script type="application/json" id="report-text">{{ report_text | tojson }}</script>
   </details>
 
   <details class="panel fold" id="critique"{% if not critique %} open{% endif %}>
@@ -268,4 +273,4 @@
   </details>
 </article>
 {% endblock %}
-{% block scripts %}<script src="/static/app.js" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/app.js?v={{ version }}" defer></script>{% endblock %}

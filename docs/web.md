@@ -37,7 +37,9 @@ cannot drift from the markup. Entries carry a count when the block holds a
 countable thing — objects, sections, notes, attempts — and no count when a count
 would only restate the cards at the top.
 
-Sticky above 1080 px, a horizontal chip strip below it. The active entry is the
+Sticky above 880 px — 172 px wide, narrowing to 142 px under 1160 px — and a
+horizontal chip strip only below that. A column beside the title beats a chip
+bar pinned above it, which was the first version and read as clutter. The active entry is the
 last block whose top crossed 28 % of the viewport, recomputed on scroll, resize
 and `toggle`: **not** an IntersectionObserver, because opening a fold moves every
 block below it without a scroll event, and reconstructing "what is on screen"
@@ -51,13 +53,17 @@ under the title. A peek states what is inside (the rule, the count, the model an
 when) and never a value that the cards already show — "37 of 153 objects: every
 miss and every non-300, in map order", not "37 objects, worst first".
 
-The deterministic report's fold carries a **copy** button: `/run/<id>/report.txt`
-serves exactly what `osu-critique report` prints (`report_sections.to_text`), so
-pasting it into a model cannot pick up a second, drifting formatter. The button
-lives inside `<summary>` and therefore stops propagation — otherwise copying
-would also toggle the fold. `navigator.clipboard` needs a secure context, so on a
-plain-http LAN address the fallback is a hidden textarea and `execCommand`, and
-if that fails too, the text is appended for a manual select.
+The deterministic report's fold carries **copy** and **text**. The text is
+inlined in the page as `<script type="application/json" id="report-text">` — the
+same `report_sections.to_text` the CLI prints — so copying needs no fetch and
+happens inside the click gesture. That matters: `execCommand("copy")` after an
+`await fetch(...)` has lost the user activation and silently fails, which is
+exactly how the first version broke on the LAN address. `navigator.clipboard`
+also needs a secure context, so plain http falls back to a hidden textarea and
+`execCommand`; if even that fails, the text is dropped into the fold and opened.
+
+`text` is a plain link to `/run/<id>/report.txt`: no JavaScript, no clipboard,
+always works. Copy is the convenience, not the only access.
 
 ## Design rules
 

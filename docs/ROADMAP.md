@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.22.0** (tag `v0.22.0` is the last published release); 307 tests green
+State: **0.22.1** (tag `v0.22.1` is the last published release); 310 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
@@ -38,6 +38,19 @@ numbers), and one 2020 replay that trips a pre-existing analyser `TypeError`
 and is skipped by the digest.
 
 ## Shipped since the handoff
+
+- **0.22.1 — the dead-JavaScript fix.** 0.22.0 shipped with `initAnnotations`
+  and `initBoards` missing from `app.js`: an edit sliced a range of the file and
+  took two functions with it. The page rendered, the rail scrolled, and the
+  playhead, the boards and the critique stream were silently dead — no error
+  because the deletion left a call with no definition, which only surfaces at
+  runtime. Restored, and there is now a test that every `init*()` called in the
+  file is defined in it. Three smaller things from the same look: the rail stays
+  a column down to 880 px (a chip strip above the title read as clutter, which
+  was the whole point), static assets are cache-busted with the version (a stale
+  `style.css` under new markup looks exactly like a styling bug), and the report
+  fold now inlines its text and offers a plain `text` link, because copying from
+  an insecure http origin cannot rely on the clipboard API.
 
 - **0.22.0 — decluttering: a rail and five folds.** Measured first: the run page
   was 7.5 screens at 1280x800 with 715 numbers on it, half of them restated, and
