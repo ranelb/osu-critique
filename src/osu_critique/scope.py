@@ -37,6 +37,11 @@ SESSION_GAP_HOURS = 3        # a longer silence starts a new session
 
 MOD_FILTERS = ("NM", "DT", "HT", "HR", "HD")
 
+#: "attempts per map" thresholds offered in the picker. A map you played ten
+#: times is worth ten of a map you played once: repeats are what the stability
+#: block, the trend block and any "did I get better" answer are made of.
+ATTEMPT_FILTERS = (2, 3, 5)
+
 #: How a mod filter matches a stored ``mod_string``. ``NM`` means *no* mods, which
 #: is an equality rather than a substring; everything else is a substring, so
 #: ``DT`` also catches ``HDDT``.
@@ -55,7 +60,7 @@ def _mod_clause(mods: str | None):
 
 def empty_selection() -> dict:
     return {"runs": [], "maps": [], "since": None, "until": None, "mods": None,
-            "question": None}
+            "min_attempts": 0, "question": None}
 
 
 def from_query(query) -> dict:
@@ -81,10 +86,15 @@ def from_query(query) -> dict:
         return raw or None
 
     mods = stamp("mods")
+    try:
+        min_attempts = max(0, int(stamp("min_attempts") or 0))
+    except ValueError:
+        min_attempts = 0
     question = (stamp("q") or "").strip()[:2000]
     return {"runs": ids("runs"), "maps": ids("maps"),
             "since": stamp("since"), "until": stamp("until"),
             "mods": mods.upper() if mods else None,
+            "min_attempts": min_attempts,
             "question": question or None}
 
 
@@ -149,19 +159,29 @@ _RUN_COLUMNS = ("run_id, json_path, tag, beatmap_md5, map_name, played_at, "
                 "rank_status, replay_md5")
 
 
-def resolve(conn, selection: dict, now: datetime | None = None) -> list[dict]:
-    """The runs a selection covers, deduplicated by run_id, oldest first."""
-    found: dict[str, dict] = {}
+def resolve(conn, selection: dict, now: datetime | None = None,
+            stats: dict | None = None) -> list[dict]:
+    """The runs a selection covers, deduplicated by run_id, oldest first.
 
-    def add(where: str, args: tuple):
+    ``min_attempts`` drops whole maps the selection only grazes: it counts the
+    attempts *inside the selection*, because a map you played ten times over six
+    months is still one attempt this week and tells the model nothing. A replay
+    you named by hand is never dropped by it — naming one is a stronger
+    statement than a threshold.
+    """
+    found: dict[str, dict] = {}
+    named: dict[str, dict] = {}
+
+    def add(where: str, args: tuple, into: dict | None = None):
+        target = into if into is not None else found
         sql = f"SELECT {_RUN_COLUMNS} FROM runs WHERE {where}"
         for row in conn.execute(sql, args):
             doc = dict(row)
-            found.setdefault(doc["run_id"], doc)
+            target.setdefault(doc["run_id"], doc)
 
     if selection.get("runs"):
         marks = ",".join("?" * len(selection["runs"]))
-        add(f"run_id IN ({marks})", tuple(selection["runs"]))
+        add(f"run_id IN ({marks})", tuple(selection["runs"]), named)
     mod_sql, mod_args = _mod_clause(selection.get("mods"))
     if selection.get("maps"):
         marks = ",".join("?" * len(selection["maps"]))
@@ -181,6 +201,21 @@ def resolve(conn, selection: dict, now: datetime | None = None) -> list[dict]:
         args.append(until)
     if clauses:
         add(" AND ".join(clauses) + mod_sql, tuple(args) + mod_args)
+
+    minimum = int(selection.get("min_attempts") or 0)
+    if minimum >= 2:
+        counts: dict[str, int] = {}
+        for row in found.values():
+            key = row.get("beatmap_md5") or ""
+            counts[key] = counts.get(key, 0) + 1
+        kept = {rid: row for rid, row in found.items()
+                if counts.get(row.get("beatmap_md5") or "") >= minimum}
+        if stats is not None:
+            stats["dropped_thin"] = len(found) - len(kept)
+            stats["thin_maps"] = len({row.get("beatmap_md5") for row in found.values()}) - \
+                len({row.get("beatmap_md5") for row in kept.values()})
+        found = kept
+    found.update(named)
 
     return sorted(found.values(),
                   key=lambda r: (r.get("played_at") or "", r["run_id"]))
@@ -228,6 +263,9 @@ def _selector_line(selection: dict) -> str:
         parts.append(f"everything up to {until}")
     if selection.get("mods"):
         parts.append(f"only {selection['mods']} plays")
+    minimum = int(selection.get("min_attempts") or 0)
+    if minimum >= 2:
+        parts.append(f"maps played {minimum}+ times in this selection")
     return "; ".join(parts) or "nothing"
 
 
@@ -443,8 +481,10 @@ def _trend_block(rows: list[dict], metrics: dict[str, dict]) -> str:
 
 
 def render(rows: list[dict], metrics: dict[str, dict], selection: dict,
-           outdir) -> str:
+           outdir, stats: dict | None = None) -> str:
     """The whole deterministic text for a resolved selection."""
+    stats = stats or {}
+    minimum = int(selection.get("min_attempts") or 0)
     parts: list[str] = ["# Selection summary", ""]
 
     question = (selection.get("question") or "").strip()
@@ -460,6 +500,10 @@ def render(rows: list[dict], metrics: dict[str, dict], selection: dict,
               f"- played {span}",
               f"- selected by: {_selector_line(selection)}"]
     omitted: list[str] = []
+    if stats.get("dropped_thin"):
+        omitted.append(f"{stats['dropped_thin']} run(s) on "
+                       f"{stats['thin_maps']} map(s) with fewer than "
+                       f"{minimum} attempt(s) in this selection")
     if len(rows) > FULL_REPORT_LIMIT:
         omitted.append(f"per-replay reports (the selection is above "
                        f"{FULL_REPORT_LIMIT} runs)")
@@ -523,13 +567,14 @@ def hash_of(text: str, system: str) -> str:
 def build(conn, outdir, selection: dict, system: str = "",
           now: datetime | None = None) -> dict:
     """Resolve, render and size a selection. No network, no keys, no writes."""
-    rows = resolve(conn, selection, now=now)
+    stats: dict = {}
+    rows = resolve(conn, selection, now=now, stats=stats)
     metrics: dict[str, dict] = {}
     for row in rows:
         doc = _metrics_at(row.get("json_path"))
         if doc:
             metrics[row["run_id"]] = doc
-    text = render(rows, metrics, selection, outdir)
+    text = render(rows, metrics, selection, outdir, stats=stats)
     size = len(text.encode("utf-8"))
     return {
         "selection": selection,

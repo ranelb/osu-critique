@@ -266,7 +266,7 @@ def map_toc(page: dict) -> list:
 
 def critique_candidates(conn, picked_runs: set, picked_maps: set, query: str = "",
                         limit: int = 40, runs_offset: int = 0,
-                        maps_offset: int = 0) -> dict:
+                        maps_offset: int = 0, min_attempts: int = 0) -> dict:
     """What the pickers offer: replays and maps, paged, minus what is picked.
 
     Paging is by offset and the picked ids are excluded *in SQL*, so a page
@@ -297,13 +297,15 @@ def critique_candidates(conn, picked_runs: set, picked_maps: set, query: str = "
 
     clause, args = (f" AND beatmap_md5 NOT IN ({','.join('?' * len(picked_maps))})",
                     tuple(sorted(picked_maps))) if picked_maps else ("", ())
+    having = " HAVING COUNT(*) >= ?" if min_attempts and min_attempts >= 2 else ""
+    having_args = (min_attempts,) if having else ()
     maps = [dict(row) for row in conn.execute(
         "SELECT beatmap_md5 AS md5, COUNT(*) AS plays, MAX(accuracy) AS best, "
         "MAX(played_at) AS last, MAX(map_name) AS name FROM runs "
         "WHERE beatmap_md5 != '' AND map_name LIKE ?" + clause +
-        " GROUP BY beatmap_md5 ORDER BY plays DESC, last DESC, md5 "
-        "LIMIT ? OFFSET ?",
-        (like, *args, limit + 1, max(0, maps_offset)))]
+        " GROUP BY beatmap_md5" + having +
+        " ORDER BY plays DESC, last DESC, md5 LIMIT ? OFFSET ?",
+        (like, *args, *having_args, limit + 1, max(0, maps_offset)))]
     maps_more = len(maps) > limit
     maps = maps[:limit]
     for doc in maps:

@@ -24,6 +24,14 @@ A selection is additive and deduplicated: `--runs a,b`, `--maps <md5>,<md5>`
 played, not when the replay was exported. Presets: `today`, `session` (since the
 last gap longer than three hours), `7d`, `30d`; or `--since YYYY-MM-DD [--until]`.
 
+An **attempts-per-map filter** (`≥2`, `≥3`, `≥5`) drops whole maps the selection
+only grazes, counted **inside the selection**: a map played ten times over six
+months is one attempt this week and tells the model nothing. It also filters the
+map list by how often you have played each map at all, which is how you find the
+repeated ones. Repeats are what the stability block, the trend block and any
+"did I get better" answer are made of — ten maps played once are ten anecdotes.
+A replay you named by hand is never dropped by it, same rule as the mod filter.
+
 A **mod filter** (`DT`, `HR`, `HD`, `HT`, `NM`) narrows the map and range
 selectors — "this map, DT only", "last week, no-mod plays". It deliberately does
 not touch replays you pick by hand: naming a replay is a stronger statement than
@@ -49,7 +57,7 @@ Sizing, because a selection has no natural bound:
 | patterns over time | per family and shape class, first third vs last third, gated at 20 objects per end — the evidence a "did I get better" question needs |
 | full per-replay reports | up to 10 runs |
 | above that | overview + per-map table (top 40 by plays) + per-run table (newest 120) + the cross-attempt stability block |
-| omission | counted in the header, so the model knows what it was not given |
+| omission | counted in the header, so the model knows what it was not given — including "113 runs on 113 maps with fewer than 2 attempts" when the attempt filter bit |
 | warning | above 300 KB of text: the page says so and the button reads "generate anyway" — nothing is blocked, because a big selection is the owner's call, not the tool's |
 
 Stored at `out/answers/<hash>.json` (before 0.25.0: `out/critiques/scope/`; those

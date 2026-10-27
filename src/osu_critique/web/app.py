@@ -291,7 +291,8 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             picked_maps = {r["beatmap_md5"] for r in built["rows"]}
             mq = request.query_params.get("mq") or ""
             candidates = data.critique_candidates(
-                conn, picked, picked_maps, mq, limit=PICKER_PAGE)
+                conn, picked, picked_maps, mq, limit=PICKER_PAGE,
+                min_attempts=selection.get("min_attempts") or 0)
             saved = data.answers(conn)
         finally:
             conn.close()
@@ -321,11 +322,21 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         if selection["mods"]:
             tray.append({"label": f"only {selection['mods']} plays", "kind": "mods",
                          "remove": query_for({"mods": None})})
+        if (selection.get("min_attempts") or 0) >= 2:
+            tray.append({"label": f"maps played {selection['min_attempts']}+ times",
+                         "kind": "attempts",
+                         "remove": query_for({"min_attempts": None})})
 
         for row in candidates["runs"]:
             row["add"] = query_for({"runs": selection["runs"] + [row["run_id"]]})
         for row in candidates["maps"]:
             row["add"] = query_for({"maps": selection["maps"] + [row["md5"]]})
+        attempt_chips = [{"label": "any", "add": query_for({"min_attempts": None}),
+                          "on": not selection.get("min_attempts")}]
+        for n in scope.ATTEMPT_FILTERS:
+            attempt_chips.append({"label": f"≥{n}",
+                                  "add": query_for({"min_attempts": n}),
+                                  "on": selection.get("min_attempts") == n})
         mod_chips = [{"label": "any", "add": query_for({"mods": None}),
                       "on": not selection["mods"]}]
         for key in scope.MOD_FILTERS:
@@ -343,7 +354,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
 
         return {"selection": selection, "built": built, "tray": tray,
                 "candidates": candidates, "saved": saved, "presets": presets,
-                "mod_chips": mod_chips,
+                "mod_chips": mod_chips, "attempt_chips": attempt_chips,
                 "runs_more": candidates["runs_more"],
                 "maps_more": candidates["maps_more"],
                 "runs_next": (rows_url("runs", PICKER_PAGE)
@@ -387,7 +398,8 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             page = data.critique_candidates(
                 conn, picked, picked_maps, mq, limit=PICKER_PAGE,
                 runs_offset=offset if kind == "runs" else 0,
-                maps_offset=offset if kind == "maps" else 0)
+                maps_offset=offset if kind == "maps" else 0,
+                min_attempts=selection.get("min_attempts") or 0)
         finally:
             conn.close()
         rows = page["runs"] if kind == "runs" else page["maps"]

@@ -23,7 +23,7 @@ skip), then serves until interrupted.
 | `/api/objects/<run_id>` | the per-object JSON, verbatim as `analyze` wrote it. |
 | `/api/map/<md5>`, `/api/runs` | the same data the pages render, for anything that wants JSON. |
 | `/api/cover/<md5>?size=card\|hero` | the cached cover, fetched once from `assets.ppy.sh`. |
-| `/ask` | the selection picker (replays, whole maps, time ranges, a mod filter), an optional question, the generate button, the summary as text, and the stored answers — the answer first, the input it read underneath. Old `/critique` links 301 here. See `docs/ask.md`. |
+| `/ask` | the selection picker (replays, whole maps, time ranges, a mod filter, an attempts-per-map filter), an optional question, the generate button, the summary as text, and the stored answers — the answer first, the input it read underneath. Old `/critique` links 301 here. See `docs/ask.md`. |
 | `/ask/<hash>` | one stored answer: the question, the answer, the exact summary it read, and the selection. |
 | `/feed` | the written digests as pages — stat cards, linked plays, map cards with art, and a **digest now** button (see [export.md](export.md)). |
 | `/run/<id>/frames` | **501** — reserved for replay playback, deliberately unimplemented. |

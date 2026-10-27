@@ -1044,3 +1044,19 @@ def test_the_feed_says_whether_the_digest_exports(client, monkeypatch):
     monkeypatch.setattr(export_mod, "binary_path", lambda: None)
     page = client.get("/feed").text
     assert "the exporter is missing" in page
+
+
+def test_the_picker_filters_by_attempts_per_map(client):
+    page = client.get("/ask?maps=" + MAP_A + "&min_attempts=3").text
+    assert "maps played 3+ times in this selection" in page
+    # map A has three attempts here, so nothing is dropped
+    assert "3 runs" in page
+    page = client.get("/ask?maps=" + MAP_A + "&min_attempts=5").text
+    assert "Nothing matches this selection" in page
+
+
+def test_the_attempt_chips_are_links_that_keep_the_selection(client):
+    page = client.get("/ask?maps=" + MAP_A).text
+    assert 'class="modrow"' in page
+    assert "min_attempts=2" in page and "min_attempts=5" in page
+    assert "attempts<br>per map" in page

@@ -495,6 +495,8 @@ pre.scope-text { max-height: 34rem; overflow: auto; background: var(--bg2);
   color: var(--text); }
 .modrow .fineprint { margin: 0 0 0 .4rem; flex: 1 1 16rem; }
 .tray-chip.kind-mods .tray-kind { background: #b48bff; }
+.tray-chip.kind-attempts .tray-kind { background: #7fe2c4; }
+.modrow-label { min-width: 3.6rem; line-height: 1.15; }
 
 /* a dimmed cover behind a replay row: decoration only, the row keeps its size */
 .picklist li.has-bg { position: relative; overflow: hidden; }

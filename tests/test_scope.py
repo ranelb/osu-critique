@@ -273,3 +273,42 @@ def test_the_trend_block_appears_only_with_enough_plays(corpus):
     small = scope.build(conn, out, {"maps": [MAP_A, MAP_B], "runs": [], "since": None,
                                     "until": None}, system="SYS")
     assert "## Patterns over time" not in small["text"]     # three plays is not a trend
+
+
+# ------------------------------------------------------- attempts per map ----
+
+def test_min_attempts_drops_maps_the_selection_only_grazes(corpus):
+    out, conn = corpus
+    stats = {}
+    selection = {"runs": [], "maps": [MAP_A, MAP_B], "since": None, "until": None,
+                 "min_attempts": 2}
+    rows = scope.resolve(conn, selection, stats=stats)
+    assert run_ids(rows) == ["a1", "a2"]          # map B had one attempt
+    assert stats == {"dropped_thin": 1, "thin_maps": 1}
+
+
+def test_min_attempts_never_drops_a_replay_you_named(corpus):
+    out, conn = corpus
+    rows = scope.resolve(conn, {"runs": ["3" * 32], "maps": [], "since": None,
+                                "until": None, "min_attempts": 5})
+    assert run_ids(rows) == ["b1"]
+
+
+def test_min_attempts_counts_inside_the_selection_not_the_corpus(corpus):
+    """Two attempts on map A in total, one inside the range: the map is thin."""
+    out, conn = corpus
+    stats = {}
+    rows = scope.resolve(conn, {"runs": [], "maps": [], "since": "2026-10-02",
+                                "until": "2026-10-02", "min_attempts": 2},
+                         stats=stats)
+    assert run_ids(rows) == []
+    assert stats["dropped_thin"] == 1
+
+
+def test_the_text_states_the_attempt_threshold_and_what_it_dropped(corpus):
+    out, conn = corpus
+    built = scope.build(conn, out, {"runs": [], "maps": [MAP_A, MAP_B], "since": None,
+                                    "until": None, "min_attempts": 2}, system="SYS")
+    assert "maps played 2+ times in this selection" in built["text"]
+    assert ("omitted: 1 run(s) on 1 map(s) with fewer than 2 attempt(s)"
+            in built["text"])

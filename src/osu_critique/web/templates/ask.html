@@ -52,6 +52,16 @@
         you pick by hand are always included</span>
     </div>
 
+    <div class="modrow">
+      <span class="modrow-label">attempts<br>per map</span>
+      {% for a in attempt_chips %}
+      <a class="pill-link{% if a.on %} on{% endif %}" href="{{ a.add }}">{{ a.label }}</a>
+      {% endfor %}
+      <span class="fineprint">keeps maps you played at least that often <b>in this
+        selection</b>, and filters the map list by how often you played it at all —
+        repeats are what the stability and trend blocks are made of</span>
+    </div>
+
     <div class="picker-grid">
       <div class="picker">
         <h3>replays</h3>
