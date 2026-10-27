@@ -1,4 +1,5 @@
 """Path resolution and folder-pairing tests (no network, no osu! install)."""
+import json
 import os
 import zipfile
 from pathlib import Path
@@ -138,3 +139,38 @@ def test_batch_keeps_every_attempt_of_one_map(tmp_path):
     for tag in tags:
         (tmp_path / f"{tag}_metrics.json").write_text("{}")
     assert len(list(tmp_path.glob("*_metrics.json"))) == 2
+
+
+def test_setup_merges_instead_of_replacing_the_config(tmp_path, monkeypatch):
+    """The wizard asks about six settings; the file holds more than six.
+
+    0.24.x replaced the whole file, so running `setup` to set an LLM key silently
+    switched replay export off — and the digest then looked broken.
+    """
+    import osu_critique.cli as cli_mod
+    import osu_critique.config as config_mod
+
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps({
+        "export": {"enabled": True, "binary": "/opt/BeatmapExporterCLI"},
+        "web": {"llm_remote": False},
+        "llm_key": "old",
+    }))
+    monkeypatch.setattr(config_mod, "CONFIG_PATH", path)
+    monkeypatch.setattr(config_mod, "CONFIG_DIR", tmp_path)
+
+    def fake_ask(prompt, default=None, secret=False):
+        if "LLM API key" in prompt:
+            return "new-key"
+        if "export replays" in prompt:
+            return "y"
+        return default if default is not None else ""
+
+    monkeypatch.setattr(cli_mod, "_ask", fake_ask)
+    assert cli_mod.main(["setup"]) == 0
+
+    saved = json.loads(path.read_text())
+    assert saved["llm_key"] == "new-key"                      # asked about
+    assert saved["export"] == {"enabled": True,                 # not asked about… 
+                               "binary": "/opt/BeatmapExporterCLI"}  # …kept
+    assert saved["web"] == {"llm_remote": False}

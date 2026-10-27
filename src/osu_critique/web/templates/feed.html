@@ -12,8 +12,22 @@
       {% else %}Nothing new since your last digest{% endif %}
       · deterministic, no model called.
     </p>
-    <p class="fineprint"><b>digest now</b> ingests replays that were exported since the
-      last digest, analyses them, then writes a new one — that can take a minute.</p>
+    <p class="fineprint"><b>digest now</b> {% if export_enabled %}asks osu! for your new
+      plays,{% else %}reads replays that are already exported,{% endif %} analyses them,
+      then writes a new one — that can take a minute.</p>
+    <p class="fineprint export-state">
+      {% if export_enabled and export_binary %}
+      export: <b class="pos">on</b> — the exporter runs before each digest
+      {% elif export_enabled and not export_binary %}
+      export: <b class="warn">on, but the exporter is missing</b> — install it with
+      <code>osu-critique export --install</code>, otherwise a digest only sees
+      replays exported by something else
+      {% else %}
+      export: <b class="warn">off</b> — a digest only reads replays you exported
+      yourself; set <code>"export": {"enabled": true}</code> or re-run
+      <code>osu-critique setup</code>
+      {% endif %}
+    </p>
   </div>
   <div class="feed-actions">
     <span class="fineprint">{{ items | length }} digest{{ '' if items | length == 1 else 's' }}</span>

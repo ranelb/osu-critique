@@ -755,7 +755,8 @@ def cmd_setup(args):
         print(json.dumps(masked, indent=2) if cfg else "no config file yet")
         return 0
 
-    from .config import (CONFIG_PATH, outdir, save_config, lazer_data, stable_root)
+    from .config import (CONFIG_PATH, outdir, save_config, load_config,
+                         lazer_data, stable_root, get as config_get)
     print("osu-critique setup — first-time configuration")
     print("Every value is optional; press Enter to accept the [default] or skip.")
     print("Nothing is required for `analyze` / `pair` / `batch` / `report`.\n")
@@ -775,6 +776,14 @@ def cmd_setup(args):
     allow_scrape = "true" if str(allow_scrape).strip().lower() in (
         "y", "yes", "true", "1", "on") else "false"
 
+    from . import export as _export
+    current_export = _export.enabled()
+    print("\n[Replay export — lets `digest` pull your new plays out of osu!]")
+    export_answer = _ask("export replays from the osu! database before a digest? "
+                         "(y/N)",
+                         "y" if current_export else "n")
+    export_enabled = str(export_answer).strip().lower() in ("y", "yes", "true", "1", "on")
+
     print("\n[Paths — where your replays/maps live (auto-detected if empty)]")
     lazer_data_dir = _ask("osu!lazer data dir", str(lazer_data()))
     cfg_extra = {}
@@ -783,11 +792,16 @@ def cmd_setup(args):
         cfg_extra["stable_root"] = stable_root_dir
     outdir_ask = _ask("output dir", str(outdir()))
 
-    cfg = {"llm_key": llm_key, "llm_base_url": base_url, "llm_model": model,
-           "osu_client_id": client_id, "osu_client_secret": client_secret,
-           "allow_scrape": allow_scrape,
-           "lazer_data": lazer_data_dir, **cfg_extra,
-           "outdir": outdir_ask}
+    # Merge, never replace: this wizard asks about six settings, and a config
+    # file holds more (export.enabled, web.llm_remote, export.binary …). Replacing
+    # it silently switched replay export off on this box for a whole evening.
+    cfg = load_config()
+    cfg.update({"llm_key": llm_key, "llm_base_url": base_url, "llm_model": model,
+                "osu_client_id": client_id, "osu_client_secret": client_secret,
+                "allow_scrape": allow_scrape,
+                "lazer_data": lazer_data_dir, **cfg_extra,
+                "outdir": outdir_ask})
+    cfg["export"] = {**(cfg.get("export") or {}), "enabled": export_enabled}
     cfg = {k: v for k, v in cfg.items() if v is not None}
     path = save_config(cfg)
     print(f"\nsaved to {path} (mode 0600)")

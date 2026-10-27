@@ -1026,3 +1026,21 @@ def test_the_tab_is_named_ask_and_the_run_page_points_at_it(client):
     assert '<a href="/ask">ask</a>' in client.get("/").text
     page = client.get("/run/" + "2" * 32).text
     assert "/ask?runs=" + "2" * 32 in page
+
+
+def test_the_feed_says_whether_the_digest_exports(client, monkeypatch):
+    import osu_critique.export as export_mod
+
+    monkeypatch.setattr(export_mod, "enabled", lambda: True)
+    monkeypatch.setattr(export_mod, "binary_path", lambda: Path("/bin/true"))
+    page = client.get("/feed").text
+    assert "export: <b class=\"pos\">on</b>" in page
+
+    monkeypatch.setattr(export_mod, "enabled", lambda: False)
+    page = client.get("/feed").text
+    assert "a digest only reads replays you exported" in page
+
+    monkeypatch.setattr(export_mod, "enabled", lambda: True)
+    monkeypatch.setattr(export_mod, "binary_path", lambda: None)
+    page = client.get("/feed").text
+    assert "the exporter is missing" in page

@@ -4,7 +4,7 @@ For contributors picking this up. Read this file, then `docs/profile.md` and
 `docs/object_schema.md`. It records the decisions already made, the items still
 open, and the traps that have bitten.
 
-State: **0.25.0** (tag `v0.25.0` is the last published release); 351 tests green
+State: **0.25.1** (tag `v0.25.1` is the last published release); 353 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need real replays), CI on Python
 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).

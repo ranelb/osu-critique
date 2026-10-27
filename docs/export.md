@@ -9,6 +9,15 @@ Two halves of the same loop:
 Both are **opt-in**. Nothing here schedules itself, and export does nothing at
 all until you turn it on.
 
+Once it is on, a **digest exports first**: `digest` runs the exporter, then
+ingests what came back, then summarises. So "digest now" means "get my latest
+plays and tell me about them", not "read whatever something else exported". The
+feed page states which of the two it is at the top, and says so loudly when the
+exporter is enabled but missing.
+
+`osu-critique setup` writes the flag (it merges into your config, it does not
+replace it — that is how this setting once vanished for an evening).
+
 ## Export
 
 ```sh

@@ -174,8 +174,11 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
                 "label": datetime.fromtimestamp(item["mtime"]).strftime("%d %b %H:%M"),
                 "count": (item["data"] or {}).get("n_runs") or 0}
                for i, item in enumerate(items, 1) if item["data"]]
+        from .. import export as export_mod
         return render("feed.html", request, items=items, marker=marker,
-                      n_new=n_new, toc=toc)
+                      n_new=n_new, toc=toc,
+                      export_enabled=export_mod.enabled(),
+                      export_binary=export_mod.binary_path() is not None)
 
     @app.get("/map/{beatmap_md5}", response_class=HTMLResponse)
     def map_page(request: Request, beatmap_md5: str, sort: str = "played_at"):
