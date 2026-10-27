@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.24.1** (tag `v0.24.1` is the last published release); 344 tests green
+State: **0.24.2** (tag `v0.24.2` is the last published release); 345 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
@@ -45,7 +45,9 @@ and is skipped by the digest.
   fresh sentinel), with the offsets skipping already-picked ids in SQL so a page
   boundary cannot repeat a row. Static assets switched to a content fingerprint
   after an edited `app.js` was served from cache under the release-number query
-  and looked like broken JavaScript.
+  and looked like broken JavaScript. Also: the picker grouped by run id — 35 of
+  the corpus's runs have two artifacts (a duplicate export), so the same play was
+  offered twice and paging spent offsets on it.
 
 - **0.24.0 — mod filter, order, covers.** Three refinements from using 0.23.0:
   the picker filters by mod (`DT`, `HR`, `HD`, `HT`, `NM`: maps and ranges only,

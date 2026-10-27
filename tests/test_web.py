@@ -969,3 +969,24 @@ def test_the_fragment_route_keeps_the_current_selection(client):
                                              "maps": MAP_A, "mods": "NM"})
     assert r.status_code == 200
     assert "mods=NM" in r.text                       # add links keep the filter
+
+
+def test_a_duplicate_export_appears_once_in_the_picker(tmp_path):
+    """Two artifacts of one replay are one play: the picker must not offer it twice."""
+    import osu_critique.web.data as data_mod
+    from osu_critique import index as index_mod
+
+    out = build_corpus(tmp_path)
+    conn = index_mod.connect(out / index_mod.DB_FILENAME)
+    try:
+        doc = json.loads((out / "a2_metrics.json").read_text())
+        copy = dict(doc, tag="a2_again")
+        path = out / "a2_again_metrics.json"
+        path.write_text(json.dumps(copy))
+        index_mod.upsert_run(copy, path, outdir=out)
+        page = data_mod.critique_candidates(conn, set(), set(), "", limit=20)
+    finally:
+        conn.close()
+    ids = [r["run_id"] for r in page["runs"]]
+    assert len(ids) == len(set(ids))
+    assert ids.count("2" * 32) == 1

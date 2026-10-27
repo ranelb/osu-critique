@@ -281,10 +281,14 @@ def critique_candidates(conn, picked_runs: set, picked_maps: set, query: str = "
         return f" AND run_id NOT IN ({','.join('?' * len(values))})", tuple(values)
 
     clause, args = not_in(sorted(picked_runs))
+    # A duplicate export of the same replay is two rows (different json_path)
+    # but one run id: group, or the picker offers the same play twice and paging
+    # spends offsets on it.
     runs = [dict(row) for row in conn.execute(
-        "SELECT run_id, beatmap_md5, map_name, played_at, mod_string, accuracy "
-        "FROM runs WHERE map_name LIKE ?" + clause +
-        " ORDER BY played_at DESC, run_id LIMIT ? OFFSET ?",
+        "SELECT run_id, beatmap_md5, MAX(map_name) AS map_name, "
+        "MAX(played_at) AS played_at, MAX(mod_string) AS mod_string, "
+        "MAX(accuracy) AS accuracy FROM runs WHERE map_name LIKE ?" + clause +
+        " GROUP BY run_id ORDER BY played_at DESC, run_id LIMIT ? OFFSET ?",
         (like, *args, limit + 1, max(0, runs_offset)))]
     runs_more = len(runs) > limit
     runs = runs[:limit]
