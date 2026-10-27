@@ -264,6 +264,17 @@ and is skipped by the digest.
 
 ---
 
+## Known gaps in the critique tab
+
+- The model's answer is rendered in a `<pre>`, markdown and all, because the
+  project has no markdown renderer and adding a dependency for one panel was not
+  worth it in this pass. The deterministic side is text on purpose; the answer is
+  not, and it shows.
+- No "lens" selector (per-run / map / diet / timeframe) — one scope prompt serves
+  every selection, which works but blurs the wording for a one-replay critique.
+- The pickers show the 40 newest replays and the 40 busiest maps for the current
+  filter; there is no paging deeper than that yet.
+
 ## The most useful thing about this tool
 
 **The value is not the verdicts, it is that the per-object record plus the raw
