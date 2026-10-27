@@ -10,6 +10,7 @@ the history. See ``docs/web.md``.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import queue
 import sys
@@ -36,6 +37,9 @@ TEMPLATES = ROOT / "templates"
 
 #: How many rows the object table renders before it says "and N more".
 TABLE_LIMIT = 400
+
+#: How many picker rows arrive per page; scrolling the list asks for the next.
+PICKER_PAGE = 40
 
 
 # ------------------------------------------------------------------ filters --
@@ -103,8 +107,22 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
     templates.env.filters.update(pct=pct, num=num, star=star, when=when,
                                  clock=clock, mmss=mmss, ts=ts,
                                  fmt_t=annotations.fmt_time)
+    # Static assets are busted by their own fingerprint, not the release number:
+    # editing style.css and reloading used to show the old file, which reads as
+    # a CSS bug. Two runs of the same build with an edited file now differ.
+    h = hashlib.sha1()
+    for name in ("style.css", "app.js", "htmx.min.js"):
+        path = STATIC / name
+        try:
+            st = path.stat()
+            h.update(f"{name}:{st.st_size}:{st.st_mtime_ns}".encode())
+        except OSError:
+            h.update(name.encode())
+    asset_v = h.hexdigest()[:10]
+
     templates.env.globals.update(
         version=__version__,
+        asset_v=asset_v,
         table_limit=TABLE_LIMIT,
         brand="osu-critique",
     )
@@ -268,7 +286,8 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             picked = {r["run_id"] for r in built["rows"]}
             picked_maps = {r["beatmap_md5"] for r in built["rows"]}
             mq = request.query_params.get("mq") or ""
-            candidates = data.critique_candidates(conn, picked, picked_maps, mq)
+            candidates = data.critique_candidates(
+                conn, picked, picked_maps, mq, limit=PICKER_PAGE)
             saved = data.scope_critiques(conn)
         finally:
             conn.close()
@@ -308,12 +327,24 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         for key in scope.MOD_FILTERS:
             mod_chips.append({"label": key, "add": url(mods=key),
                               "on": selection["mods"] == key})
+        def rows_url(kind, offset):
+            params = {"kind": kind, "offset": offset, "mq": mq}
+            params.update({k: (",".join(v) if isinstance(v, list) else (v or ""))
+                           for k, v in selection.items() if v})
+            return "/critique/rows?" + urlencode(params)
+
         presets = [{"label": label, "add": url(since=key, until=None)}
                    for key, label in (("today", "today"), ("session", "this session"),
                                       ("7d", "last 7 days"), ("30d", "last 30 days"))]
         return {"selection": selection, "built": built, "tray": tray,
                 "candidates": candidates, "saved": saved, "presets": presets,
                 "mod_chips": mod_chips,
+                "runs_more": candidates["runs_more"],
+                "maps_more": candidates["maps_more"],
+                "runs_next": (rows_url("runs", PICKER_PAGE)
+                              if candidates["runs_more"] else None),
+                "maps_next": (rows_url("maps", PICKER_PAGE)
+                              if candidates["maps_more"] else None),
                 "clear": "/critique", "mq": mq,
                 "form": {"runs": ",".join(selection["runs"]),
                          "maps": ",".join(selection["maps"]),
@@ -330,6 +361,43 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
                       stored=critiques.load_scope(out, state["built"]["hash"]) is not None,
                       llm_available=bool(_llm_key()),
                       llm_allowed=_llm_allowed(request))
+
+    @app.get("/critique/rows", response_class=HTMLResponse)
+    def critique_rows(request: Request, kind: str = "runs", offset: int = 0,
+                      mq: str = ""):
+        """The next page of one picker list, as HTML rows plus a fresh sentinel."""
+        if kind not in ("runs", "maps"):
+            raise HTTPException(status_code=400, detail="kind is 'runs' or 'maps'")
+        selection = scope.from_query(request.query_params)
+        conn = index.open_readonly(out)
+        if conn is None:
+            raise HTTPException(status_code=404, detail="no index")
+        try:
+            resolved = scope.resolve(conn, selection)
+            picked = {r["run_id"] for r in resolved}
+            picked_maps = {r["beatmap_md5"] for r in resolved}
+            page = data.critique_candidates(
+                conn, picked, picked_maps, mq, limit=PICKER_PAGE,
+                runs_offset=offset if kind == "runs" else 0,
+                maps_offset=offset if kind == "maps" else 0)
+        finally:
+            conn.close()
+        rows = page["runs"] if kind == "runs" else page["maps"]
+        more = page["runs_more"] if kind == "runs" else page["maps_more"]
+        for row in rows:
+            row["add"] = "/critique?" + urlencode(
+                {k: ",".join(v) if isinstance(v, list) else (v or "")
+                 for k, v in dict(selection,
+                                  runs=(selection["runs"] + [row["run_id"]]) if kind == "runs"
+                                  else selection["runs"],
+                                  maps=(selection["maps"] + [row["md5"]]) if kind == "maps"
+                                  else selection["maps"]).items() if v})
+        params = {"kind": kind, "offset": offset + PICKER_PAGE, "mq": mq}
+        params.update({k: (",".join(v) if isinstance(v, list) else (v or ""))
+                       for k, v in selection.items() if v})
+        return render("partials/pickrows_body.html", request, rows=rows,
+                      more=more, kind=kind,
+                      next_url="/critique/rows?" + urlencode(params))
 
     @app.get("/critique/{digest}", response_class=HTMLResponse)
     def critique_artifact(request: Request, digest: str):

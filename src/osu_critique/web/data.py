@@ -265,36 +265,48 @@ def map_toc(page: dict) -> list:
 # --------------------------------------------------------------- critique --
 
 def critique_candidates(conn, picked_runs: set, picked_maps: set, query: str = "",
-                        limit: int = 40) -> dict:
-    """What the pickers offer: recent replays and busiest maps, minus the picked."""
+                        limit: int = 40, runs_offset: int = 0,
+                        maps_offset: int = 0) -> dict:
+    """What the pickers offer: replays and maps, paged, minus what is picked.
+
+    Paging is by offset and the picked ids are excluded *in SQL*, so a page
+    boundary cannot repeat a row that a previous page already showed. One extra
+    row is fetched to answer "is there more" without a COUNT.
+    """
     like = f"%{query.strip()}%" if query.strip() else "%"
-    runs = []
-    for row in conn.execute(
-            "SELECT run_id, beatmap_md5, map_name, played_at, mod_string, accuracy "
-            "FROM runs WHERE map_name LIKE ? ORDER BY played_at DESC LIMIT ?",
-            (like, limit * 3)):
-        doc = dict(row)
-        if doc["run_id"] in picked_runs:
-            continue
+
+    def not_in(values):
+        if not values:
+            return "", ()
+        return f" AND run_id NOT IN ({','.join('?' * len(values))})", tuple(values)
+
+    clause, args = not_in(sorted(picked_runs))
+    runs = [dict(row) for row in conn.execute(
+        "SELECT run_id, beatmap_md5, map_name, played_at, mod_string, accuracy "
+        "FROM runs WHERE map_name LIKE ?" + clause +
+        " ORDER BY played_at DESC, run_id LIMIT ? OFFSET ?",
+        (like, *args, limit + 1, max(0, runs_offset)))]
+    runs_more = len(runs) > limit
+    runs = runs[:limit]
+    for doc in runs:
         doc["when"] = (doc.get("played_at") or "")[:16].replace("T", " ")
-        runs.append(doc)
-        if len(runs) >= limit:
-            break
-    maps = []
-    for row in conn.execute(
-            "SELECT beatmap_md5 AS md5, COUNT(*) AS plays, MAX(accuracy) AS best, "
-            "MAX(played_at) AS last, MAX(map_name) AS name FROM runs "
-            "WHERE beatmap_md5 != '' AND map_name LIKE ? "
-            "GROUP BY beatmap_md5 ORDER BY plays DESC, last DESC LIMIT ?",
-            (like, limit * 2)):
-        doc = dict(row)
-        if doc["md5"] in picked_maps:
-            continue
+
+    clause, args = (f" AND beatmap_md5 NOT IN ({','.join('?' * len(picked_maps))})",
+                    tuple(sorted(picked_maps))) if picked_maps else ("", ())
+    maps = [dict(row) for row in conn.execute(
+        "SELECT beatmap_md5 AS md5, COUNT(*) AS plays, MAX(accuracy) AS best, "
+        "MAX(played_at) AS last, MAX(map_name) AS name FROM runs "
+        "WHERE beatmap_md5 != '' AND map_name LIKE ?" + clause +
+        " GROUP BY beatmap_md5 ORDER BY plays DESC, last DESC, md5 "
+        "LIMIT ? OFFSET ?",
+        (like, *args, limit + 1, max(0, maps_offset)))]
+    maps_more = len(maps) > limit
+    maps = maps[:limit]
+    for doc in maps:
         doc["when"] = (doc.get("last") or "")[:10]
-        maps.append(doc)
-        if len(maps) >= limit:
-            break
-    return {"runs": runs, "maps": maps}
+
+    return {"runs": runs, "maps": maps,
+            "runs_more": runs_more, "maps_more": maps_more}
 
 
 def scope_critiques(conn, limit: int = 50) -> list[dict]:

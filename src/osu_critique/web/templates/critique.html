@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/rail.html" import rail with context %}
+{% from "partials/pickrows.html" import pickrows with context %}
 {% block title %}critique · osu-critique{% endblock %}
 {% block main_class %}has-rail{% endblock %}
 {% block rail %}{{ rail([{'id': 'tray', 'label': 'selection', 'count': built.n_runs},
@@ -54,28 +55,14 @@
       <div class="picker">
         <h3>replays</h3>
         <ul class="picklist">
-          {% for r in candidates.runs %}
-          <li class="has-bg">
-            <span class="row-bg" style="background-image:url('/api/cover/{{ r.beatmap_md5 }}?size=card')"></span>
-            <a class="pick" href="{{ r.add }}">+</a>
-            <span class="pick-main">{{ r.map_name }}</span>
-            <span class="pick-meta">{{ r.when }} · {{ r.mod_string or 'NM' }} ·
-              {{ (r.accuracy * 100) | num(1) }}%</span></li>
-          {% endfor %}
-          {% if not candidates.runs %}<li class="muted">no replays match</li>{% endif %}
+          {{ pickrows(candidates.runs, runs_more, runs_next, 'runs') }}
         </ul>
       </div>
 
       <div class="picker">
         <h3>maps <span class="muted">(every attempt)</span></h3>
         <ul class="picklist">
-          {% for m in candidates.maps %}
-          <li><a class="pick" href="{{ m.add }}">+</a>
-            <span class="pick-main">{{ m.name }}</span>
-            <span class="pick-meta">{{ m.plays }} play{{ '' if m.plays == 1 else 's' }} ·
-              best {{ (m.best * 100) | num(1) }}% · {{ m.when }}</span></li>
-          {% endfor %}
-          {% if not candidates.maps %}<li class="muted">no maps match</li>{% endif %}
+          {{ pickrows(candidates.maps, maps_more, maps_next, 'maps') }}
         </ul>
       </div>
 
@@ -174,4 +161,4 @@
   </section>
 </article>
 {% endblock %}
-{% block scripts %}<script src="/static/app.js?v={{ version }}" defer></script>{% endblock %}
+{% block scripts %}<script src="/static/app.js?v={{ asset_v }}" defer></script>{% endblock %}

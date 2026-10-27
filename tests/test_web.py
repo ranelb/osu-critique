@@ -918,3 +918,54 @@ def test_the_mod_chips_are_links_that_keep_the_selection(client):
     assert 'class="modrow"' in page
     assert "mods=DT" in page and "mods=NM" in page
     assert "<span class=\"fineprint\">narrows the <b>map</b>" in page
+
+
+def test_the_picker_pages_without_repeating_or_dropping_rows(client):
+    import osu_critique.web.data as data_mod
+    from osu_critique import index as index_mod
+
+    out = Path(client.app.state.outdir)
+    conn = index_mod.open_readonly(out)
+    try:
+        first = data_mod.critique_candidates(conn, set(), set(), "", limit=2)
+        second = data_mod.critique_candidates(conn, set(), set(), "", limit=2,
+                                              runs_offset=2, maps_offset=2)
+    finally:
+        conn.close()
+    assert len(first["runs"]) == 2 and first["runs_more"] is True
+    assert set(r["run_id"] for r in first["runs"]) & set(r["run_id"] for r in second["runs"]) == set()
+
+
+def test_a_picked_replay_is_excluded_in_the_query_not_after_it(client):
+    import osu_critique.web.data as data_mod
+    from osu_critique import index as index_mod
+
+    conn = index_mod.open_readonly(Path(client.app.state.outdir))
+    try:
+        page = data_mod.critique_candidates(conn, {"2" * 32}, set(), "", limit=10)
+    finally:
+        conn.close()
+    assert all(r["run_id"] != "2" * 32 for r in page["runs"])
+
+
+def test_the_fragment_route_returns_rows_and_a_fresh_sentinel(client, monkeypatch):
+    import osu_critique.web.app as app_mod
+    monkeypatch.setattr(app_mod, "PICKER_PAGE", 2)
+    page = client.get("/critique").text
+    assert "data-more=" in page                     # the sentinel that arms scroll
+    r = client.get("/critique/rows", params={"kind": "runs", "offset": 0, "mq": ""})
+    assert r.status_code == 200
+    assert 'class="pick"' in r.text
+    # the next sentinel keeps the selection and moves the offset
+    assert "offset=2" in r.text
+    last = client.get("/critique/rows", params={"kind": "runs", "offset": 2})
+    assert "data-more=" not in last.text            # nothing left to fetch
+    assert "that is everything" in last.text
+    assert client.get("/critique/rows", params={"kind": "nope"}).status_code == 400
+
+
+def test_the_fragment_route_keeps_the_current_selection(client):
+    r = client.get("/critique/rows", params={"kind": "maps", "offset": 0,
+                                             "maps": MAP_A, "mods": "NM"})
+    assert r.status_code == 200
+    assert "mods=NM" in r.text                       # add links keep the filter

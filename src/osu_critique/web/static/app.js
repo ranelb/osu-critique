@@ -442,6 +442,43 @@
     });
   }
 
+  /* ------------------------------------------------------------ pickers -- */
+
+  /* Load the next page of a picker list when its sentinel scrolls into view.
+     The observer is rooted at the list itself, because the list is its own
+     scroll container: htmx's `revealed` only watches the document, so it never
+     fires here. Each page ends with a fresh sentinel, so this re-arms. */
+  function watchMore(list) {
+    const sentinel = list.querySelector("li.more[data-more]");
+    if (!sentinel || !("IntersectionObserver" in window)) return;
+    const io = new IntersectionObserver(async (entries) => {
+      if (!entries.some((e) => e.isIntersecting)) return;
+      io.disconnect();
+      const url = sentinel.dataset.more;
+      sentinel.removeAttribute("data-more");
+      let html = "";
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(res.status);
+        html = await res.text();
+      } catch (err) {
+        sentinel.replaceChildren(Object.assign(document.createElement("span"),
+          { className: "muted", textContent: "could not load more (" + err.message + ")" }));
+        return;
+      }
+      const holder = document.createElement("template");
+      holder.innerHTML = html;
+      const nodes = Array.from(holder.content.children);
+      sentinel.replaceWith(...nodes);
+      watchMore(list);
+    }, { root: list, rootMargin: "200px" });
+    io.observe(sentinel);
+  }
+
+  function initPickers() {
+    document.querySelectorAll(".picklist").forEach(watchMore);
+  }
+
   /* ------------------------------------------------------- scope critique -- */
 
   function initScope() {
@@ -516,6 +553,7 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     initRail();
+    initPickers();
     initScope();
     const run = document.querySelector("[data-run-id]");
     if (run) {

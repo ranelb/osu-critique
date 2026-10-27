@@ -1,0 +1,38 @@
+{# One page of a picker list, plus the sentinel that asks for the next one.
+
+   The sentinel is the last <li>: `app.js` watches it with an
+   IntersectionObserver rooted at the list, fetches `next_url` when it comes into
+   view, and swaps the rows in front of a fresh sentinel — until the list is
+   exhausted. Deliberately hand-rolled: htmx's `revealed` watches document
+   scroll, and scrolling an inner panel fires no such event. Offsets are
+   computed server-side from the rows already excluded, so a page boundary
+   cannot repeat a row. #}
+{% macro pickrows(rows, more, next_url, kind) %}
+  {% for r in rows %}
+  {% if kind == 'runs' %}
+  <li class="has-bg">
+    <span class="row-bg" style="background-image:url('/api/cover/{{ r.beatmap_md5 }}?size=card')"></span>
+    <a class="pick" href="{{ r.add }}">+</a>
+    <span class="pick-main">{{ r.map_name }}</span>
+    <span class="pick-meta">{{ r.when }} · {{ r.mod_string or 'NM' }} ·
+      {{ (r.accuracy * 100) | num(1) }}%</span>
+  </li>
+  {% else %}
+  <li>
+    <a class="pick" href="{{ r.add }}">+</a>
+    <span class="pick-main">{{ r.name }}</span>
+    <span class="pick-meta">{{ r.plays }} play{{ '' if r.plays == 1 else 's' }} ·
+      best {{ (r.best * 100) | num(1) }}% · {{ r.when }}</span>
+  </li>
+  {% endif %}
+  {% endfor %}
+  {% if more %}
+  <li class="more" data-more="{{ next_url }}">
+    <span class="muted">loading more…</span>
+  </li>
+  {% elif not rows %}
+  <li class="muted">nothing matches</li>
+  {% else %}
+  <li class="more muted">that is everything</li>
+  {% endif %}
+{% endmacro %}

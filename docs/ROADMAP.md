@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.24.0** (tag `v0.24.0` is the last published release); 340 tests green
+State: **0.24.1** (tag `v0.24.1` is the last published release); 344 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
@@ -38,6 +38,14 @@ numbers), and one 2020 replay that trips a pre-existing analyser `TypeError`
 and is skipped by the digest.
 
 ## Shipped since the handoff
+
+- **0.24.1 — the pickers scroll.** The lists stopped at 40 rows, which read as
+  "the corpus is tiny". They now load 40 at a time as you scroll (a sentinel, an
+  IntersectionObserver rooted at the list, `/critique/rows` returning rows plus a
+  fresh sentinel), with the offsets skipping already-picked ids in SQL so a page
+  boundary cannot repeat a row. Static assets switched to a content fingerprint
+  after an edited `app.js` was served from cache under the release-number query
+  and looked like broken JavaScript.
 
 - **0.24.0 — mod filter, order, covers.** Three refinements from using 0.23.0:
   the picker filters by mod (`DT`, `HR`, `HD`, `HT`, `NM`: maps and ranges only,

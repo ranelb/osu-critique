@@ -84,6 +84,16 @@ always works. Copy is the convenience, not the only access.
   background plus a gradient, so a row is recognisable at a glance without
   changing its height; `loading` is irrelevant for a background, and the images
   are cached after the first look.
+- **The pickers page on scroll.** Each list starts with 40 rows and ends with a
+  sentinel `<li data-more>`; `app.js` watches it with an `IntersectionObserver`
+  rooted at the list and fetches `/critique/rows?kind=…&offset=…`, which returns
+  the next rows plus a fresh sentinel. Hand-rolled on purpose: htmx's `revealed`
+  watches document scroll, and scrolling an inner panel fires no such event. The
+  offsets skip the ids already excluded *in SQL*, so a page boundary cannot
+  repeat or drop a row.
+- **Static assets are busted by a content fingerprint**, not the release number:
+  editing `style.css` and reloading used to serve the old file, which reads
+  exactly like a CSS bug. `?v=` changes when the files change.
 - **Selection state is the URL.** `/critique?runs=…&maps=…&since=…`: every "add"
   and "remove" is a link, the page is server-rendered on each change, and a
   selection can be bookmarked or pasted into a chat. Nothing is remembered
