@@ -894,14 +894,16 @@ def test_generating_without_a_key_says_why(client, monkeypatch):
     assert r.status_code == 400 and "OSU_LLM_KEY" in r.json()["detail"]
 
 
-def test_an_oversized_selection_is_refused_not_truncated(client, llm, monkeypatch):
+def test_an_oversized_selection_warns_and_still_sends(client, llm, monkeypatch):
     import osu_critique.scope as scope_mod
     monkeypatch.setattr(scope_mod, "MAX_TEXT_BYTES", 100)
     page = client.get("/critique?maps=" + MAP_A).text
-    assert "above the" in page
+    assert "above the" in page and "guideline" in page
+    assert "generate anyway" in page                 # the button is still there
     r = client.post("/critique/generate", data={"maps": MAP_A},
                     headers={"accept": "text/event-stream"})
-    assert r.status_code == 413
+    assert r.status_code == 200                      # warned, not blocked
+    assert "[DONE]" in r.text
 
 
 def test_the_tab_filters_maps_by_mod(client):

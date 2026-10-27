@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.24.2** (tag `v0.24.2` is the last published release); 345 tests green
+State: **0.24.3** (tag `v0.24.3` is the last published release); 345 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
@@ -38,6 +38,11 @@ numbers), and one 2020 replay that trips a pre-existing analyser `TypeError`
 and is skipped by the digest.
 
 ## Shipped since the handoff
+
+- **0.24.3 — the size threshold warns, it does not block.** 300 KB of summary now
+  produces a notice and a button that reads "generate anyway". Blocking was the
+  wrong call: the owner decides what to spend, the tool's job is to say what it
+  will cost. The CLI warns on stderr and proceeds, same rule.
 
 - **0.24.1 — the pickers scroll.** The lists stopped at 40 rows, which read as
   "the corpus is tiny". They now load 40 at a time as you scroll (a sentinel, an

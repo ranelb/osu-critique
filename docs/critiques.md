@@ -38,7 +38,7 @@ Sizing, because a selection has no natural bound:
 | full per-replay reports | up to 10 runs |
 | above that | overview + per-map table (top 40 by plays) + per-run table (newest 120) + the cross-attempt stability block |
 | omission | counted in the header, so the model knows what it was not given |
-| refusal | above 300 KB of text: the preview is still shown, generation is off with the reason |
+| warning | above 300 KB of text: the page says so and the button reads "generate anyway" — nothing is blocked, because a big selection is the owner's call, not the tool's |
 
 Stored at `out/critiques/scope/<hash>.json`, where the hash covers **the text and
 the system prompt**. The same selection over the same corpus is the same artifact,

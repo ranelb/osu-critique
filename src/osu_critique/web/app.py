@@ -430,12 +430,8 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             built = scope.build(conn, out, selection, system=system)
         finally:
             conn.close()
-        if built["refused"]:
-            raise HTTPException(
-                status_code=413,
-                detail=(f"this selection is {built['bytes'] // 1024} KB of summary; "
-                        f"the limit is {scope.MAX_TEXT_BYTES // 1024} KB. "
-                        "Narrow it and try again."))
+        # A large selection is sent anyway: the owner asked for a warning, not a
+        # gate. The panel shows the number before the click; the model decides.
         digest = built["hash"]
         if critiques.load_scope(out, digest) is not None:
             return _redirect(f"/critique/{digest}")

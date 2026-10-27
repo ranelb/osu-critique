@@ -28,7 +28,7 @@ from datetime import datetime, timedelta
 FULL_REPORT_LIMIT = 10       # above this, per-replay reports are dropped
 MAP_TABLE_LIMIT = 40         # maps in the table, by play count
 RUN_TABLE_LIMIT = 120        # rows in the per-run table, most recent first
-MAX_TEXT_BYTES = 300_000     # refuse to generate above this
+MAX_TEXT_BYTES = 300_000     # warn above this; never block
 
 PRESETS = ("today", "session", "7d", "30d")
 SESSION_GAP_HOURS = 3        # a longer silence starts a new session
@@ -456,7 +456,7 @@ def build(conn, outdir, selection: dict, system: str = "",
         "rows": rows,
         "text": text,
         "bytes": size,
-        "refused": size > MAX_TEXT_BYTES,
+        "oversized": size > MAX_TEXT_BYTES,
         "hash": hash_of(text, system),
         "n_runs": len(rows),
         "n_maps": len({r.get("beatmap_md5") for r in rows}),

@@ -225,14 +225,19 @@ def test_the_hash_changes_when_the_corpus_changes(corpus):
 
 # ----------------------------------------------------------------- limits ---
 
-def test_a_huge_selection_is_refused_but_still_rendered(corpus, monkeypatch):
+def test_an_oversized_selection_is_flagged_not_refused(corpus, monkeypatch):
+    """The threshold is a warning. Owner's call: never block a generation."""
     out, conn = corpus
     monkeypatch.setattr(scope, "MAX_TEXT_BYTES", 100)
     built = scope.build(conn, out, {"runs": [], "maps": [MAP_A], "since": None,
                                     "until": None}, system="SYS")
-    assert built["refused"] is True
+    assert built["oversized"] is True
     assert built["bytes"] > 100
     assert built["text"].startswith("# Critique selection")
+
+    monkeypatch.setattr(scope, "MAX_TEXT_BYTES", 10_000_000)
+    assert scope.build(conn, out, {"runs": [], "maps": [MAP_A], "since": None,
+                                   "until": None}, system="SYS")["oversized"] is False
 
 
 def test_window_presets_resolve_against_now():

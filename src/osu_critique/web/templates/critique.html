@@ -92,9 +92,6 @@
     <h2>llm critique</h2>
     {% if not built.n_runs %}
     <p class="muted">Select something first.</p>
-    {% elif built.refused %}
-    <p class="notice">This selection is {{ (built.bytes / 1024) | num(0) }} KB of summary,
-      above the {{ (max_bytes / 1024) | num(0) }} KB limit. Narrow it to send it to a model.</p>
     {% elif not llm_allowed %}
     <p class="notice">LLM routes are local-only here (<code>web.llm_remote = false</code>).</p>
     {% elif not llm_available %}
@@ -107,8 +104,13 @@
       <input type="hidden" name="maps" value="{{ form.maps }}">
       <input type="hidden" name="since" value="{{ form.since }}">
       <input type="hidden" name="until" value="{{ form.until }}">
+      {% if built.oversized %}
+      <p class="notice">This selection is {{ (built.bytes / 1024) | num(0) }} KB of summary,
+        above the {{ (max_bytes / 1024) | num(0) }} KB guideline. It will still be sent —
+        long inputs risk truncation or an API error, and cost more.</p>
+      {% endif %}
       <div class="note-form-row">
-        <button type="submit" id="scope-run">{{ 'open the stored critique' if stored else 'generate' }}</button>
+        <button type="submit" id="scope-run">{{ 'open the stored critique' if stored else ('generate anyway' if built.oversized else 'generate') }}</button>
         <span class="fineprint">one call,
           {{ '≈ ' ~ (built.text | length // 4) ~ ' tokens of summary' }}. The answer is
           stored with the summary it was given.</span>

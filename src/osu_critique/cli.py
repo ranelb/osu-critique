@@ -588,11 +588,10 @@ def cmd_critique(args):
     if not args.llm:
         print(built["text"], end="")
         return 0
-    if built["refused"]:
-        print(f"error: {built['bytes'] // 1024} KB of summary, the limit is "
-              f"{scope.MAX_TEXT_BYTES // 1024} KB — narrow the selection",
+    if built["oversized"]:
+        print(f"warning: {built['bytes'] // 1024} KB of summary, above the "
+              f"{scope.MAX_TEXT_BYTES // 1024} KB guideline — sending it anyway",
               file=sys.stderr)
-        return 2
 
     from .coach import generate_critique
     try:
