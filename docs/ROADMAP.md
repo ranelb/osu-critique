@@ -5,7 +5,7 @@ For the next agent picking this up. Read this file, then `docs/profile.md` and
 holds the private half: the author's measured player profile and the reference
 numbers each feature below should reproduce.
 
-State: **0.23.0** (tag `v0.23.0` is the last published release); 336 tests green
+State: **0.24.0** (tag `v0.24.0` is the last published release); 340 tests green
 (242 run anywhere: 52 need the `[web]` extra, 6 need the author's replays), CI
 on Python 3.10/3.12/3.14 on every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
@@ -38,6 +38,14 @@ numbers), and one 2020 replay that trips a pre-existing analyser `TypeError`
 and is skipped by the digest.
 
 ## Shipped since the handoff
+
+- **0.24.0 — mod filter, order, covers.** Three refinements from using 0.23.0:
+  the picker filters by mod (`DT`, `HR`, `HD`, `HT`, `NM`: maps and ranges only,
+  never a replay you named by hand); the LLM critique now sits above the
+  deterministic summary on both the tab and the run page, because the answer is
+  what you read and the tables are what you check it against; and each replay row
+  in the picker carries its beatmap cover as a dimmed background, so a row is
+  recognisable at a glance without changing the row's height.
 
 - **0.23.0 — the critique tab.** A third page, plus the CLI command behind it.
   Select replays, whole maps (every attempt) and date ranges into one additive,

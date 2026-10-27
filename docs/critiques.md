@@ -20,6 +20,13 @@ A selection is additive and deduplicated: `--runs a,b`, `--maps <md5>,<md5>`
 played, not when the replay was exported. Presets: `today`, `session` (since the
 last gap longer than three hours), `7d`, `30d`; or `--since YYYY-MM-DD [--until]`.
 
+A **mod filter** (`DT`, `HR`, `HD`, `HT`, `NM`) narrows the map and range
+selectors — "this map, DT only", "last week, no-mod plays". It deliberately does
+not touch replays you pick by hand: naming a replay is a stronger statement than
+a filter, and silently dropping it would be a bug you only notice from the count.
+`NM` means *no mods at all*; every other value is a substring of the stored
+`mod_string`, so `DT` also catches `HDDT`.
+
 `scope.py` resolves the selection and renders **one text**. That text is the
 page's summary section, the model's entire input, and the thing stored in the
 artifact — there is no second formatter and no raw metrics in the prompt.

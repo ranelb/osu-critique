@@ -486,3 +486,21 @@ a.pick:hover { background: var(--pink); color: #17060f; }
 pre.scope-text { max-height: 34rem; overflow: auto; background: var(--bg2);
   border: 1px solid var(--line); border-radius: 10px; padding: .9rem 1rem;
   font-size: .76rem; }
+
+.modrow { display: flex; gap: .4rem; align-items: center; flex-wrap: wrap;
+  margin: 0 0 1rem; }
+.modrow-label { font-size: .66rem; text-transform: uppercase; letter-spacing: .11em;
+  color: #5a6377; margin-right: .2rem; }
+.pill-link.on { border-color: var(--pink); background: var(--pink-soft);
+  color: var(--text); }
+.modrow .fineprint { margin: 0 0 0 .4rem; flex: 1 1 16rem; }
+.tray-chip.kind-mods .tray-kind { background: #b48bff; }
+
+/* a dimmed cover behind a replay row: decoration only, the row keeps its size */
+.picklist li.has-bg { position: relative; overflow: hidden; }
+.picklist li.has-bg .row-bg { position: absolute; inset: 0;
+  background-size: cover; background-position: center; filter: saturate(.6);
+  opacity: .28; }
+.picklist li.has-bg::after { content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, #0f1219f2 20%, #0f1219c4 70%, #0f1219f2 100%); }
+.picklist li.has-bg > * { position: relative; z-index: 1; }

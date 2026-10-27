@@ -902,3 +902,19 @@ def test_an_oversized_selection_is_refused_not_truncated(client, llm, monkeypatc
     r = client.post("/critique/generate", data={"maps": MAP_A},
                     headers={"accept": "text/event-stream"})
     assert r.status_code == 413
+
+
+def test_the_tab_filters_maps_by_mod(client):
+    page = client.get("/critique?maps=" + MAP_A + "&mods=NM").text
+    assert "only NM plays" in page                 # a tray chip, and in the text
+    assert "2 runs" in page                        # a1 and a3 are NM; a2 is DT
+    page = client.get("/critique?maps=" + MAP_A + "&mods=DT").text
+    assert "only DT plays" in page
+    assert "1 runs" in page
+
+
+def test_the_mod_chips_are_links_that_keep_the_selection(client):
+    page = client.get("/critique?maps=" + MAP_A).text
+    assert 'class="modrow"' in page
+    assert "mods=DT" in page and "mods=NM" in page
+    assert "<span class=\"fineprint\">narrows the <b>map</b>" in page

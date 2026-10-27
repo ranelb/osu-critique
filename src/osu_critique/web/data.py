@@ -242,10 +242,10 @@ def run_toc(page: dict) -> list:
     if page.get("objects_available"):
         entries.append({"id": "objects", "label": "objects",
                         "count": page.get("n_interesting") or 0})
+    entries.append({"id": "critique", "label": "llm"})
     if page.get("n_report_sections"):
         entries.append({"id": "report", "label": "report",
                         "count": page["n_report_sections"]})
-    entries.append({"id": "critique", "label": "llm"})
     n_notes = len(notes.get("map") or []) + len(notes.get("run") or [])
     entries.append({"id": "annotations", "label": "notes", "count": n_notes})
     return entries
@@ -270,7 +270,7 @@ def critique_candidates(conn, picked_runs: set, picked_maps: set, query: str = "
     like = f"%{query.strip()}%" if query.strip() else "%"
     runs = []
     for row in conn.execute(
-            "SELECT run_id, map_name, played_at, mod_string, accuracy "
+            "SELECT run_id, beatmap_md5, map_name, played_at, mod_string, accuracy "
             "FROM runs WHERE map_name LIKE ? ORDER BY played_at DESC LIMIT ?",
             (like, limit * 3)):
         doc = dict(row)

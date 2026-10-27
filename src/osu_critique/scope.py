@@ -34,8 +34,26 @@ PRESETS = ("today", "session", "7d", "30d")
 SESSION_GAP_HOURS = 3        # a longer silence starts a new session
 
 
+MOD_FILTERS = ("NM", "DT", "HT", "HR", "HD")
+
+#: How a mod filter matches a stored ``mod_string``. ``NM`` means *no* mods, which
+#: is an equality rather than a substring; everything else is a substring, so
+#: ``DT`` also catches ``HDDT``.
+MOD_SQL = {"NM": ("COALESCE(mod_string, 'NM') = 'NM'", ())}
+
+
+def _mod_clause(mods: str | None):
+    if not mods:
+        return "", ()
+    mods = mods.strip().upper()
+    if mods in MOD_SQL:
+        sql, args = MOD_SQL[mods]
+        return " AND " + sql, args
+    return " AND COALESCE(mod_string, 'NM') LIKE ?", (f"%{mods}%",)
+
+
 def empty_selection() -> dict:
-    return {"runs": [], "maps": [], "since": None, "until": None}
+    return {"runs": [], "maps": [], "since": None, "until": None, "mods": None}
 
 
 def from_query(query) -> dict:
@@ -60,8 +78,10 @@ def from_query(query) -> dict:
         raw = (query.get(key) or "").strip() if hasattr(query, "get") else ""
         return raw or None
 
+    mods = stamp("mods")
     return {"runs": ids("runs"), "maps": ids("maps"),
-            "since": stamp("since"), "until": stamp("until")}
+            "since": stamp("since"), "until": stamp("until"),
+            "mods": mods.upper() if mods else None}
 
 
 # ------------------------------------------------------------------ window --
@@ -138,9 +158,11 @@ def resolve(conn, selection: dict, now: datetime | None = None) -> list[dict]:
     if selection.get("runs"):
         marks = ",".join("?" * len(selection["runs"]))
         add(f"run_id IN ({marks})", tuple(selection["runs"]))
+    mod_sql, mod_args = _mod_clause(selection.get("mods"))
     if selection.get("maps"):
         marks = ",".join("?" * len(selection["maps"]))
-        add(f"beatmap_md5 IN ({marks})", tuple(selection["maps"]))
+        add(f"beatmap_md5 IN ({marks})" + mod_sql,
+            tuple(selection["maps"]) + mod_args)
 
     since, until = selection.get("since"), selection.get("until")
     if since == "session":
@@ -154,7 +176,7 @@ def resolve(conn, selection: dict, now: datetime | None = None) -> list[dict]:
         clauses.append("played_at < ?")
         args.append(until)
     if clauses:
-        add(" AND ".join(clauses), tuple(args))
+        add(" AND ".join(clauses) + mod_sql, tuple(args) + mod_args)
 
     return sorted(found.values(),
                   key=lambda r: (r.get("played_at") or "", r["run_id"]))
@@ -200,6 +222,8 @@ def _selector_line(selection: dict) -> str:
         parts.append(f"everything since {since}")
     elif until:
         parts.append(f"everything up to {until}")
+    if selection.get("mods"):
+        parts.append(f"only {selection['mods']} plays")
     return "; ".join(parts) or "nothing"
 
 

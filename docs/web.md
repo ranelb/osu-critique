@@ -23,7 +23,7 @@ skip), then serves until interrupted.
 | `/api/objects/<run_id>` | the per-object JSON, verbatim as `analyze` wrote it. |
 | `/api/map/<md5>`, `/api/runs` | the same data the pages render, for anything that wants JSON. |
 | `/api/cover/<md5>?size=card\|hero` | the cached cover, fetched once from `assets.ppy.sh`. |
-| `/critique` | the selection picker (replays, whole maps, time ranges), the deterministic summary as text, the generate button, and the stored critiques. See `docs/critiques.md`. |
+| `/critique` | the selection picker (replays, whole maps, time ranges, a mod filter), the generate button, the deterministic summary as text, and the stored critiques — the answer first, the input it read underneath. See `docs/critiques.md`. |
 | `/critique/<hash>` | one stored scope critique: the answer, the exact summary it read, and the selection. |
 | `/feed` | the written digests as pages — stat cards, linked plays, map cards with art, and a **digest now** button (see [export.md](export.md)). |
 | `/run/<id>/frames` | **501** — reserved for replay playback, deliberately unimplemented. |
@@ -76,6 +76,14 @@ always works. Copy is the convenience, not the only access.
   is stored for that run — a scope artifact when one exists, an older per-run one
   read-only otherwise — and links into the tab with the run pre-selected. Two
   generation paths meant two prompts for the same replay.
+- **The answer sits above the numbers.** On the run page and on the tab, the LLM
+  critique comes before the deterministic report: the answer is what you read
+  first, the tables are what you check it against. The rail follows the same
+  order.
+- **Replay rows carry a dimmed cover.** `/api/cover/<md5>?size=card` as a CSS
+  background plus a gradient, so a row is recognisable at a glance without
+  changing its height; `loading` is irrelevant for a background, and the images
+  are cached after the first look.
 - **Selection state is the URL.** `/critique?runs=…&maps=…&since=…`: every "add"
   and "remove" is a link, the page is server-rendered on each change, and a
   selection can be bookmarked or pasted into a chat. Nothing is remembered

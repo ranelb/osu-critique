@@ -3,8 +3,8 @@
 {% block title %}critique · osu-critique{% endblock %}
 {% block main_class %}has-rail{% endblock %}
 {% block rail %}{{ rail([{'id': 'tray', 'label': 'selection', 'count': built.n_runs},
-                         {'id': 'summary', 'label': 'summary'},
                          {'id': 'generate', 'label': 'llm'},
+                         {'id': 'summary', 'label': 'summary'},
                          {'id': 'saved', 'label': 'saved', 'count': saved | length}],
                         'this critique') }}{% endblock %}
 {% block body %}
@@ -41,12 +41,23 @@
       <button type="submit" class="ghost medium">filter</button>
     </form>
 
+    <div class="modrow">
+      <span class="modrow-label">mods</span>
+      {% for m in mod_chips %}
+      <a class="pill-link{% if m.on %} on{% endif %}" href="{{ m.add }}">{{ m.label }}</a>
+      {% endfor %}
+      <span class="fineprint">narrows the <b>map</b> and <b>range</b> selectors; replays
+        you pick by hand are always included</span>
+    </div>
+
     <div class="picker-grid">
       <div class="picker">
         <h3>replays</h3>
         <ul class="picklist">
           {% for r in candidates.runs %}
-          <li><a class="pick" href="{{ r.add }}">+</a>
+          <li class="has-bg">
+            <span class="row-bg" style="background-image:url('/api/cover/{{ r.beatmap_md5 }}?size=card')"></span>
+            <a class="pick" href="{{ r.add }}">+</a>
             <span class="pick-main">{{ r.map_name }}</span>
             <span class="pick-meta">{{ r.when }} · {{ r.mod_string or 'NM' }} ·
               {{ (r.accuracy * 100) | num(1) }}%</span></li>
@@ -90,21 +101,6 @@
     </div>
   </section>
 
-  <section class="panel" id="summary">
-    <h2>deterministic summary <span class="count">{{ (built.bytes / 1024) | num(0) }} KB</span></h2>
-    {% if built.n_runs %}
-    <p class="fineprint">Built from the artifacts, offline, no model. This exact text is
-      what a critique is asked to read — <b>copy</b> it if you would rather paste it
-      somewhere else.</p>
-    <div class="summary-acts">
-      <button class="ghost small" type="button" id="copy-summary">copy</button>
-    </div>
-    <pre class="report scope-text" id="scope-text">{{ built.text }}</pre>
-    {% else %}
-    <p class="muted">Nothing matches this selection yet.</p>
-    {% endif %}
-  </section>
-
   <section class="panel" id="generate">
     <h2>llm critique</h2>
     {% if not built.n_runs %}
@@ -116,7 +112,7 @@
     <p class="notice">LLM routes are local-only here (<code>web.llm_remote = false</code>).</p>
     {% elif not llm_available %}
     <p class="notice">No LLM key configured — run <code>osu-critique setup</code> or set
-      <code>OSU_LLM_KEY</code>. The summary above works without one.</p>
+      <code>OSU_LLM_KEY</code>. The summary below works without one.</p>
     {% else %}
     <form method="post" action="/critique/generate" id="scope-form" class="note-form"
           data-hash="{{ built.hash }}">
@@ -132,6 +128,21 @@
       </div>
     </form>
     <pre class="report" id="scope-body" hidden></pre>
+    {% endif %}
+  </section>
+
+  <section class="panel" id="summary">
+    <h2>deterministic summary <span class="count">{{ (built.bytes / 1024) | num(0) }} KB</span></h2>
+    {% if built.n_runs %}
+    <p class="fineprint">Built from the artifacts, offline, no model. This exact text is
+      what a critique is asked to read — <b>copy</b> it if you would rather paste it
+      somewhere else.</p>
+    <div class="summary-acts">
+      <button class="ghost small" type="button" id="copy-summary">copy</button>
+    </div>
+    <pre class="report scope-text" id="scope-text">{{ built.text }}</pre>
+    {% else %}
+    <p class="muted">Nothing matches this selection yet.</p>
     {% endif %}
   </section>
 

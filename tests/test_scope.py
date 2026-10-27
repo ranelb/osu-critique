@@ -80,7 +80,7 @@ def run_ids(rows):
 
 def test_selectors_union_and_dedupe(corpus):
     out, conn = corpus
-    selection = {"runs": ["a1"], "maps": [MAP_A], "since": None, "until": None}
+    selection = {"runs": ["1" * 32], "maps": [MAP_A], "since": None, "until": None}
     rows = scope.resolve(conn, selection)
     # a1 is named twice: by replay and by its map; it must appear once
     assert run_ids(rows) == ["a1", "a2"]
@@ -105,6 +105,9 @@ def test_an_unknown_selector_is_empty_not_an_error(corpus):
     _out, conn = corpus
     assert scope.resolve(conn, {"runs": ["nope"], "maps": [], "since": None,
                                 "until": None}) == []
+    # a run id is the replay md5, not the tag: the tag is a filename fragment
+    assert scope.resolve(conn, {"runs": ["a1"], "maps": [], "since": None,
+                                "until": None}) == []
 
 
 def test_from_query_tolerates_junk():
@@ -113,6 +116,28 @@ def test_from_query_tolerates_junk():
     assert selection["runs"] == ["a1", "b2"]
     assert selection["maps"] == []
     assert selection["since"] == "7d"
+
+
+def test_a_mod_filter_narrows_maps_and_ranges_but_not_chosen_replays(corpus):
+    out, conn = corpus
+    # a2 is the DT attempt on map A; a1 is NM
+    rows = scope.resolve(conn, {"maps": [MAP_A], "runs": [], "since": None,
+                                "until": None, "mods": "NM"})
+    assert run_ids(rows) == ["a1"]
+    rows = scope.resolve(conn, {"maps": [MAP_A], "runs": [], "since": None,
+                                "until": None, "mods": "DT"})
+    assert run_ids(rows) == ["a2"]
+    # a replay you named is included whatever the filter says
+    rows = scope.resolve(conn, {"maps": [], "runs": ["1" * 32], "since": None,
+                                "until": None, "mods": "DT"})
+    assert run_ids(rows) == ["a1"]
+
+
+def test_the_mod_filter_is_stated_in_the_text(corpus):
+    out, conn = corpus
+    built = scope.build(conn, out, {"runs": [], "maps": [MAP_A], "since": None,
+                                    "until": None, "mods": "NM"}, system="SYS")
+    assert "only NM plays" in built["text"]
 
 
 # ----------------------------------------------------------------- render ---

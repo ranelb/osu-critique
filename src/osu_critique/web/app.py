@@ -300,11 +300,20 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             row["add"] = url(runs=selection["runs"] + [row["run_id"]])
         for row in candidates["maps"]:
             row["add"] = url(maps=selection["maps"] + [row["md5"]])
+        if selection["mods"]:
+            tray.append({"label": f"only {selection['mods']} plays", "kind": "mods",
+                         "remove": url(mods=None)})
+        mod_chips = [{"label": "any", "add": url(mods=None),
+                      "on": not selection["mods"]}]
+        for key in scope.MOD_FILTERS:
+            mod_chips.append({"label": key, "add": url(mods=key),
+                              "on": selection["mods"] == key})
         presets = [{"label": label, "add": url(since=key, until=None)}
                    for key, label in (("today", "today"), ("session", "this session"),
                                       ("7d", "last 7 days"), ("30d", "last 30 days"))]
         return {"selection": selection, "built": built, "tray": tray,
                 "candidates": candidates, "saved": saved, "presets": presets,
+                "mod_chips": mod_chips,
                 "clear": "/critique", "mq": mq,
                 "form": {"runs": ",".join(selection["runs"]),
                          "maps": ",".join(selection["maps"]),
