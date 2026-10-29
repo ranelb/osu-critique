@@ -252,12 +252,6 @@ pytest -q                     # 345 tests (6 need real replays, 76 need [web])
   (`--anonymize`).
 - CI (`.github/workflows/test.yml`) runs the suite on Python 3.10, 3.12, and 3.14.
 
-## Roadmap
-
-What is planned and why (miss autopsy, slider bodies, cross-attempt structure)
-lives in [docs/ROADMAP.md](docs/ROADMAP.md) — read it before changing the
-analysis; it also records the traps that have already bitten (the snap/divisor
-convention, the calibration override, population gates).
 
 ## Privacy, attribution, and terms
 
