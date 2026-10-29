@@ -303,6 +303,60 @@ def test_cover_rejects_an_unknown_size(client):
     assert client.get(f"/api/cover/{MAP_A}", params={"size": "huge"}).status_code == 400
 
 
+def test_cover_fetches_the_variant_that_was_asked_for(tmp_path, monkeypatch):
+    """v1 fetched cover@2x no matter the size: a 64px thumb was 1800px wide."""
+    seen = []
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def read(self):
+            return b"\xff\xd8\xff\xe0fake-jpeg"
+
+    def fake_urlopen(req, timeout=None):
+        seen.append(req.full_url)
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    dest = tmp_path / "out" / "covers" / "1-thumb.jpg"
+    assert covers.fetch(1, dest, size="thumb") is True
+    assert seen and seen[0].endswith("/covers/card.jpg")
+    seen.clear()
+    assert covers.fetch(1, dest, size="hero") is True
+    assert seen and seen[0].endswith("/covers/cover@2x.jpg")
+
+
+def test_the_listing_asks_for_the_small_cover_and_offers_the_big_one(client):
+    page = client.get("/").text
+    assert "?size=thumb" in page
+    assert "?size=card 2x" in page
+
+
+# ------------------------------------------------------------ home screen ----
+
+def test_the_manifest_makes_it_installable(client):
+    r = client.get("/manifest.webmanifest")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/manifest+json")
+    doc = r.json()
+    assert doc["display"] == "standalone"
+    assert doc["start_url"] == "/"
+    assert [i["sizes"] for i in doc["icons"]] == ["192x192", "512x512"]
+
+
+def test_the_icons_are_real_pngs_drawn_without_an_image_library(client):
+    for size in (180, 192, 512):
+        r = client.get(f"/icon-{size}.png")
+        assert r.status_code == 200
+        assert r.headers["content-type"] == "image/png"
+        assert r.content.startswith(b"\x89PNG\r\n\x1a\n")
+    assert client.get("/icon-64.png").status_code == 404
+
+
 # --------------------------------------------------------------- startup ----
 
 def test_boot_builds_a_missing_index(tmp_path):
@@ -1060,3 +1114,65 @@ def test_the_attempt_chips_are_links_that_keep_the_selection(client):
     assert 'class="modrow"' in page
     assert "min_attempts=2" in page and "min_attempts=5" in page
     assert "attempts<br>per map" in page
+
+
+# ----------------------------------------------------------------- mobile ----
+# Nothing here asserts a pixel. It asserts the three things that broke on a
+# phone and are visible in the markup: a table that widens the page, the
+# answer printed as a <pre>, and a listing card with no dense-row variant.
+
+def test_a_stored_answer_is_rendered_as_markdown_not_as_a_pre(client, llm,
+                                                              monkeypatch):
+    """The answer is markdown; asterisks in a <pre> is not a readable page."""
+    import osu_critique.coach as coach_mod
+
+    body = ("## Verdict\n\n**Long jumps** are the problem.\n\n"
+            "- Bigjump misses every time\n- plain `jump` is fine")
+
+    def markdown_answer(system, user, on_delta=None, model=None, key=None):
+        if on_delta:
+            on_delta(body)
+        return body, "test-model"
+
+    monkeypatch.setattr(coach_mod, "generate_critique", markdown_answer)
+    assert client.post("/ask/generate", data={"runs": "2" * 32},
+                       headers={"accept": "text/event-stream"}).status_code == 200
+
+    from osu_critique import answers
+
+    doc = answers.all_answers(client.app.state.outdir)[0]
+    for page in (client.get("/ask/" + doc["hash"]).text,
+                 client.get("/run/" + "2" * 32).text):
+        assert 'class="md answer-body"' in page
+        assert "<h2>Verdict</h2>" in page
+        assert "<strong>Long jumps</strong>" in page
+        assert "<li>Bigjump misses every time</li>" in page
+        assert "<code>jump</code>" in page
+        assert "**Long jumps**" not in page
+
+
+def test_every_table_sits_in_a_horizontal_scroller(client):
+    """A wide table must scroll inside its panel, never widen the page."""
+    import re
+
+    def misplaced(html):
+        bad = []
+        for m in re.finditer(r"<table", html):
+            before = html[max(0, m.start() - 400):m.start()]
+            if 'class="tscroll"' not in before and 'class="rscroll"' not in before:
+                bad.append(html[m.start():m.start() + 70])
+        return bad
+
+    for route in ("/", f"/map/{MAP_A}", "/run/" + "2" * 32, "/ask", "/feed"):
+        page = client.get(route)
+        assert page.status_code == 200
+        assert misplaced(page.text) == [], route
+
+
+def test_the_listing_card_carries_the_dense_row_bits(client):
+    """The pills and the difficulty move into the body on a phone (CSS only)."""
+    page = client.get("/").text
+    assert 'class="row-badges"' in page
+    assert 'class="row-version"' in page
+    # the desktop cover markup is untouched
+    assert 'class="cover-badges"' in page

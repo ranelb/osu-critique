@@ -114,7 +114,7 @@
 
   <section class="panel">
     <h2>plays <span class="count">{{ d.n_runs }}</span></h2>
-    <table class="data tight">
+    <div class="tscroll"><table class="data tight">
       <thead><tr><th>when</th><th>map</th><th>mods</th><th class="num">acc</th>
         <th class="num">UR</th><th class="num">miss</th><th>trust</th><th></th></tr></thead>
       <tbody>
@@ -134,7 +134,7 @@
         <tr><td colspan="8" class="muted">… and {{ d.runs | length - 20 }} more</td></tr>
       {% endif %}
       </tbody>
-    </table>
+    </table></div>
   </section>
 
   <section class="panel">
@@ -144,7 +144,8 @@
       {% for b in d.worth %}
       <a class="card mini" href="/map/{{ b.md5 }}">
         <div class="cover">
-          <img src="/api/cover/{{ b.md5 }}?size=card" alt="" loading="lazy" onerror="this.remove()">
+          <img src="/api/cover/{{ b.md5 }}?size=thumb" alt="" loading="lazy" decoding="async"
+               srcset="/api/cover/{{ b.md5 }}?size=card 2x" onerror="this.remove()">
           <div class="cover-shade"></div>
           <span class="diff">{{ b.version or '—' }}</span>
           <span class="cover-badges">

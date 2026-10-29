@@ -14,9 +14,17 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-#: ``cover@2x`` is the map page's hero (108 KB); ``card@2x`` is the list tile
-#: (46 KB). Nothing bigger is downloaded, ever.
-SIZES = {"hero": "cover@2x", "card": "card@2x"}
+#: ``cover@2x`` is the map page's hero (108 KB), ``card@2x`` the 3-column tile
+#: (46 KB), and ``thumb`` the 1x card (13 KB) a phone's 64px dense-row thumb and
+#: the dimmed picker backgrounds use. Nothing bigger than @2x is downloaded,
+#: ever — a listing of 24 tiles was 5 MB before ``thumb`` existed.
+SIZES = {"hero": "cover@2x", "card": "card@2x", "thumb": "card"}
+
+#: Bumped when the fetched variant changes. v1 shipped ``fetch`` without a size,
+#: so every file it wrote — including "-card.jpg" — was really ``cover@2x``
+#: (1800x500): the listing served that for a 64px thumb. v2 re-fetches at the
+#: size that was asked for.
+CACHE_VERSION = 2
 _UA = "osu-critique (local analysis tool)"
 
 
@@ -29,7 +37,7 @@ def covers_dir(outdir) -> Path:
 
 
 def cover_path(outdir, set_id, size: str = "hero") -> Path:
-    return covers_dir(outdir) / f"{int(set_id)}-{size}.jpg"
+    return covers_dir(outdir) / f"{int(set_id)}-{size}-v{CACHE_VERSION}.jpg"
 
 
 def enabled() -> bool:
@@ -42,10 +50,11 @@ def enabled() -> bool:
     return bool(value)
 
 
-def fetch(set_id, dest: Path, timeout: float = 6.0) -> bool:
-    """Download one cover into ``dest``. Returns False on any failure."""
+def fetch(set_id, dest: Path, size: str = "hero", timeout: float = 6.0) -> bool:
+    """Download one cover variant into ``dest``. False on any failure."""
     try:
-        req = urllib.request.Request(cover_url(set_id), headers={"User-Agent": _UA})
+        req = urllib.request.Request(cover_url(set_id, size),
+                                     headers={"User-Agent": _UA})
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = resp.read()
         if not data:
@@ -75,7 +84,14 @@ def ensure(outdir, set_id, size: str = "hero") -> Path | None:
         return None
     if not enabled():
         return None
-    if fetch(set_id, dest):
+    if fetch(set_id, dest, size=size):
+        # reclaim the v1 file, whose bytes were the hero art under a card name
+        legacy = covers_dir(outdir) / f"{int(set_id)}-{size}.jpg"
+        if legacy.is_file():
+            try:
+                legacy.unlink()
+            except OSError:
+                pass
         return dest
     try:
         marker.parent.mkdir(parents=True, exist_ok=True)

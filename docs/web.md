@@ -48,6 +48,15 @@ block below it without a scroll event, and reconstructing "what is on screen"
 from enter/leave events gets subtle. On a page too short to scroll, the last
 entry wins.
 
+On a phone the strip sticks **below** the header, at `top: var(--topbar-h)`.
+`initRail` measures the header and the strip into `--topbar-h` / `--rail-h` on
+load and resize instead of hardcoding a padding that moves with the font — it
+used to stick at `top: 0` with `z-index: 6` under a 61.5 px header with
+`z-index: 10`, so the whole navigation was invisible exactly while scrolling.
+`main [id]`'s `scroll-margin-top` is the same sum, or a chip jumps to a block
+that is hidden behind both bars. The active chip is scrolled into view when the
+section changes.
+
 ## Folds
 
 Heavy blocks are `<details class="fold">`, closed by default, with a **peek** line
@@ -66,6 +75,44 @@ also needs a secure context, so plain http falls back to a hidden textarea and
 
 `text` is a plain link to `/run/<id>/report.txt`: no JavaScript, no clipboard,
 always works. Copy is the convenience, not the only access.
+
+## Phones
+
+The owner reads this on a phone over the LAN, so 320–430 px is a supported
+width, not a degraded one. What that costs:
+
+- **A table scrolls inside its panel.** Every `<table class="data">` sits in a
+  `.tscroll` (or `.rscroll` for the report), which is `overflow-x: auto` with
+  `min-width: max-content` on the table. Without that the page widens to the
+  table and the header scrolls off the screen — measured at 507 px on a 390 px
+  map page before this rule existed. Grids use `minmax(min(100%, Npx), 1fr)` for
+  the same reason: a bare `minmax(430px, 1fr)` is a hard 430 px floor.
+- **The listing becomes dense rows below 620 px.** A 3.2:1 cover per map is five
+  screens for 24 maps, so the card reflows to a 64 px thumb plus three lines:
+  title, difficulty and mapper, then attempts/best/last. The SR and status pills
+  and the difficulty name are duplicated in the card body (`.row-badges`,
+  `.row-version`, hidden above 620 px) because the cover is too small to carry
+  them. Duplication is CSS-only; the desktop card is untouched.
+- **Answers are rendered markdown.** `osu_critique/markdown.py` renders the
+  subset a model actually writes (headings, paragraphs, lists, quotes, fences,
+  tables, bold/italic/code/links) and escapes everything first — the body is
+  untrusted text. Templates use `{{ body | md | safe }}`. The deterministic
+  report is **not** markdown and keeps its cards and tables.
+- **Controls and prose size up.** Text inputs take a 16 px floor on phones (iOS
+  zooms on focus below that and never zooms back); `pre.report`/`pre.scope-text`
+  go from 12 px to 14; `.rkv` stacks its label above its value instead of
+  squeezing the value into a 175 px column. Chips and the picker's +/× get a
+  40 px floor, and the miss boards go two-up (`150px` tiles) instead of one per
+  row.
+- **The ask page's action is always reachable.** Below 620 px a bar sticks to
+  the bottom of the window with the selection count and the generate button. It
+  is a `<button form="scope-form">`, not a second form: no duplicated hidden
+  inputs, one submit handler, and it still submits without JavaScript. The bar
+  is `display: none` above 620 px, where the panel is already in view.
+
+The stat cards are one row (`grid-auto-flow: column`) only while there is a rail
+beside them; below 880 px they flow as rows again. Column flow plus a template
+of two columns is how six cards became six 60 px slivers.
 
 ## Design rules
 
@@ -130,10 +177,23 @@ always works. Copy is the convenience, not the only access.
   artifact is available: the run page renders from the metrics JSON, and the
   object table from `_objects.json`. The list page is the one place that trusts
   the index, because that is what it exists for.
-- **Covers are lazy and optional.** `<img>` per visible card hits
-  `/api/cover/...`, which caches to `out/covers/<set>-<size>.jpg`; a CDN 404
+- **Covers are lazy, sized and optional.** `<img>` per visible card hits
+  `/api/cover/...`, which caches to `out/covers/<set>-<size>-v<N>.jpg`; a CDN 404
   leaves a `.missing` marker so a dead set is not re-fetched forever, and the
-  page degrades to its gradient placeholder with no network at all.
+  page degrades to its gradient placeholder with no network at all. The sizes
+  are `hero` (`cover@2x`, the map page), `card` (`card@2x`, a retina tile) and
+  `thumb` (`card`, 13–34 KB, what a phone's 64px row and a dimmed picker
+  background need); a listing tile is `src=thumb srcset="…card 2x"` so the
+  browser picks by density. **`fetch` takes the size** — it used to ignore it and
+  download `cover@2x` for every variant, so a "card" was 1800x500 and 24 tiles
+  were 5 MB; `CACHE_VERSION` in `covers.py` re-fetches at the right variant once
+  and deletes the stale file.
+- **The home-screen icons are generated, not committed.** `web/icons.py` writes
+  the 180/192/512 PNGs with `zlib` (a pink disc on the page background, inset to
+  survive a maskable crop) and the route caches them for a week. `manifest.webmanifest`
+  is `display: standalone` with `theme_color` in `base.html`, so "add to home
+  screen" opens without browser chrome. No service worker: the data is a local
+  server, and a cached shell would only lie about it.
 - **Fonts and icons are shippable.** Torus is licensed for osu! only
   (`osu-resources/.../Fonts/Torus/LICENCE`), so the look uses Poppins (OFL,
   self-hosted woff2) and text mod pills. No osu! logo; the footer says who this
@@ -169,6 +229,12 @@ Env overrides: `OSU_WEB_HOST`, `OSU_WEB_PORT`, `OSU_COVER_CACHE`.
   `docs/screenshots/` is where Playwright drops them — **gitignored**, because
   a screenshot of this corpus carries the player's real numbers. A commit-able
   set has to be rendered from the synthetic fixture corpus (0.20.0 polish).
+- Layout has one automated guard: `scripts/mobile_audit.mjs` drives Chromium at
+  320/360/390/430 px over `/`, a map, a run, `/feed`, `/ask` and a stored answer,
+  and **fails on document-level horizontal scroll**. It also warns on touch
+  targets under 32 px and text under 12 px. Needs Playwright (`npm i playwright`,
+  or `PLAYWRIGHT_MODULE=` + `CHROMIUM_PATH=`); it is the only Node dependency in
+  the repo and it never ships.
 
 ## Not here yet
 

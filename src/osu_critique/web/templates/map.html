@@ -40,7 +40,7 @@
     {% for group_key, label in [('families', 'families'), ('shapes', 'shapes')] %}
       {% set rows = cross_attempt[group_key] | selectattr('reported') | list %}
       {% if rows %}
-      <table class="data tight">
+      <div class="tscroll"><table class="data tight">
         <thead><tr><th>{{ label }}</th><th class="num">first</th><th class="num">latest</th>
           <th class="num">Δ</th><th class="num">n (min)</th></tr></thead>
         <tbody>
@@ -54,7 +54,7 @@
           </tr>
         {% endfor %}
         </tbody>
-      </table>
+      </table></div>
       {% endif %}
     {% endfor %}
     <p class="fineprint">A rate is only reported where the bucket has at least the map's solid gate

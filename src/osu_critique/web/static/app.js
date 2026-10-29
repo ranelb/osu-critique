@@ -134,14 +134,30 @@
     host.replaceChildren(table);
   }
 
+  /* One request per run, cached for the life of the page. The chart redraws on
+     every resize, and a phone's URL bar collapsing fires resize constantly: it
+     used to refetch the whole objects JSON (135 KB here) each time. */
+  const objectDocs = new Map();
+
+  function loadObjects(runId) {
+    if (!objectDocs.has(runId)) {
+      const request = fetch("/api/objects/" + encodeURIComponent(runId))
+        .then((res) => {
+          if (!res.ok) throw new Error(res.status);
+          return res.json();
+        })
+        .catch((err) => { objectDocs.delete(runId); throw err; });
+      objectDocs.set(runId, request);
+    }
+    return objectDocs.get(runId);
+  }
+
   async function loadAllObjects(runId, host, button) {
     if (button) { button.disabled = true; button.textContent = "loading…"; }
     host.replaceChildren(Object.assign(document.createElement("p"),
       { className: "muted", textContent: "loading the object table…" }));
     try {
-      const res = await fetch("/api/objects/" + encodeURIComponent(runId));
-      if (!res.ok) throw new Error(res.status);
-      const doc = await res.json();
+      const doc = await loadObjects(runId);
       buildTable(host, doc.objects || []);
       if (button) button.remove();
     } catch (err) {
@@ -181,6 +197,15 @@
       if (id === current) return;
       current = id;
       links.forEach((a) => a.classList.toggle("active", a.dataset.spy === id));
+      // on a phone the rail is a horizontal strip: keep the active chip in view
+      if (rail.scrollWidth > rail.clientWidth + 2) {
+        const active = links.find((a) => a.dataset.spy === id);
+        if (active) {
+          const left = active.offsetLeft
+            - (rail.clientWidth - active.offsetWidth) / 2;
+          rail.scrollTo({ left: Math.max(0, left), behavior: "smooth" });
+        }
+      }
     };
     let queued = false;
     const schedule = () => {
@@ -188,7 +213,22 @@
       queued = true;
       requestAnimationFrame(() => { queued = false; pick(); });
     };
+    // The mobile rail sticks *below* the header, so it needs the header's real
+    // height. Hardcoding a padding that moves with the font is exactly how the
+    // rail ended up parked underneath the bar (measured: top 0, header 61.5px).
+    const topbar = document.querySelector(".topbar");
+    const measure = () => {
+      const style = document.documentElement.style;
+      if (topbar) {
+        style.setProperty("--topbar-h",
+                          Math.round(topbar.getBoundingClientRect().height) + "px");
+      }
+      style.setProperty("--rail-h",
+                        Math.round(rail.getBoundingClientRect().height) + "px");
+    };
+    measure();
     window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", measure);
     window.addEventListener("resize", schedule);
     document.addEventListener("toggle", schedule, true);
     pick();
@@ -483,7 +523,7 @@
 
   function initScope() {
     const form = document.getElementById("scope-form");
-    const body = document.getElementById("scope-body");
+    const body = document.getElementById("answer-body");
     const summary = document.getElementById("copy-summary");
     const text = (document.getElementById("scope-text") || {}).textContent || "";
     if (summary) {
@@ -497,12 +537,16 @@
       });
     }
     if (!form || !body) return;
+    // The phone action bar sits at the bottom of the window and submits this
+    // form through its `form=` attribute, so it is a second button for one form.
+    const buttons = [form.querySelector("button[type=submit]"),
+                     document.querySelector('button[form="scope-form"]')]
+      .filter(Boolean);
+    const labels = buttons.map((b) => b.textContent);
+    const setButtons = (fn) => buttons.forEach((b, i) => fn(b, labels[i]));
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
-      const button = form.querySelector("button[type=submit]");
-      const label = button.textContent;
-      button.disabled = true;
-      button.textContent = "thinking…";
+      setButtons((b) => { b.disabled = true; b.textContent = "thinking…"; });
       body.hidden = false;
       body.textContent = "";
       try {
@@ -514,8 +558,7 @@
         if (!res.ok || !res.body) {
           const detail = await res.text();
           body.textContent = "[" + res.status + "] " + detail.slice(0, 400);
-          button.disabled = false;
-          button.textContent = label;
+          setButtons((b, label) => { b.disabled = false; b.textContent = label; });
           return;
         }
         const reader = res.body.getReader();
@@ -536,15 +579,20 @@
             try { obj = JSON.parse(payload); } catch (err) { continue; }
             if (obj.delta) body.textContent += obj.delta;
             else if (obj.error) body.textContent += "\n\n[error] " + obj.error;
-            else if (obj.done) { url = obj.url; button.textContent = "open"; }
+            else if (obj.done) {
+              url = obj.url;
+              setButtons((b) => { b.textContent = "open"; });
+            }
           }
         }
         if (url) window.location.assign(url);
       } catch (err) {
         body.textContent += "\n\n[network error] " + err.message;
       } finally {
-        button.disabled = false;
-        if (button.textContent === "thinking…") button.textContent = label;
+        setButtons((b, label) => {
+          b.disabled = false;
+          if (b.textContent === "thinking…") b.textContent = label;
+        });
       }
     });
   }
@@ -560,19 +608,16 @@
       const canvas = document.getElementById("hiterror");
       const runId = run.dataset.runId;
       if (canvas) {
-        fetch("/api/objects/" + encodeURIComponent(runId))
-          .then((r) => (r.ok ? r.json() : null))
-          .then((doc) => { if (doc) drawHitError(canvas, doc.objects || []); })
-          .catch(() => {});
+        const redraw = () => {
+          loadObjects(runId)
+            .then((doc) => drawHitError(canvas, doc.objects || []))
+            .catch(() => {});
+        };
+        redraw();
         let timer = null;
         window.addEventListener("resize", () => {
           clearTimeout(timer);
-          timer = setTimeout(() => {
-            fetch("/api/objects/" + encodeURIComponent(runId))
-              .then((r) => (r.ok ? r.json() : null))
-              .then((doc) => { if (doc) drawHitError(canvas, doc.objects || []); })
-              .catch(() => {});
-          }, 200);
+          timer = setTimeout(redraw, 200);
         });
       }
       initAnnotations(run);

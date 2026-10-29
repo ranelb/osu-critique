@@ -161,7 +161,7 @@
   <section class="panel" id="saved">
     <h2>saved answers <span class="count">{{ saved | length }}</span></h2>
     {% if saved %}
-    <table class="data tight">
+    <div class="tscroll"><table class="data tight">
       <thead><tr><th>when</th><th>question</th><th>runs</th><th>maps</th><th>span</th>
         <th>model</th><th class="num">size</th><th></th></tr></thead>
       <tbody>
@@ -179,13 +179,24 @@
         </tr>
       {% endfor %}
       </tbody>
-    </table>
+    </table></div>
     {% else %}
     <p class="muted">No stored answers yet. Generating one stores both the answer and the
       summary it read (question included), keyed by their hash — the same selection and
       question will not pay twice.</p>
     {% endif %}
   </section>
+
+  {# Phones only (CSS): the action sits at the bottom of the window while you
+     pick, instead of two screens below the pickers. `form=` points at the one
+     real form — no duplicated hidden inputs, and it still works with JS off. #}
+  {% if built.n_runs and llm_allowed and llm_available %}
+  <div class="askbar">
+    <span class="askbar-count"><b>{{ built.n_runs }}</b> run{{ '' if built.n_runs == 1 else 's' }}
+      · {{ (built.bytes / 1024) | num(0) }} KB{% if stored %} · stored{% endif %}</span>
+    <button type="submit" form="scope-form">{{ 'open stored' if stored else 'generate' }}</button>
+  </div>
+  {% endif %}
 </article>
 {% endblock %}
 {% block scripts %}<script src="/static/app.js?v={{ asset_v }}" defer></script>{% endblock %}

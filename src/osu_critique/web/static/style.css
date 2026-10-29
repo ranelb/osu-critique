@@ -21,6 +21,10 @@
   --green: #4ade80;
   --gold: #ffd166;
   --radius: 14px;
+  /* overwritten by app.js:initRail with the measured header/rail heights, since
+     a sticky rail below a sticky header cannot ask CSS how tall that header is */
+  --topbar-h: 62px;
+  --rail-h: 45px;
   --mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, monospace;
 }
 
@@ -60,6 +64,8 @@ h2 { font-size: 1.05rem; color: #cbd4e6; }
 .topbar {
   display: flex; align-items: center; gap: 1.2rem;
   padding: 1rem clamp(1rem, 4vw, 2.5rem);
+  /* viewport-fit=cover: in standalone mode the status bar overlaps the page */
+  padding-top: calc(1rem + env(safe-area-inset-top));
   border-bottom: 1px solid var(--line);
   background: #0a0c12cc;
   backdrop-filter: blur(10px);
@@ -90,7 +96,8 @@ main.has-rail { display: grid; grid-template-columns: 172px minmax(0, 1fr);
 main [id] { scroll-margin-top: 4.6rem; }
 
 footer { padding: 2rem clamp(1rem, 4vw, 2.5rem); color: #5a6377; font-size: .78rem;
-  border-top: 1px solid #161b27; }
+  border-top: 1px solid #161b27;
+  padding-bottom: calc(2rem + env(safe-area-inset-bottom)); }
 
 /* -------------------------------------------------------------- list ---- */
 
@@ -153,6 +160,10 @@ button.link { background: none; color: var(--pink); padding: 0; border: 0;
   margin: 0 0 .6rem; font-size: .8rem; }
 
 .card-body { padding: .7rem .85rem .8rem; }
+/* Shown only by the dense-row listing on phones (see the mobile section): the
+   cover is 64px wide there, so the pills and the difficulty move into the body.
+   Duplicated on purpose — no JS, and the desktop card is untouched. */
+.row-badges, .row-version { display: none; }
 .card .title { font-weight: 600; font-size: .95rem; line-height: 1.3;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card .sub { color: var(--muted); font-size: .78rem; margin-top: .1rem;
@@ -222,6 +233,12 @@ table.data td { padding: .42rem .5rem; border-bottom: 1px solid #1b2130; }
 table.data tr:last-child td { border-bottom: 0; }
 table.data .num { text-align: right; font-variant-numeric: tabular-nums; }
 table.data.tight td, table.data.tight th { padding: .3rem .45rem; }
+/* A wide table gets its own scroller instead of widening the page: on a phone
+   body-level horizontal scroll hides the header and the rightmost columns. */
+.tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin; }
+.tscroll > table.data { min-width: max-content; }
+.tscroll > table.data td, .tscroll > table.data th { white-space: nowrap; }
 table.data tr.untrusted td { color: #b9a0a6; }
 table.data tr.res-miss td { background: #ff5f6d0d; }
 table.data tr.res-100 td, table.data tr.res-50 td { background: #ffd1660a; }
@@ -269,24 +286,33 @@ details.all-objects summary { cursor: pointer; color: var(--muted); font-size: .
 
 @media (max-width: 880px) {
   main.has-rail { grid-template-columns: 1fr; gap: .7rem; }
-  .rail { position: sticky; top: 0; z-index: 6; max-height: none; display: flex;
-    gap: .4rem; overflow-x: auto; padding: .45rem 0; background: var(--bg);
-    border-bottom: 1px solid var(--line); }
+  /* the desktop rail trick (one row of cards, never an orphan) cannot survive
+     here: column flow turns six cards into six 60px slivers. rows instead. */
+  main.has-rail .statrow { grid-auto-flow: row; grid-auto-columns: auto;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .rail { position: sticky; top: var(--topbar-h); z-index: 6; max-height: none;
+    display: flex; gap: .4rem; overflow-x: auto; padding: .45rem 0;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+    scrollbar-width: none; }
+  .rail::-webkit-scrollbar { display: none; }
   .rail-title { display: none; }
   .rail ul { flex-direction: row; gap: .35rem; }
   .rail a { border: 1px solid var(--line); border-left-width: 1px; border-radius: 999px;
     padding: .22rem .6rem; white-space: nowrap; }
   .rail a.active { border-color: var(--pink); background: var(--pink-soft); }
   .rail .count { margin-left: .1rem; }
-  main [id] { scroll-margin-top: 3.6rem; }
+  main [id] { scroll-margin-top: calc(var(--topbar-h) + var(--rail-h) + .5rem); }
 }
 
 /* ------------------------------------------------------------ responsive - */
 @media (max-width: 620px) {
   .page-head { align-items: flex-start; }
+  .page-head > * { max-width: 100%; }
+  .filters { max-width: 100%; }
   .filters input[type=search] { min-width: 100%; }
   .statrow { grid-template-columns: repeat(2, 1fr); }
-  main.has-rail .statrow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  main.has-rail .statrow { grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-flow: row; grid-auto-columns: auto; }
 }
 
 /* ------------------------------------------------------- annotations ---- */
@@ -313,7 +339,8 @@ button.link.danger:hover { color: var(--red); }
   resize: vertical; min-height: 2.6rem; }
 .note-form textarea:focus { border-color: var(--pink); outline: none; }
 .note-form-row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
-.note-form-row input[name=tag], .note-form-row input[name=t] { flex: 0 1 14rem; }
+.note-form-row input[name=tag], .note-form-row input[name=t] { flex: 0 1 14rem;
+  min-width: 0; }
 .playhead { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 .playhead input[type=range] { flex: 1 1 18rem; accent-color: var(--pink); }
 button.ghost, a.ghost { background: none; border: 1px solid var(--line);
@@ -401,7 +428,7 @@ details.panel > summary .count { font-weight: 600; }
 /* ------------------------------------------------- deterministic report --- */
 
 .rsections { display: grid; gap: .9rem;
-  grid-template-columns: repeat(auto-fit, minmax(430px, 1fr)); }
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); }
 .rsection.wide { grid-column: 1 / -1; }
 .rsection { background: var(--bg2); border: 1px solid var(--line);
   border-radius: 12px; padding: .8rem .9rem; }
@@ -423,7 +450,7 @@ details.panel > summary .count { font-weight: 600; }
 .rnote.target { background: var(--pink-soft); border-color: #ff66aa55; color: #ffd0e4; }
 .rcap { font-size: .74rem; color: var(--muted); text-transform: uppercase;
   letter-spacing: .06em; margin: .5rem 0 .2rem; }
-.rscroll { overflow-x: auto; }
+.rscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .rtable { font-size: .8rem; }
 .rtable th, .rtable td { white-space: nowrap; }
 .rtable td:first-child, .rtable th:first-child { white-space: normal; }
@@ -437,19 +464,22 @@ details.panel > summary .count { font-weight: 600; }
   flex-wrap: wrap; gap: .4rem; align-items: center; }
 .tray-chip { display: inline-flex; align-items: center; gap: .4rem;
   background: var(--bg2); border: 1px solid var(--line); border-radius: 999px;
-  padding: .18rem .5rem .18rem .2rem; font-size: .82rem; max-width: 34rem; }
+  padding: .18rem .5rem .18rem .2rem; font-size: .82rem; max-width: 100%;
+  min-width: 0; }
 .tray-kind { font-size: .64rem; text-transform: uppercase; letter-spacing: .08em;
   color: #0a0c12; background: var(--pink); border-radius: 999px; padding: .05rem .4rem; }
 .tray-chip.kind-map .tray-kind { background: var(--gold); }
 .tray-chip.kind-range .tray-kind { background: #8bb4ff; }
-.tray-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tray-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  min-width: 0; }
 .tray-x { color: var(--muted); padding: 0 .25rem; }
 .tray-x:hover { color: var(--red); }
 .tray-clear { font-size: .78rem; }
 
 .picker-grid { display: grid; gap: 1.2rem; align-items: start;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); }
 .picker h3 { margin-top: 0; }
+.picker { min-width: 0; }
 .picklist { list-style: none; margin: .5rem 0 0; padding: 0; max-height: 19rem;
   overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
 .picklist li { display: grid; grid-template-columns: auto minmax(0, 1fr);
@@ -475,8 +505,8 @@ a.pick:hover { background: var(--pink); color: #17060f; }
 .pill-link:hover { border-color: var(--pink); color: var(--pink); }
 .picker-search { margin: .6rem 0 1rem; }
 .picker-search input[type=search] { min-width: 0; flex: 1 1 12rem; }
-.range-form { display: grid; grid-template-columns: 1fr 1fr; gap: .45rem;
-  align-items: end; }
+.range-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: .45rem; align-items: end; }
 .range-field { display: flex; flex-direction: column; gap: .2rem; font-size: .74rem;
   color: var(--muted); }
 .range-form button { grid-column: 1 / -1; }
@@ -512,3 +542,126 @@ pre.scope-text { max-height: 34rem; overflow: auto; background: var(--bg2);
 .question-form input[type=text] { flex: 1 1 22rem; min-width: 0; }
 p.question { margin: .5rem 0 0; font-size: 1.02rem; color: #e9c7d8;
   border-left: 2px solid var(--pink); padding-left: .7rem; }
+
+/* ------------------------------------------------- rendered answers ---- */
+
+/* Stored model answers are markdown. They used to be printed in a <pre>, which
+   on a phone reads as a text file with asterisks in it. This is prose. */
+.md { font-size: .95rem; line-height: 1.62; color: #dbe2f0; }
+.md > :first-child { margin-top: 0; }
+.md > :last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 { color: #eef2fa; font-weight: 600;
+  letter-spacing: -.01em; margin: 1.1em 0 .35em; font-size: 1rem; }
+.md h1 { font-size: 1.2rem; }
+.md h2 { font-size: 1.05rem; color: var(--pink); }
+.md h3 { font-size: .98rem; }
+.md p { margin: .6em 0; }
+.md ul, .md ol { margin: .5em 0 .8em; padding-left: 1.25rem; }
+.md li { margin: .18em 0; }
+.md li::marker { color: var(--pink); }
+.md strong { color: #fff; font-weight: 600; }
+.md em { color: #e7ecf6; }
+.md blockquote { margin: .7em 0; padding: .1em 0 .1em .8rem;
+  border-left: 2px solid var(--pink); color: #c3cbdc; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 1.1rem 0; }
+.md pre.md-code { background: var(--bg2); border: 1px solid var(--line);
+  border-radius: 10px; padding: .7rem .8rem; overflow-x: auto;
+  font-family: var(--mono); font-size: .82rem; }
+.md pre.md-code code { background: none; padding: 0; }
+.md .md-table { overflow-x: auto; }
+.md .md-table table { min-width: max-content; }
+.answer-body { max-width: 68ch; }
+
+/* ---------------------------------------------------------- phones ---- */
+
+@media (max-width: 620px) {
+  /* iOS zooms the page when a control under 16px takes focus, and never zooms
+     back out. Text-entry controls get the 16px floor; buttons do not need it. */
+  input[type=text], input[type=search], input[type=date], textarea, select {
+    font-size: 16px;
+  }
+  /* the report and the summary were 12px monospace: fine on a monitor, not
+     in a hand. Prose scales up, tables keep their density. */
+  pre.report, pre.scope-text { font-size: .88rem; line-height: 1.6; }
+  .md { font-size: 1rem; }
+  .rkv { font-size: .9rem; }
+  .rkv .rn { font-size: .82rem; }
+  .rnote { font-size: .88rem; }
+  /* a 112px label column leaves 175px for the value, which turns "210 bpm
+     effective (210-210)" into four lines. Stack label above value instead. */
+  .rkv { display: block; padding: .45rem 0; }
+  .rkv .rk { display: block; font-size: .68rem; text-transform: uppercase;
+    letter-spacing: .07em; }
+  .rkv .rv { display: block; font-size: .95rem; }
+  .rkv .rn { display: block; margin-top: .1rem; }
+  .fineprint { font-size: .78rem; }
+  /* the 1160px block printed these at .62rem; match its specificity to win */
+  main.has-rail .statcard .k2, .statcard .k2 { font-size: .78rem; }
+  table.data th { font-size: .78rem; }
+  input[type=checkbox] { width: 18px; height: 18px; }
+
+  /* 44px is the usual floor for a thumb; these were 22-29px chips */
+  .rail a, .pill-link, .presets .pill-link { padding: .42rem .7rem; }
+  .tray-x { padding: 0 .5rem; font-size: 1.05rem; }
+  button.ghost, a.ghost, button.small, button.link.danger { min-height: 36px;
+    padding-top: .4rem; padding-bottom: .4rem; }
+  /* the +/x on a picker row was 21x23 and it is the most-tapped control here */
+  a.pick { min-width: 40px; min-height: 40px; display: inline-flex;
+    align-items: center; justify-content: center; }
+  .picklist li { padding: .4rem .55rem; }
+  table.data a.open { display: inline-block; padding: .35rem .15rem; }
+
+  /* eight miss boards one per row is three screens; a zoomed five-note window
+     reads fine at 160px */
+  .boardgrid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr)); }
+
+  /* Dense rows for the listing. A 3.2:1 cover per map is five screens of
+     scroll for 24 maps; a 64px thumb plus three text lines scans far faster. */
+  .grid { grid-template-columns: 1fr; gap: .5rem; }
+  .grid .card { display: grid; grid-template-columns: 64px minmax(0, 1fr);
+    align-items: stretch; }
+  .grid .card .cover { aspect-ratio: auto; height: 100%; min-height: 64px;
+    border-radius: 0; }
+  .grid .card .cover img { height: 100%; }
+  .grid .card .cover-shade, .grid .card .cover-badges,
+  .grid .card .diff { display: none; }
+  .grid .card .card-body { display: grid;
+    grid-template-columns: minmax(0, 1fr) auto; column-gap: .5rem;
+    row-gap: .1rem; padding: .5rem .65rem .55rem; }
+  .grid .card .title { grid-column: 1; grid-row: 1; white-space: normal;
+    display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+    overflow: hidden; }
+  .grid .card .row-badges { display: flex; grid-column: 2; grid-row: 1;
+    align-self: start; gap: .25rem; }
+  .grid .card .row-version { display: inline; }
+  .grid .card .sub { grid-column: 1 / -1; grid-row: 2; }
+  .grid .card .stats { grid-column: 1 / -1; grid-row: 3; margin-top: .1rem;
+    gap: .55rem; }
+}
+
+@media (max-width: 420px) {
+  /* brand + nav + version need ~336px; at 320 the version was clipped anyway */
+  .topbar { gap: .8rem; }
+  .ver { display: none; }
+  .nav { margin-left: auto; }
+}
+
+/* --------------------------------------------------- phone action bar ---- */
+
+/* Hidden by default: a desktop has the panel in view. On a phone this is the
+   page's primary action, pinned to the bottom while you pick. */
+.askbar { display: none; }
+
+@media (max-width: 620px) {
+  .askbar {
+    position: sticky; bottom: 0; z-index: 8;
+    display: flex; align-items: center; gap: .7rem;
+    margin: .6rem -1rem 0;
+    padding: .55rem 1rem calc(.55rem + env(safe-area-inset-bottom));
+    background: #0a0c12f2; backdrop-filter: blur(10px);
+    border-top: 1px solid var(--line);
+  }
+  .askbar-count { flex: 1 1 auto; font-size: .8rem; color: var(--muted); }
+  .askbar-count b { color: var(--text); font-weight: 600; }
+  .askbar button { flex: 0 0 auto; min-height: 40px; }
+}

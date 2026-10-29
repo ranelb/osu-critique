@@ -126,7 +126,7 @@
       <span class="peek">{% if objects_available %}{{ n_interesting }} of {{ n_objects }} objects: every miss and every non-300, in map order{% else %}no per-object records for this run — it was analysed with <code>--no-objects</code>{% endif %}</span>
     </summary>
     {% if objects_available %}
-    <table class="data tight" id="interesting">
+    <div class="tscroll"><table class="data tight" id="interesting">
       <thead><tr><th>#</th><th class="num">time</th><th>kind</th><th>result</th>
         <th class="num">error</th><th class="num">aim</th><th class="num">spacing</th>
         <th class="num">snap</th><th class="num">angle</th></tr></thead>
@@ -145,7 +145,7 @@
         </tr>
       {% endfor %}
       </tbody>
-    </table>
+    </table></div>
     {% if n_interesting > table_limit %}
     <p class="fineprint">… and {{ n_interesting - table_limit }} more below.</p>
     {% endif %}
@@ -169,7 +169,7 @@
       <span class="muted">{{ scope_answer.created | when }}</span>
       <a href="/ask/{{ scope_hash }}">permalink</a>
     </div>
-    <pre class="report" id="critique-body">{{ scope_answer.body }}</pre>
+    <div class="md answer-body" id="critique-body">{{ scope_answer.body | md | safe }}</div>
     {% elif critique %}
     <p class="fineprint">Written by the older per-run framework, from the metrics JSON.
       Kept exactly as it was made; new answers come from the ask page, which sends the
@@ -183,7 +183,7 @@
         <button class="link danger" type="submit">delete</button>
       </form>
     </div>
-    <pre class="report" id="critique-body">{{ critique.body }}</pre>
+    <div class="md answer-body" id="critique-body">{{ critique.body | md | safe }}</div>
     {% else %}
     <p class="muted" id="critique-empty">Nothing stored for this run.</p>
     {% endif %}

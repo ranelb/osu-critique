@@ -19,7 +19,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Form, HTTPException, Query, Request
+from fastapi import FastAPI, Form, HTTPException, Query, Request, Response
 from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
                                PlainTextResponse, RedirectResponse,
                                StreamingResponse)
@@ -28,9 +28,9 @@ from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .. import (__version__, annotations, answers, coach, covers, critiques,
-                digest, index, scope)
+                digest, index, markdown, scope)
 from ..config import outdir as default_outdir
-from . import data
+from . import data, icons
 
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
@@ -107,7 +107,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
     templates = Jinja2Templates(directory=TEMPLATES)
     templates.env.filters.update(pct=pct, num=num, star=star, when=when,
                                  clock=clock, mmss=mmss, ts=ts,
-                                 fmt_t=annotations.fmt_time)
+                                 fmt_t=annotations.fmt_time, md=markdown.render)
     # Static assets are busted by their own fingerprint, not the release number:
     # editing style.css and reloading used to show the old file, which reads as
     # a CSS bug. Two runs of the same build with an edited file now differ.
@@ -590,6 +590,35 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             raise HTTPException(status_code=404, detail="cover unavailable")
         return FileResponse(path, media_type="image/jpeg",
                             headers={"Cache-Control": "public, max-age=604800"})
+
+    # --------------------------------------------------------- home screen --
+
+    @app.get("/manifest.webmanifest")
+    def manifest():
+        """Add-to-home-screen: a pink disc, standalone, no service worker."""
+        return JSONResponse({
+            "name": "osu!critique",
+            "short_name": "osu!critique",
+            "description": "Local replay analysis, your data.",
+            "start_url": "/",
+            "scope": "/",
+            "display": "standalone",
+            "background_color": "#0a0c12",
+            "theme_color": "#0a0c12",
+            "icons": [
+                {"src": "/icon-192.png", "sizes": "192x192",
+                 "type": "image/png", "purpose": "any maskable"},
+                {"src": "/icon-512.png", "sizes": "512x512",
+                 "type": "image/png", "purpose": "any maskable"},
+            ],
+        }, media_type="application/manifest+json")
+
+    @app.get("/icon-{size}.png")
+    def app_icon(size: int):
+        if size not in (180, 192, 512):
+            raise HTTPException(status_code=404, detail="no such icon size")
+        return Response(content=icons.png(size), media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=604800"})
 
     # ------------------------------------------------------------- digest --
 

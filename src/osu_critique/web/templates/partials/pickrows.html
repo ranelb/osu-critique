@@ -11,7 +11,7 @@
   {% for r in rows %}
   {% if kind == 'runs' %}
   <li class="has-bg">
-    <span class="row-bg" style="background-image:url('/api/cover/{{ r.beatmap_md5 }}?size=card')"></span>
+    <span class="row-bg" style="background-image:url('/api/cover/{{ r.beatmap_md5 }}?size=thumb')"></span>
     <a class="pick" href="{{ r.add }}">+</a>
     <span class="pick-main">{{ r.map_name }}</span>
     <span class="pick-meta">{{ r.when }} · {{ r.mod_string or 'NM' }} ·

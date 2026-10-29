@@ -25,7 +25,7 @@
     <p class="fineprint">Stored: this text and the summary it was given. Both are
       immutable — a changed corpus is a different answer, not a stale one.
       <a href="{{ reopen }}">reopen this selection</a> to build it again with today's data.</p>
-    <pre class="report" id="answer-body">{{ doc.body }}</pre>
+    <div class="md answer-body" id="answer-body">{{ doc.body | md | safe }}</div>
   </section>
 
   <details class="panel fold" id="input">

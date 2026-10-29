@@ -26,7 +26,8 @@
 {% for m in maps %}
   <a class="card" href="/map/{{ m.md5 }}">
     <div class="cover">
-      <img src="/api/cover/{{ m.md5 }}?size=card" alt="" loading="lazy" onerror="this.remove()">
+      <img src="/api/cover/{{ m.md5 }}?size=thumb" alt="" loading="lazy" decoding="async"
+           srcset="/api/cover/{{ m.md5 }}?size=card 2x" onerror="this.remove()">
       <div class="cover-shade"></div>
       <span class="diff" title="difficulty">{{ m.version or '—' }}</span>
       <span class="cover-badges">
@@ -36,7 +37,11 @@
     </div>
     <div class="card-body">
       <div class="title">{{ m.title_display }}</div>
-      <div class="sub">{% if m.creator %}mapped by {{ m.creator }}{% else %}<span class="muted">metadata missing</span>{% endif %}</div>
+      <div class="row-badges">
+        {% if m.sr %}<span class="pill star">{{ m.sr | star }}</span>{% endif %}
+        {% if m.rank_status %}<span class="pill st-{{ m.rank_status }}">{{ m.rank_status }}</span>{% endif %}
+      </div>
+      <div class="sub">{% if m.version %}<span class="row-version">{{ m.version }} · </span>{% endif %}{% if m.creator %}mapped by {{ m.creator }}{% else %}<span class="muted">metadata missing</span>{% endif %}</div>
       <div class="stats">
         <span class="stat"><b>{{ m.attempts }}</b> attempt{{ '' if m.attempts == 1 else 's' }}</span>
         <span class="stat">best <b>{{ m.acc_pct | num(2) }}%</b></span>
