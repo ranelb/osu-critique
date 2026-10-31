@@ -27,8 +27,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from .. import (__version__, annotations, answers, coach, covers, critiques,
-                digest, index, markdown, scope)
+from .. import (__version__, annotations, answers, blacklist, coach, covers,
+                critiques, dashboard, digest, index, markdown, recommend, scope)
 from ..config import outdir as default_outdir
 from . import data, icons
 
@@ -137,7 +137,21 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
     # ------------------------------------------------------------- pages --
 
     @app.get("/", response_class=HTMLResponse)
-    def home(request: Request, q: str | None = None,
+    def home(request: Request):
+        conn = index.open_readonly(out)
+        if conn is None:
+            return render("empty.html", request)
+        try:
+            settings = dashboard.load()
+            page = dashboard.build(conn, out, settings)
+            page["toc"] = dashboard.toc(page)
+            page["blacklist"] = blacklist.load(out)
+        finally:
+            conn.close()
+        return render("dashboard.html", request, **page)
+
+    @app.get("/maps", response_class=HTMLResponse)
+    def maps(request: Request, q: str | None = None,
              sort: str = "recent", status: str | None = None,
              trust: str | None = None, offset: int = 0):
         conn = index.open_readonly(out)
@@ -149,9 +163,113 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
                                   offset=max(0, offset))
         finally:
             conn.close()
-        return render("index.html", request, **page, q=q or "",
+        return render("maps.html", request, **page, q=q or "",
                       status=status or "", trust=trust or "",
                       sorts=list(data.SORTS.items()))
+
+    # ---------------------------------------------------------- settings --
+
+    @app.get("/settings", response_class=HTMLResponse)
+    def settings_page(request: Request, saved: int = 0):
+        settings = dashboard.load()
+        conn = index.open_readonly(out)
+        blocked = blacklist.load(out)
+        player = None
+        library = {"scanned": False, "maps": 0, "age_days": None}
+        try:
+            if conn is not None:
+                player = dashboard.player_for(conn, settings)
+                library = dashboard.library_state(conn)
+        finally:
+            if conn is not None:
+                conn.close()
+        from .. import config as config_mod
+        from ..config import lazer_exports, lazer_files, maps_dir, replays_dir
+        paths = {
+            "out": str(out),
+            "index": str(index.db_path(out)),
+            "settings": str(dashboard.settings_path()),
+            "lazer_files": str(lazer_files()),
+            "lazer_exports": str(lazer_exports()),
+            "maps": str(maps_dir()),
+            "replays": str(replays_dir()),
+            "bind": f"{config_mod.get('web.host', 'OSU_WEB_HOST', '0.0.0.0')}:"
+                    f"{config_mod.get('web.port', 'OSU_WEB_PORT', 8765)}",
+        }
+        return render("settings.html", request, settings=settings,
+                      player=player, library=library, blocked=blocked, paths=paths,
+                      widgets=dashboard.WIDGETS, stretch_choices=dashboard.STRETCH_CHOICES,
+                      card_choices=dashboard.CARD_CHOICES, buckets=dashboard.BUCKETS,
+                      saved=bool(saved))
+
+    @app.post("/settings")
+    async def settings_save(request: Request):
+        form = await request.form()
+        current = dashboard.load()
+        # widgets: the form lists them in the current order, so a move is a
+        # reorder of that list, and a toggle cannot silently reorder anything
+        widgets = []
+        for w in current["widgets"]:
+            wid = w["id"]
+            window = w["window"]
+            allowed = next((x["windows"] for x in dashboard.WIDGETS
+                            if x["id"] == wid), ())
+            if allowed:
+                try:
+                    chosen = int(form.get(f"window:{wid}", window))
+                except (TypeError, ValueError):
+                    chosen = window
+                window = chosen if chosen in allowed else w["window"]
+            widgets.append({"id": wid, "on": f"w:{wid}" in form, "window": window})
+        for idx, w in enumerate(widgets):
+            move = form.get(f"move:{w['id']}")
+            if move in ("up", "down") and 0 <= idx < len(widgets):
+                j = idx - 1 if move == "up" else idx + 1
+                if 0 <= j < len(widgets):
+                    widgets[idx], widgets[j] = widgets[j], widgets[idx]
+        if form.get("reset"):
+            dashboard.save(dashboard.defaults())
+            return _redirect("/settings?saved=1")
+        raw = {
+            "player": form.get("player", ""),
+            "stretch": form.get("stretch", current["stretch"]),
+            "cards": form.get("cards", current["cards"]),
+            "buckets": form.getlist("bucket"),
+            "widgets": widgets,
+        }
+        dashboard.save(raw)
+        return _redirect(str(form.get("next") or "/settings?saved=1"))
+
+    @app.post("/blacklist")
+    async def blacklist_add(request: Request):
+        form = await request.form()
+        scope = str(form.get("scope") or "map")
+        if scope == "set" and form.get("set_id"):
+            blacklist.add_set(out, int(form.get("set_id")))
+        elif form.get("md5"):
+            blacklist.add_map(out, str(form.get("md5")))
+        _mirror_blacklist()
+        return _redirect(str(form.get("next") or "/settings"))
+
+    @app.post("/blacklist/remove")
+    async def blacklist_remove(request: Request):
+        form = await request.form()
+        if form.get("md5"):
+            blacklist.remove_map(out, str(form.get("md5")))
+        if form.get("set_id"):
+            blacklist.remove_set(out, int(form.get("set_id")))
+        _mirror_blacklist()
+        return _redirect(str(form.get("next") or "/settings"))
+
+    def _mirror_blacklist():
+        try:
+            conn = index.connect(index.db_path(out))
+            try:
+                blacklist.mirror(conn, out)
+            finally:
+                conn.close()
+        except Exception as exc:      # the sidecar is canonical; never block on this
+            print(f"  ! blacklist mirror: {type(exc).__name__}: {exc}", file=sys.stderr)
 
     @app.get("/feed", response_class=HTMLResponse)
     def feed(request: Request):

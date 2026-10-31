@@ -1,0 +1,23 @@
+{% set w = data.whatsnew %}
+<section class="panel" id="w-whatsnew">
+  <h2>what's new</h2>
+  {% if w.n_new %}
+    <p><b>{{ w.n_new }}</b> play{{ '' if w.n_new == 1 else 's' }} since your last
+      digest.</p>
+  {% else %}
+    <p class="muted">Nothing new since your last digest.</p>
+  {% endif %}
+  {% if w.digest %}
+    <p class="fineprint">Latest digest: {{ w.digest.mtime | ts }}
+      {% if w.digest.data %}· {{ w.digest.data.n_runs }} plays over
+      {{ w.digest.data.n_maps }} maps{% endif %}
+      · <a href="/feed">read the feed →</a></p>
+  {% else %}
+    <p class="fineprint">No digests yet — <code>osu-critique digest</code> writes one.</p>
+  {% endif %}
+  {% if not w.library.scanned %}
+    <p class="fineprint warn">The map library has never been scanned, so
+      recommendations cannot score anything you own:
+      <code>osu-critique library scan</code>.</p>
+  {% endif %}
+</section>

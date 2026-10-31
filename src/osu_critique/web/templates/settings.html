@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}settings · osu-critique{% endblock %}
+{% block body %}
+<section class="page-head dash-head">
+  <div>
+    <h1>settings</h1>
+    <p class="muted">
+      The dashboard's layout lives in <code>{{ paths.settings }}</code> — a file,
+      not a cookie, so your phone and your desktop agree.
+      {% if saved %}<span class="pos">saved.</span>{% endif %}
+    </p>
+  </div>
+  <a class="clear" href="/">← dashboard</a>
+</section>
+
+<form method="post" action="/settings" class="panel settings-form">
+  <h2>dashboard</h2>
+  <div class="wgrid three">
+    <label class="field">
+      <span class="k">player</span>
+      <input type="text" name="player" value="{{ settings.player }}"
+             placeholder="{{ player or 'the most-run player' }}">
+      <span class="fineprint">Blank = the most-run player in the corpus
+        {% if player %}(now: <b>{{ player }}</b>){% endif %}.</span>
+    </label>
+    <label class="field">
+      <span class="k">stretch</span>
+      <select name="stretch">
+        {% for c in stretch_choices %}
+        <option value="{{ c }}" {% if c == settings.stretch %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+      <span class="fineprint">How far above your comfort SR to aim.
+        0 = comfort, 1 = a real step up.</span>
+    </label>
+    <label class="field">
+      <span class="k">cards</span>
+      <select name="cards">
+        {% for c in card_choices %}
+        <option value="{{ c }}" {% if c == settings.cards %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+      <span class="fineprint">How many recommendations the page shows.</span>
+    </label>
+  </div>
+  <fieldset class="buckets">
+    <legend class="k">buckets</legend>
+    {% for b in buckets %}
+    <label class="check"><input type="checkbox" name="bucket" value="{{ b }}"
+      {% if b in settings.buckets %}checked{% endif %}> {{ b }}</label>
+    {% endfor %}
+    <span class="fineprint">Unticking a bucket hides it from the page and from
+      the recommendation list.</span>
+  </fieldset>
+
+  <h2>widgets</h2>
+  <p class="fineprint">Switch a block off, or move it up and down. Saving is one
+    form, so a move keeps whatever toggles you changed in the same click.</p>
+  <ul class="wrows">
+    {% for w in settings.widgets %}
+    {% set meta = widgets | selectattr("id", "equalto", w.id) | first %}
+    <li class="wrow{{ '' if w.on else ' off' }}">
+      <label class="check">
+        <input type="checkbox" name="w:{{ w.id }}" {% if w.on %}checked{% endif %}>
+        <span class="wlabel">{{ meta.label }}</span>
+      </label>
+      <span class="muted wmeta">
+        {% if meta.windows %}
+          window
+          <select name="window:{{ w.id }}" aria-label="{{ meta.label }} window">
+            {% for choice in meta.windows %}
+            <option value="{{ choice }}" {% if choice == w.window %}selected{% endif %}>{{ choice }}</option>
+            {% endfor %}
+          </select>
+        {% else %}<span class="fineprint">no window knob</span>{% endif %}
+      </span>
+      <span class="wmove">
+        <button class="link" name="move:{{ w.id }}" value="up" title="move up">↑</button>
+        <button class="link" name="move:{{ w.id }}" value="down" title="move down">↓</button>
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <div class="form-actions">
+    <button type="submit">save</button>
+    <button type="submit" name="reset" value="1" class="link">reset to defaults</button>
+  </div>
+</form>
+
+<section class="panel" id="blacklist">
+  <h2>blacklist <span class="count">{{ (blocked.maps | length) + (blocked.sets | length) }}</span></h2>
+  <p class="fineprint">Written to <code>{{ paths.out }}/blacklist.json</code>; the
+    recommender never suggests these again. A set entry blocks every difficulty.</p>
+  {% if not (blocked.maps or blocked.sets) %}
+    <p class="muted">Nothing blocked. The × on a recommendation card adds one.</p>
+  {% else %}
+  <div class="tscroll"><table class="data tight">
+    <thead><tr><th>scope</th><th>key</th><th></th></tr></thead>
+    <tbody>
+      {% for md5 in blocked.maps %}
+      <tr><td>difficulty</td><td><code>{{ md5 }}</code></td>
+        <td class="num"><form method="post" action="/blacklist/remove">
+          <input type="hidden" name="md5" value="{{ md5 }}">
+          <input type="hidden" name="next" value="/settings">
+          <button class="link">unblock</button></form></td></tr>
+      {% endfor %}
+      {% for sid in blocked.sets %}
+      <tr><td>beatmapset</td><td><code>{{ sid }}</code></td>
+        <td class="num"><form method="post" action="/blacklist/remove">
+          <input type="hidden" name="set_id" value="{{ sid }}">
+          <input type="hidden" name="next" value="/settings">
+          <button class="link">unblock</button></form></td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% endif %}
+</section>
+
+<section class="panel" id="resolved">
+  <h2>resolved paths</h2>
+  <p class="fineprint">Read-only here on purpose: the web server is on
+    <code>{{ paths.bind }}</code> with no authentication, and a page that can
+    write API keys is a page that can leak them.</p>
+  <dl class="kv">
+    {% for k, v in paths.items() %}
+    <dt>{{ k }}</dt><dd><code>{{ v }}</code></dd>
+    {% endfor %}
+  </dl>
+  <p class="fineprint">
+    library: {% if library.scanned %}{{ library.maps }} maps, scanned
+      {% if library.age_days is not none %}{{ library.age_days | num(1) }} days ago{% endif %}
+      {% if library.no_sr %}· {{ library.no_sr }} without a star rating
+      (<code>pip install 'osu-critique[stars]'</code>){% endif %}
+    {% else %}<span class="warn">never scanned</span> — <code>osu-critique library scan</code>
+    {% endif %}
+  </p>
+</section>
+{% endblock %}

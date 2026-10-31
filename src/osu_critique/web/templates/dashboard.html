@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "partials/rail.html" import rail with context %}
+{% block title %}dashboard · osu-critique{% endblock %}
+{% block main_class %}has-rail{% endblock %}
+{% block rail %}{{ rail(toc, 'dashboard') }}{% endblock %}
+{% block body %}
+<section class="page-head dash-head">
+  <div>
+    <h1>dashboard</h1>
+    <p class="muted">
+      {% if player %}<b>{{ player }}</b>{% else %}no runs yet{% endif %}
+      {% if library.scanned %}
+        · library: {{ library.maps }} maps, scanned
+        {% if library.age_days is not none %}{{ library.age_days | num(1) }}d ago{% endif %}
+      {% else %}
+        · library: <span class="warn">not scanned</span> — recommendations need
+        <code>osu-critique library scan</code>
+      {% endif %}
+    </p>
+  </div>
+  <a class="clear" href="/settings">settings →</a>
+</section>
+
+{% if not widgets %}
+  <p class="empty">Every widget is switched off.
+    <a href="/settings">Turn one back on in settings.</a></p>
+{% endif %}
+{% for w in widgets %}
+  {% include "partials/dash/" ~ w.id ~ ".html" %}
+{% endfor %}
+{% endblock %}

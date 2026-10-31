@@ -1,0 +1,34 @@
+{% set s = data.skills %}
+<section class="panel" id="w-weakspots">
+  <h2>weak spots <span class="count">{{ (s.dimensions or []) | length }}</span></h2>
+  {% if not s or not s.dimensions %}
+    <p class="muted">Not enough runs per material to split any dimension
+      (needs 20 runs on each side of the median).</p>
+  {% else %}
+    <p class="fineprint">Every dimension the profile looked at, including the ones
+      that did <b>not</b> clear the gate. Misses are band-corrected: your rate
+      minus your own median at that star rating.</p>
+    <div class="tscroll"><table class="data tight">
+      <thead><tr>
+        <th>material</th><th>split</th><th>worse half</th>
+        <th class="num">misses (bad / good)</th><th class="num">excess</th>
+        <th class="num">ratio</th><th class="num">n</th><th></th>
+      </tr></thead>
+      <tbody>
+      {% for d in s.dimensions %}
+        <tr class="{{ 'is-weak' if d.key in (s.weaknesses | map(attribute='key') | list) }}">
+          <td>{{ d.label }}</td>
+          <td class="num">{{ d.split }}</td>
+          <td>{{ 'high' if d.bad_side == 'high' else 'low' }} &gt; {{ d.split }}</td>
+          <td class="num">{{ d.miss_bad_pct | num(2) }}% / {{ d.miss_good_pct | num(2) }}%</td>
+          <td class="num">{{ d.excess_bad_pp | num(2) }} pp</td>
+          <td class="num">{{ d.ratio }}</td>
+          <td class="num">{{ d.n_bad }}/{{ d.n_good }}</td>
+          <td>{% if d.key in (s.weaknesses | map(attribute='key') | list) %}
+            <span class="pill bad-pill">weak</span>{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% endif %}
+</section>

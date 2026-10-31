@@ -1,0 +1,16 @@
+{% set c = data.calendar %}
+<section class="panel" id="w-calendar">
+  <h2>activity <span class="count">{{ c.total }}</span></h2>
+  <p class="fineprint">{{ c.total }} plays on {{ c.active_days }} day{{ '' if c.active_days == 1 else 's' }}
+    {% if c.avg_per_active %}· {{ c.avg_per_active | num(1) }} per active day{% endif %}
+    · busiest day {{ c.max }}</p>
+  <div class="cal" role="img" aria-label="plays per day">
+    {% for week in c.weeks %}
+      {% for d in week %}
+      <span class="cel l{{ d.level }}{{ ' future' if d.future }}"
+            {% if not d.future %}title="{{ d.date }}: {{ d.n }} play{{ '' if d.n == 1 else 's' }}"{% endif %}></span>
+      {% endfor %}
+    {% endfor %}
+  </div>
+  <p class="fineprint cal-legend">{{ c.start }} → {{ c.end }}</p>
+</section>

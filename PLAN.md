@@ -135,6 +135,16 @@ rest of the file, and `_ensure_index` rebuilds on a schema mismatch. The
 dashboard must show "library not scanned / scanned N days ago" instead of an
 empty recommendation panel.
 
+Shipped: `src/osu_critique/dashboard.py` (widget catalogue, settings file,
+per-widget data), `/` dashboard + `/maps` + `/settings`, `POST /blacklist` and
+`/blacklist/remove`, `templates/partials/dash/*.html` (one per widget),
+`tests/test_dashboard.py` (21 tests). `docs/web.md` gained "The dashboard",
+"Settings" and "Blacklist"; the settings page is a single form that redirects,
+so it works without JavaScript. Verified at 320/360/390/430 px in Chromium:
+no document-level horizontal scroll on `/`, `/maps`, `/settings`, `/feed`
+(the five-link nav needed to wrap below 620 px). `scripts/mobile_audit.mjs`
+itself could not run — Playwright is not installed in this checkout.
+
 ### 4. Teaching and polish
 `/learn` glossary, tooltips wired from the cards, × affordances everywhere plus
 the settings manager, docs updates (`docs/web.md`, `docs/ROADMAP.md`,

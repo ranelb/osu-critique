@@ -1,0 +1,29 @@
+{% set t = data.trend %}
+<section class="panel" id="w-trend">
+  <h2>accuracy &amp; UR <span class="count">{{ t.points | length }} weeks</span></h2>
+  {% if not t.points %}
+    <p class="muted">No plays in the last {{ t.weeks }} weeks.</p>
+  {% else %}
+    <p class="fineprint">Mean accuracy per week (line) — {{ t.lo | num(2) }}% to
+      {{ t.hi | num(2) }}%{% if t.best %} · best week {{ t.best.week }} at
+      {{ t.best.accuracy | num(2) }}%{% endif %}.</p>
+    <svg class="spark" viewBox="0 0 100 100" preserveAspectRatio="none"
+         role="img" aria-label="mean accuracy per week">
+      <polyline points="{% for p in t.points %}{{ p.x }},{{ p.y }} {% endfor %}"></polyline>
+      {% for p in t.points %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="1.4">
+        <title>{{ p.week }}: {{ p.accuracy | num(2) }}% · {{ p.plays }} plays{% if p.ur %} · UR {{ p.ur | num(1) }}{% endif %}</title>
+      </circle>{% endfor %}
+    </svg>
+    <div class="tscroll"><table class="data tight">
+      <thead><tr><th>week</th><th class="num">plays</th>
+        <th class="num">accuracy</th><th class="num">UR</th></tr></thead>
+      <tbody>
+      {% for p in t.points | reverse %}
+        <tr><td class="muted">{{ p.week }}</td><td class="num">{{ p.plays }}</td>
+          <td class="num">{{ p.accuracy | num(2) }}%</td>
+          <td class="num">{{ p.ur | num(1) }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table></div>
+  {% endif %}
+</section>

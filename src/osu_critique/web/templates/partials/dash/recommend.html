@@ -1,0 +1,53 @@
+{% set r = data.recommend %}
+<section class="panel" id="w-recommend">
+  <h2>recommendations
+    <span class="count">{{ r.recommendations | length }}</span></h2>
+  {% if r.error %}
+    <p class="muted">{{ r.error }}</p>
+  {% elif not r.recommendations %}
+    <p class="muted">No candidates inside your star band. Widen the stretch in
+      <a href="/settings">settings</a>, or scan more maps.</p>
+  {% else %}
+    <p class="fineprint">
+      {% if r.basis == 'difficulty-only' %}
+      No material weakness cleared the gate, so these are difficulty-appropriate
+      maps — the page is not going to invent a weakness to look clever.
+      {% else %}
+      Chosen against your weaknesses below, each inside
+      {{ r.comfort_sr | num(2) }}★ ± 1. Scores are deterministic; the line under
+      each card is its evidence.
+      {% endif %}
+    </p>
+    <div class="recs">
+    {% for c in r.recommendations %}
+      <article class="rec">
+        <div class="rec-head">
+          <span class="pill b-{{ c.bucket }}">{{ c.bucket }}</span>
+          <span class="pill star">{{ c.sr | star }}</span>
+          <a class="rec-title" href="/map/{{ c.beatmap_md5 }}">{{ c.artist }} — {{ c.title }}</a>
+          <span class="muted rec-ver">[{{ c.version }}]</span>
+        </div>
+        <p class="rec-why">{{ c.why }}</p>
+        <div class="rec-act">
+          <a class="open" href="/map/{{ c.beatmap_md5 }}">history →</a>
+          <form method="post" action="/blacklist">
+            <input type="hidden" name="md5" value="{{ c.beatmap_md5 }}">
+            <input type="hidden" name="next" value="/">
+            <button class="link" name="scope" value="map" title="never suggest this difficulty">× difficulty</button>
+            {% if c.set_id %}
+            <input type="hidden" name="set_id" value="{{ c.set_id }}">
+            <button class="link" name="scope" value="set" title="never suggest this beatmapset">× set</button>
+            {% endif %}
+          </form>
+        </div>
+      </article>
+    {% endfor %}
+    </div>
+    <p class="fineprint">
+      pool: {{ r.counts.new }} new · {{ r.counts.improver }} improver ·
+      {{ r.counts.maintain }} maintain · {{ r.counts.gated }} outside the gates
+      {% if r.counts.blocked %} · {{ r.counts.blocked }} blacklisted{% endif %}
+      {% if r.counts.relax_only %} · {{ r.counts.relax_only }} played only in relax{% endif %}
+    </p>
+  {% endif %}
+</section>

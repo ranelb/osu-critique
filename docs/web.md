@@ -17,7 +17,10 @@ skip), then serves until interrupted.
 
 | route | content |
 |---|---|
-| `/` | one card per beatmap: cover, difficulty, star pill, ranked status, attempts, best accuracy, last played. Search by artist/title/difficulty; sort by recency, accuracy, SR, attempts or pp; filter by status or "trustworthy only". |
+| `/` | the **dashboard**: configurable widgets — form (30/90 d), recommendations, skill profile, weak spots, accuracy+UR trend, activity calendar, recently played, what's new. See [The dashboard](#the-dashboard). |
+| `/maps` | one card per beatmap: cover, difficulty, star pill, ranked status, attempts, best accuracy, last played. Search by artist/title/difficulty; sort by recency, accuracy, SR, attempts or pp; filter by status or "trustworthy only". |
+| `/settings` | dashboard layout (player, stretch, card count, buckets, widget order/windows), the blacklist manager, and read-only resolved paths. See [Settings](#settings). |
+| `POST /blacklist`, `POST /blacklist/remove` | the × on a card and the manager: add/remove a difficulty or a whole beatmapset. Canonical in `out/blacklist.json` (see [recommend.md](recommend.md)). |
 | `/map/<beatmap_md5>` | hero cover + `[Metadata]` from the `.osu`, star/status pills, attempt table (sortable via htmx, no page reload), the cross-attempt block (first → latest per family/shape, with the `attempts` gate and verdict). |
 | `/run/<run_id>` | the trust banner **first**, then accuracy/UR/counts/combo/hit-error/aim cards, a hit-error-over-time chart, and then five folds: "where it went wrong", the objects worth looking at, the deterministic report as **cards with tables** (see below), the stored LLM critique (read-only, with a link into the tab), and the notes. A left rail jumps between them. |
 | `/api/objects/<run_id>` | the per-object JSON, verbatim as `analyze` wrote it. |
@@ -30,6 +33,55 @@ skip), then serves until interrupted.
 
 `run_id` is the replay's md5, or `tag:<tag>` for the four pre-schema artifacts
 that carry no md5. Re-exports of one play share an id; the newest artifact wins.
+
+## The dashboard
+
+`/` is a page of **widgets**, and the widget list *is* the settings: order,
+on/off, and a window where a window means something. The catalogue lives in
+`dashboard.WIDGETS` (id, label, allowed windows); a template cannot fall out of
+sync with it because the page renders `partials/dash/<id>.html` per enabled
+widget, in order.
+
+- **The layout is a file**, `~/.config/osu-critique/dashboard.json` (0600, next
+  to `config.json`), not a cookie: the phone on the LAN and the desktop see the
+  same page. Unknown widget ids are dropped and missing ones defaulted, so an
+  old or hand-edited file never blanks the dashboard. `?saved=1` is the only
+  query parameter, and it only switches the word "saved." on.
+- **The player is resolved, not assumed.** `dashboard.json`'s `player` is a
+  pin; blank means "the most-run player in the corpus". A pinned name the
+  corpus does not contain falls back to that, rather than showing an empty page.
+  The resolved name is printed under the title so a wrong pin is obvious.
+- **Recommendations and the skill profile are one call.** The recommender
+  produces both halves in one pass (`recommend.build`), and the dashboard pays
+  for it only when a widget shows either. Measured on the owner's corpus: ~0.4 s
+  cold, ~0.15 s warm — a page a phone can wait for.
+- **No library scan on boot.** The dashboard reports the scan's age instead
+  ("library: 5589 maps, scanned 2.3d ago" or "not scanned" with the command). A
+  cold scan is ~150 s and a boot stall on a phone-first tool is worse than a
+  stale candidate list.
+- **Charts are precomputed geometry.** The trend widget's points are turned
+  into an SVG polyline in Python, the calendar into a level 0–4 per day; the
+  template does no arithmetic. That is also why the dashboard needs no
+  JavaScript: no canvas, no client-side data.
+
+## Settings
+
+One `<form>` posts the whole layout. Widgets are rows with a checkbox, a window
+select and ↑/↓ buttons, so a toggle and a move made in the same click are
+saved together — the buttons are `<button name="move:<id>" value="up">`, not a
+second form. Saving writes the file and redirects (`302`), so the page works
+with no JavaScript and a refresh cannot re-post.
+
+Read-only on purpose: the resolved paths and the bind address. The server is
+unauthenticated on the LAN, and a page that can write an API key is a page that
+can leak one.
+
+## Blacklist
+
+The × on a recommendation card blocks a difficulty; the second button blocks
+the whole beatmapset. Both post to `/blacklist`, which writes the sidecar and
+mirrors it into the index. The manager in settings lists both scopes with an
+unblock button, because a list you cannot undo is a trap.
 
 ## The rail
 

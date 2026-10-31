@@ -338,6 +338,7 @@ def skill_profile(plays: list, stats: dict, window: str,
         "comfort_sr": round(_median(srs), 3) if srs else None,
         "miss_basis": "miss rate minus your own median miss rate in the same "
                       f"{MISS_BAND}★ band",
+        "dimensions": entries,
         "weaknesses": weaknesses[:3],
         "strengths": [
             {"key": e["key"], "label": e["label"],

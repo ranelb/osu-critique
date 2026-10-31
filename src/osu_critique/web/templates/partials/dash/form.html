@@ -1,0 +1,34 @@
+{% set f = data.form %}
+<section class="panel" id="w-form">
+  <h2>form <span class="count">30d / 90d</span></h2>
+  <div class="wgrid two">
+  {% for key in ['30', '90'] %}
+    {% set w = f[key] %}
+    <div class="wblock">
+      <h3>last {{ w.days }} days</h3>
+      <div class="statrow">
+        <div class="statcard">
+          <span class="k">plays</span>
+          <span class="v">{{ w.plays }}</span>
+          <span class="k2">{{ w.maps }} map{{ '' if w.maps == 1 else 's' }}</span>
+        </div>
+        <div class="statcard">
+          <span class="k">accuracy</span>
+          <span class="v">{{ w.accuracy | num(2) }}<span class="unit">%</span></span>
+          <span class="k2">mean per play</span>
+        </div>
+        <div class="statcard">
+          <span class="k">UR</span>
+          <span class="v">{{ w.ur | num(1) }}</span>
+          <span class="k2">median</span>
+        </div>
+        <div class="statcard">
+          <span class="k">pp</span>
+          <span class="v">{{ w.pp | num(1) }}</span>
+          <span class="k2">sum of cached pp</span>
+        </div>
+      </div>
+    </div>
+  {% endfor %}
+  </div>
+</section>

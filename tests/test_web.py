@@ -137,33 +137,33 @@ def client(tmp_path):
 
 # ------------------------------------------------------------------ list ----
 
-def test_home_lists_one_card_per_map(client):
-    r = client.get("/")
+def test_maps_lists_one_card_per_map(client):
+    r = client.get("/maps")
     assert r.status_code == 200
     assert "DEAFHEAVEN" in r.text
     assert "AaAaAaAAaAaAAa" in r.text          # the second map's title
     assert r.text.count('class="card"') == 2
 
 
-def test_home_search_filters(client):
-    r = client.get("/", params={"q": "deaf"})
+def test_maps_search_filters(client):
+    r = client.get("/maps", params={"q": "deaf"})
     assert r.text.count('class="card"') == 1
     assert "AaAaAaAAaAaAAa" not in r.text
 
 
-def test_home_status_filter_uses_the_beatmap_status_cache(client):
-    r = client.get("/", params={"status": "ranked"})
+def test_maps_status_filter_uses_the_beatmap_status_cache(client):
+    r = client.get("/maps", params={"status": "ranked"})
     assert "DEAFHEAVEN" in r.text
     assert "AaAaAaAAaAaAAa" not in r.text
 
 
-def test_home_sort_by_accuracy_orders_by_best(client):
-    r = client.get("/", params={"sort": "accuracy"})
+def test_maps_sort_by_accuracy_orders_by_best(client):
+    r = client.get("/maps", params={"sort": "accuracy"})
     assert r.text.index("DEAFHEAVEN") < r.text.index("AaAaAaAAaAaAAa")
 
 
-def test_home_sort_by_recent_puts_the_newest_run_first(client):
-    r = client.get("/", params={"sort": "recent"})
+def test_maps_sort_by_recent_puts_the_newest_run_first(client):
+    r = client.get("/maps", params={"sort": "recent"})
     assert r.text.index("DEAFHEAVEN") < r.text.index("AaAaAaAAaAaAAa")
 
 
@@ -331,7 +331,7 @@ def test_cover_fetches_the_variant_that_was_asked_for(tmp_path, monkeypatch):
 
 
 def test_the_listing_asks_for_the_small_cover_and_offers_the_big_one(client):
-    page = client.get("/").text
+    page = client.get("/maps").text
     assert "?size=thumb" in page
     assert "?size=card 2x" in page
 
@@ -1163,7 +1163,8 @@ def test_every_table_sits_in_a_horizontal_scroller(client):
                 bad.append(html[m.start():m.start() + 70])
         return bad
 
-    for route in ("/", f"/map/{MAP_A}", "/run/" + "2" * 32, "/ask", "/feed"):
+    for route in ("/", "/maps", "/settings", f"/map/{MAP_A}",
+                  "/run/" + "2" * 32, "/ask", "/feed"):
         page = client.get(route)
         assert page.status_code == 200
         assert misplaced(page.text) == [], route
@@ -1171,7 +1172,7 @@ def test_every_table_sits_in_a_horizontal_scroller(client):
 
 def test_the_listing_card_carries_the_dense_row_bits(client):
     """The pills and the difficulty move into the body on a phone (CSS only)."""
-    page = client.get("/").text
+    page = client.get("/maps").text
     assert 'class="row-badges"' in page
     assert 'class="row-version"' in page
     # the desktop cover markup is untouched
