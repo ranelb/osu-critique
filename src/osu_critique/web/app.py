@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import queue
+import subprocess
 import sys
 import threading
 from contextlib import asynccontextmanager
@@ -41,6 +42,44 @@ TABLE_LIMIT = 400
 
 #: How many picker rows arrive per page; scrolling the list asks for the next.
 PICKER_PAGE = 40
+
+
+def _game_uri(conn, md5: str) -> str | None:
+    """``osu://b/<id>`` (or ``s/<id>``) for a known map, else None."""
+    if not md5:
+        return None
+    row = conn.execute(
+        "SELECT beatmap_id, set_id FROM library_beatmaps WHERE beatmap_md5 = ?",
+        (md5,)).fetchone()
+    if row is None:
+        row = conn.execute(
+            "SELECT beatmap_id, set_id FROM beatmaps WHERE beatmap_md5 = ?",
+            (md5,)).fetchone()
+    if row is None:
+        return None
+    for column, prefix in (("beatmap_id", "b"), ("set_id", "s")):
+        try:
+            value = int(row[column])
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        if value > 0:
+            return f"osu://{prefix}/{value}"
+    return None
+
+def _launch_uri(uri: str) -> bool:
+    """Hand the URI to the desktop; the service runs in the user session."""
+    for argv in (["gio", "open", uri], ["xdg-open", uri]):
+        try:
+            subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+def _with_flag(url: str, flag: str) -> str:
+    return f"{url}{'&' if '?' in url else '?'}{flag}"
 
 
 # ------------------------------------------------------------------ filters --
@@ -138,7 +177,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
     # ------------------------------------------------------------- pages --
 
     @app.get("/", response_class=HTMLResponse)
-    def home(request: Request):
+    def home(request: Request, open: str | None = None):
         conn = index.open_readonly(out)
         if conn is None:
             return render("empty.html", request)
@@ -149,7 +188,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             page["blacklist"] = blacklist.load(out)
         finally:
             conn.close()
-        return render("dashboard.html", request, **page)
+        return render("dashboard.html", request, open_note=open, **page)
 
     @app.get("/learn", response_class=HTMLResponse)
     def learn(request: Request):
@@ -248,6 +287,33 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         }
         dashboard.save(raw)
         return _redirect(str(form.get("next") or "/settings?saved=1"))
+
+    @app.post("/open")
+    async def open_in_osu(request: Request):
+        """Launch the map in the game, server-side, from a browser that cannot.
+
+        The `osu://` link depends on the browser delegating an unknown scheme to
+        the OS handler; Firefox-based browsers refuse unless a pref is set, and
+        a phone has no handler at all. This route does the same thing with the
+        privileges the service already has (it runs inside the user's session).
+
+        The id is looked up in the index from the submitted md5 — the client
+        never supplies a URI, so this cannot be turned into "open anything".
+        """
+        form = await request.form()
+        md5 = str(form.get("md5") or "")
+        next_url = str(form.get("next") or "/")
+        conn = index.open_readonly(out)
+        target = None
+        if conn is not None:
+            try:
+                target = _game_uri(conn, md5)
+            finally:
+                conn.close()
+        if target is None:
+            return _redirect(_with_flag(next_url, "open=no-id"))
+        ok = _launch_uri(target)
+        return _redirect(_with_flag(next_url, "open=ok" if ok else "open=error"))
 
     @app.post("/blacklist")
     async def blacklist_add(request: Request):

@@ -92,16 +92,28 @@ button, so nothing becomes unreachable.
 ## "Open in osu!"
 
 `/learn` is not the only way out of the page: a recommendation card and the map
-page carry an **open in osu!** link, which is a protocol-handler URL, not an API
-call — `osu://b/<beatmap id>` is lazer's `OpenBeatmap` action (`osu://s/<set id>`
-is `OpenBeatmapSet`), parsed by `MessageFormatter` on every platform. There is no
-server round trip and no key: the browser hands the URL to the registered `osu`
-scheme handler and lazer opens the map.
+page carry an **open in osu!** button. It posts the map's md5 to `/open`, and
+the **server** launches the game:
 
-A map imported from a folder without online ids cannot be pointed at, so the
-button degrades honestly: the set when only a set id exists, and a disabled "no
-online id" label (with the reason in its tooltip) when neither does. On a phone
-the scheme often has no handler; the link is simply inert there.
+1. the md5 is looked up in `library_beatmaps` (then `beatmaps`) — the client
+   never supplies a URI, so the route cannot be turned into "open anything";
+2. the id becomes `osu://b/<beatmap id>` (or `osu://s/<set id>` when only a set
+   id exists) — lazer's `OpenBeatmap` / `OpenBeatmapSet` actions, parsed by
+   `MessageFormatter` on every platform;
+3. `gio open` (then `xdg-open`) hands it to the desktop, in the user session the
+   service already runs in;
+4. the redirect says what happened (`?open=ok`, `open=error`, `open=no-id`).
+
+Doing it server-side is not a preference: a browser only launches an unknown
+scheme if it delegates to the OS, which Firefox-based browsers do not do for
+`osu` unless `network.protocol-handler.external.osu` is `true` — without it Zen
+just opens a tab showing `osu://b/1234`. A phone has no handler at all. The
+server round trip works from any browser, and from the phone.
+
+The map page keeps the raw `osu://b/<id>` link next to it as a "direct link",
+which is the right thing when the page is served from a different machine than
+the one running the game. A map imported from a folder without online ids
+degrades to a disabled "no online id" label, reason in the tooltip.
 
 ## Teaching
 

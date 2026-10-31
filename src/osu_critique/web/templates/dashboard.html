@@ -22,6 +22,16 @@
     <a class="clear" href="/settings">settings →</a></span>
 </section>
 
+{% if open_note == 'ok' %}
+<p class="fineprint pos open-note">osu! was asked to open that map.</p>
+{% elif open_note == 'no-id' %}
+<p class="fineprint warn open-note">That map has no online id in its .osu, so osu!
+  cannot be pointed at it.</p>
+{% elif open_note == 'error' %}
+<p class="fineprint warn open-note">Could not launch osu! — is the desktop handler
+  available to the service? (<code>gio open 'osu://b/&lt;id&gt;'</code>)</p>
+{% endif %}
+
 {% if not widgets %}
   <p class="empty">Every widget is switched off.
     <a href="/settings">Turn one back on in settings.</a></p>

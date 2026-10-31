@@ -1,8 +1,22 @@
-{# "open in osu!" is a protocol handler link, not an API call: lazer registers
-   `osu://` on every platform and MessageFormatter maps
-   `osu://b/<beatmap id>` -> OpenBeatmap and `osu://s/<set id>` -> OpenBeatmapSet.
-   A map imported from a folder without online ids cannot be pointed at, and
-   saying so beats a dead button. #}
+{# Two ways into the game, and both are honest about their limits.
+
+   `open_in_osu` posts the md5 to the server, which looks the id up in the index
+   and hands `osu://b/<id>` to the desktop itself. That works from any browser —
+   including a phone on the LAN — because the browser never has to understand
+   the scheme.
+
+   `osu_link` is the raw protocol link. It is the right thing when the page is
+   not served by the machine running the game; Firefox-based browsers need
+   `network.protocol-handler.external.osu = true` to delegate it. #}
+
+{% macro open_in_osu(md5, next_url='/', label='open in osu!') -%}
+<form method="post" action="/open" class="inline osu-form">
+  <input type="hidden" name="md5" value="{{ md5 }}">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <button class="osu-open" title="opens this map in osu!lazer on this machine">▶ {{ label }}</button>
+</form>
+{%- endmacro %}
+
 {% macro osu_open(beatmap_id, set_id=None, label='open in osu!') -%}
 {%- if beatmap_id -%}
 <a class="osu-open" href="osu://b/{{ beatmap_id }}"

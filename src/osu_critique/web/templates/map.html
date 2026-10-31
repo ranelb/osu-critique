@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/notes.html" import note_list with context %}
-{% from "partials/osu.html" import osu_open with context %}
+{% from "partials/osu.html" import open_in_osu, osu_open with context %}
 {% from "partials/rail.html" import rail with context %}
 {% block title %}{{ title_display }} · osu-critique{% endblock %}
 {% block main_class %}has-rail{% endblock %}
@@ -24,7 +24,8 @@
 
   {% set is_blocked = (md5 in blocked_maps) or (beatmap.set_id in blocked_sets) %}
   <p class="fineprint map-actions">
-    {{ osu_open(beatmap.beatmap_id, beatmap.set_id, 'play in osu!') }}
+    {{ open_in_osu(beatmap_md5, request.url.path, 'play in osu!') }}
+    {{ osu_open(beatmap.beatmap_id, beatmap.set_id, 'direct link') }}
     {% if is_blocked %}
       <span class="pill bad-pill">blacklisted</span> — the recommender will not
       suggest this again.

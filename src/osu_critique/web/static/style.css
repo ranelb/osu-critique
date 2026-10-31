@@ -795,3 +795,6 @@ button.x:hover { border-color: var(--pink); color: var(--pink); }
 .osu-open:hover { border-color: var(--pink); color: #ffd6e8; }
 .osu-open.off { border-color: var(--line); background: none; color: var(--muted);
   font-weight: 400; }
+form.osu-form { display: inline; }
+form.osu-form button.osu-open { font: inherit; cursor: pointer; }
+.open-note { margin: .4rem 0 0; }

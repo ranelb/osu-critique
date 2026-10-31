@@ -416,8 +416,8 @@ def test_the_map_page_can_blacklist_the_difficulty_and_the_set(client):
 
 # ------------------------------------------------------------ open in osu --
 
-def test_a_recommendation_links_into_osu_lazer(client):
-    """`osu://b/<id>` is lazer's OpenBeatmap action (MessageFormatter.cs)."""
+def test_a_recommendation_opens_in_osu_through_the_server(client):
+    """The button posts the md5; the server builds the URI from the index."""
     out = client.app.state.outdir
     conn = index.connect(index.db_path(out))
     try:
@@ -427,37 +427,83 @@ def test_a_recommendation_links_into_osu_lazer(client):
     finally:
         conn.close()
     page = client.get("/").text
-    assert 'href="osu://b/424242"' in page
-    assert 'href="osu://s/31337"' not in page      # the map link wins
+    assert 'action="/open"' in page
+    assert f'name="md5" value="{MAP_NEW}"' in page
 
 
-def test_without_a_beatmap_id_the_set_is_opened_instead(client):
+def test_the_open_route_launches_the_beattap_in_the_game(client, monkeypatch):
+    from osu_critique.web import app as web_app
+
     out = client.app.state.outdir
     conn = index.connect(index.db_path(out))
     try:
-        conn.execute("UPDATE library_beatmaps SET beatmap_id = NULL, "
-                     "set_id = 31337 WHERE beatmap_md5 = ?", (MAP_NEW,))
-        conn.commit()
-    finally:
-        conn.close()
-    assert 'href="osu://s/31337"' in client.get("/").text
-
-
-def test_without_any_online_id_the_button_says_so(client):
-    out = client.app.state.outdir
-    conn = index.connect(index.db_path(out))
-    try:
-        conn.execute("UPDATE library_beatmaps SET beatmap_id = NULL, set_id = NULL "
+        conn.execute("UPDATE library_beatmaps SET beatmap_id = 424242 "
                      "WHERE beatmap_md5 = ?", (MAP_NEW,))
         conn.commit()
     finally:
         conn.close()
-    page = client.get("/").text
-    assert "no online id" in page
-    assert 'href="osu://b/' not in page
+    seen = []
+    monkeypatch.setattr(web_app, "_launch_uri", lambda uri: seen.append(uri) or True)
+    r = client.post("/open", data={"md5": MAP_NEW, "next": "/#w-recommend"},
+                    follow_redirects=False)
+    assert r.status_code in (302, 303)
+    assert seen == ["osu://b/424242"]
+    assert r.headers["location"] == "/#w-recommend?open=ok"
 
 
-def test_the_map_page_offers_the_game_link(client):
+def test_a_map_with_only_a_set_id_opens_the_set(client, monkeypatch):
+    from osu_critique.web import app as web_app
+
+    out = client.app.state.outdir
+    conn = index.connect(index.db_path(out))
+    try:
+        conn.execute("UPDATE library_beatmaps SET beatmap_id = NULL, set_id = 31337 "
+                     "WHERE beatmap_md5 = ?", (MAP_NEW,))
+        conn.commit()
+    finally:
+        conn.close()
+    seen = []
+    monkeypatch.setattr(web_app, "_launch_uri", lambda uri: seen.append(uri) or True)
+    client.post("/open", data={"md5": MAP_NEW, "next": "/"}, follow_redirects=False)
+    assert seen == ["osu://s/31337"]
+
+
+def test_the_open_route_cannot_be_asked_to_open_anything_else(client, monkeypatch):
+    from osu_critique.web import app as web_app
+
+    seen = []
+    monkeypatch.setattr(web_app, "_launch_uri", lambda uri: seen.append(uri) or True)
+    for md5 in ("", "javascript:alert(1)", "../../etc/passwd", "f" * 32):
+        r = client.post("/open", data={"md5": md5, "next": "/"},
+                        follow_redirects=False)
+        assert r.headers["location"].endswith("open=no-id")
+    assert seen == []
+
+
+def test_a_failed_launch_says_so(client, monkeypatch):
+    from osu_critique.web import app as web_app
+
+    out = client.app.state.outdir
+    conn = index.connect(index.db_path(out))
+    try:
+        conn.execute("UPDATE library_beatmaps SET beatmap_id = 424242 "
+                     "WHERE beatmap_md5 = ?", (MAP_NEW,))
+        conn.commit()
+    finally:
+        conn.close()
+    monkeypatch.setattr(web_app, "_launch_uri", lambda uri: False)
+    r = client.post("/open", data={"md5": MAP_NEW, "next": "/"},
+                    follow_redirects=False)
+    assert r.headers["location"].endswith("open=error")
+
+
+def test_the_dashboard_reports_what_the_open_click_did(client):
+    assert "osu! was asked to open that map" in client.get("/?open=ok").text
+    assert "Could not launch osu!" in client.get("/?open=error").text
+    assert "no online id" in client.get("/?open=no-id").text
+
+
+def test_the_map_page_offers_the_game_link_both_ways(client):
     out = client.app.state.outdir
     conn = index.connect(index.db_path(out))
     try:
@@ -467,5 +513,8 @@ def test_the_map_page_offers_the_game_link(client):
     finally:
         conn.close()
     page = client.get(f"/map/{MAP_PLAYED}").text
-    assert 'href="osu://b/555001"' in page
+    assert 'action="/open"' in page
     assert "play in osu!" in page
+    # the raw protocol link stays for a page served from another machine
+    assert 'href="osu://b/555001"' in page
+    assert "direct link" in page
