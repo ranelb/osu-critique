@@ -29,7 +29,6 @@ optional extras (AI coach, osu! profile) are bring-your-own-key.
 - [Validation and trust](#validation-and-trust)
 - [Limitations](#limitations)
 - [Development](#development)
-- [Roadmap](#roadmap)
 - [Privacy, attribution, and terms](#privacy-attribution-and-terms)
 - [License](#license)
 
