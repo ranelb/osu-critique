@@ -39,10 +39,16 @@ so later sweeps never pay it.
 | `annotations` | `note_id` | mirror of `out/annotations/<beatmap_md5>.json` (authored, canonical there; re-mirrored on every sweep). |
 | `critiques` | `run_id` | mirror of `out/critiques/<run_id>.json` — the legacy per-run critiques (authored, canonical there; re-mirrored on every sweep). |
 | `answers` | `hash` | metadata mirror of `out/answers/<hash>.json` — the summaries and answers the ask page stores. Bodies stay on disk and are read when opened. |
+| `library_beatmaps` | `beatmap_md5` | features of **every installed map**, played or not, derived from the `.osu` by `library scan` (see [library.md](library.md)). Not a projection of an artifact — the only table whose source is the files on disk. |
 
 Authored data is the one thing that is not derived. Deleting the database does
 not delete an annotation or a stored critique; they are re-read from their
 sidecar files.
+
+`library_beatmaps` is the second exception to "projection of `out/`": it is a
+projection of the beatmap files, filled by `osu-critique library scan` and not
+by an artifact sweep. It is equally disposable, and a row whose file vanished
+is dropped on the next scan.
 
 ## Rules the code enforces
 

@@ -13,6 +13,9 @@ Subcommands:
   profile <username>                     fetch osu! profile (BYO osu API creds)
   setup   [--show]                       first-time configuration wizard
   index   [--rebuild|--check]            build / refresh out/index.sqlite
+  library scan [--rebuild] [--status]     per-map features for every installed map
+  recommend [--limit] [--json]           maps to train your current weaknesses
+  blacklist add|rm|list                  maps/sets the recommender must never suggest
   serve   [--host] [--port]              run the local web frontend (needs [web])
   annotate add|list|rm                   human notes the coach reads (map or run scoped)
   export  [--install|--run]              opt-in replay export from the osu! database
@@ -270,6 +273,119 @@ def cmd_index(args):
               f"unchanged {stats['unchanged']}, removed {stats['removed']}, "
               f"failed {stats['failed']} ({stats['seconds']}s)")
     return 1 if stats["failed"] else 0
+
+
+def cmd_library(args):
+    """Feature-scan the maps on disk into the derived index."""
+    from . import index, library
+
+    try:
+        stats = library.scan(args.outdir, extra_sources=args.source,
+                             rebuild=args.rebuild, want_sr=not args.no_sr,
+                             quiet=args.quiet)
+    except index.SchemaMismatch as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    if args.status:
+        out = args.outdir or str(outdir())
+        conn = index.connect(index.db_path(out))
+        try:
+            fetched = library.enrich_status(conn, out)
+        except RuntimeError as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 2
+        except Exception as exc:              # network: report, keep the scan
+            print(f"status: {type(exc).__name__}: {exc}", file=sys.stderr)
+            fetched = {"fetched": 0, "known": 0, "rows": 0}
+        finally:
+            conn.close()
+        stats["status"] = fetched
+    if args.json:
+        print(json.dumps(stats, indent=2))
+    else:
+        print(f"library: {stats['maps']} maps -> {index.db_path(args.outdir)}")
+        print(f"  added {stats['added']}, updated {stats['updated']}, "
+              f"unchanged {stats['unchanged']}, removed {stats['removed']}, "
+              f"failed {stats['failed']} ({stats['seconds']}s)")
+        if stats["no_sr"]:
+            print(f"  {stats['no_sr']} maps have no star rating — install the "
+                  "[stars] extra: pip install 'osu-critique[stars]'")
+        if "status" in stats:
+            s = stats["status"]
+            print(f"  status: {s['known']}/{s['rows']} maps known "
+                  f"({s['fetched']} fetched)")
+    return 1 if stats["failed"] else 0
+
+
+def cmd_recommend(args):
+    """What to play next: the skill profile, then the maps that train it."""
+    from . import recommend
+
+    result = recommend.build(args.outdir, player=args.player, limit=args.limit,
+                             stretch=args.stretch,
+                             buckets=(args.bucket or None),
+                             use_blacklist=not args.no_blacklist)
+    if args.json:
+        print(json.dumps(result, indent=2))
+        return 0 if not result.get("error") else 2
+    if args.skills:
+        print(json.dumps(result.get("skills") or {}, indent=2))
+        return 0
+    print("\n".join(recommend.render_lines(result)))
+    return 0 if not result.get("error") else 2
+
+
+def cmd_blacklist(args):
+    """Never suggest this map (or set) again; canonical in out/blacklist.json."""
+    from . import blacklist, index
+
+    out = args.outdir or str(outdir())
+    if args.action == "list":
+        doc = blacklist.load(out)
+        if args.json:
+            print(json.dumps(doc, indent=2))
+            return 0
+        print(f"blacklist: {len(doc['maps'])} maps, {len(doc['sets'])} sets "
+              f"({blacklist.path(out)})")
+        for md5 in doc["maps"]:
+            print(f"  map {md5}")
+        for sid in doc["sets"]:
+            print(f"  set {sid}")
+        return 0
+    try:
+        if args.action == "add":
+            if args.map:
+                doc = blacklist.add_map(out, args.map)
+            elif args.set is not None:
+                doc = blacklist.add_set(out, args.set)
+            else:
+                print("error: give --map <md5> or --set <BeatmapSetID>",
+                      file=sys.stderr)
+                return 2
+        else:
+            if args.map:
+                doc = blacklist.remove_map(out, args.map)
+            elif args.set is not None:
+                doc = blacklist.remove_set(out, args.set)
+            else:
+                print("error: give --map <md5> or --set <BeatmapSetID>",
+                      file=sys.stderr)
+                return 2
+    except OSError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+    # keep the index mirror in step with the sidecar (it is the query surface)
+    try:
+        conn = index.connect(index.db_path(out))
+        try:
+            blacklist.mirror(conn, out)
+        finally:
+            conn.close()
+    except Exception as exc:                    # the sidecar is the truth
+        print(f"  ! index mirror not updated: {type(exc).__name__}: {exc}",
+              file=sys.stderr)
+    print(f"blacklist: {len(doc['maps'])} maps, {len(doc['sets'])} sets")
+    return 0
 
 
 def cmd_pair(args):
@@ -1046,6 +1162,57 @@ def main(argv=None):
     p.add_argument("--quiet", action="store_true", help="no progress meter")
     p.add_argument("--outdir", default=None)
     p.set_defaults(func=cmd_index)
+
+    p = sub.add_parser("library", help="per-map features for every installed "
+                                        "beatmap (the recommendation candidates)")
+    lib = p.add_subparsers(dest="action", required=True)
+    s = lib.add_parser("scan", help="scan / refresh library_beatmaps in the index")
+    s.add_argument("--rebuild", action="store_true",
+                   help="drop every row and re-parse all maps")
+    s.add_argument("--status", action="store_true",
+                   help="also fetch online rank status (osu! API v2, needs keys)")
+    s.add_argument("--source", action="append", default=None, metavar="DIR",
+                   help="scan only this map folder (.osu/.osz); repeatable. "
+                        "Default: lazer store + maps/ + stable Songs")
+    s.add_argument("--no-sr", action="store_true",
+                   help="skip rosu-pp star ratings (the [stars] extra is optional)")
+    s.add_argument("--json", action="store_true", help="machine-readable output")
+    s.add_argument("--quiet", action="store_true", help="no progress meter")
+    s.add_argument("--outdir", default=None)
+    s.set_defaults(func=cmd_library)
+
+    p = sub.add_parser("recommend", help="maps to train your current weaknesses "
+                                         "(needs `library scan` and `index`)")
+    p.add_argument("--limit", type=int, default=6, help="cards to print (default 6)")
+    p.add_argument("--player", default=None,
+                   help="player name (default: the most-run player in the corpus)")
+    p.add_argument("--stretch", type=float, default=0.5,
+                   help="how far above your comfort SR to aim, 0..1 (default 0.5)")
+    p.add_argument("--bucket", action="append", default=None,
+                   choices=["new", "improver", "maintain"],
+                   help="only this bucket; repeatable (default: all three)")
+    p.add_argument("--no-blacklist", action="store_true",
+                   help="ignore out/blacklist.json (debugging only)")
+    p.add_argument("--skills", action="store_true",
+                   help="print only the skill profile (JSON)")
+    p.add_argument("--json", action="store_true", help="machine-readable output")
+    p.add_argument("--outdir", default=None)
+    p.set_defaults(func=cmd_recommend)
+
+    p = sub.add_parser("blacklist", help="maps/sets the recommender must never "
+                                         "suggest (canonical: out/blacklist.json)")
+    bl = p.add_subparsers(dest="action", required=True)
+    for name, helptext in (("add", "block a map or set"),
+                           ("rm", "unblock a map or set")):
+        b = bl.add_parser(name, help=helptext)
+        b.add_argument("--map", metavar="MD5", help="beatmap md5 (one difficulty)")
+        b.add_argument("--set", type=int, metavar="ID", help="BeatmapSetID")
+        b.add_argument("--outdir", default=None)
+        b.set_defaults(func=cmd_blacklist)
+    b = bl.add_parser("list", help="what is blocked")
+    b.add_argument("--json", action="store_true")
+    b.add_argument("--outdir", default=None)
+    b.set_defaults(func=cmd_blacklist)
 
     p = sub.add_parser("serve", help="run the local web frontend "
                                      "(needs the [web] extra)")

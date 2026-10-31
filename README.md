@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.27.0** — 378 tests (289 run anywhere without optional extras), CI on
+> **Status: 0.27.0** — 439 tests (289 run anywhere without optional extras), CI on
 > Python 3.10-3.14. The judgement is validated against the game's own recorded
 > counts; see [Validation and trust](#validation-and-trust).
 
@@ -98,6 +98,8 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 | **Profile** | `profile` | osu! API creds (BYO, optional) | player stats for context |
 | **Status** | `status` | osu! API creds (BYO, optional) | pp-eligible vs unranked split |
 | **Web** | `serve` | optional extra (`[web]`) | local frontend: map showcase, run pages with near-miss boards, a critique tab that composes selections, the feed |
+| **Library** | `library scan` | optional extra (`[stars]`) for star ratings | map-side features for **every installed beatmap**, played or not — the candidate pool behind map recommendations |
+| **Recommend** | `recommend` | no | what to play next: your weaknesses from miss rates, then maps that train them (`new` / `improver` / `maintain`), each with its own evidence line |
 | **Annotate** | `annotate` | no | notes the coach reads, in map time |
 | **Export** | `export` | optional binary + opt-in | replay export from the osu! database |
 | **Digest** | `digest` | no | what's new since your last visit; no LLM |
@@ -115,12 +117,15 @@ each run when those commands have been run in the output folder.
 
 Per-play metrics — timing, aim (press and cursor arrival), miss autopsy, slider
 bodies, two clocks, rolling baselines, cross-attempt structure, patterns,
-streams, tapping, sections, whiffs, map profile, trust — are catalogued in
-[docs/metrics.md](docs/metrics.md). The SQLite projection the web frontend
+sequence labels, streams, tapping, sections, whiffs, map profile, trust, and the
+lazer score block (exact rate, pauses, aggregate slider truth) — are catalogued
+in [docs/metrics.md](docs/metrics.md). The SQLite projection the web frontend
 reads is [docs/index.md](docs/index.md); the frontend itself (pages, bind rules,
 testing) is [docs/web.md](docs/web.md), and annotations in [docs/annotations.md](docs/annotations.md), and stored critiques in
 [docs/ask.md](docs/ask.md). Export and the digest are
-[docs/export.md](docs/export.md).
+[docs/export.md](docs/export.md). The map-side feature scan behind
+recommendations is [docs/library.md](docs/library.md), and the recommendation logic (weakness
+evidence, buckets, scoring, blacklist) in [docs/recommend.md](docs/recommend.md).
 
 The AI coach is tested with **one model: DeepSeek V4 Flash**
 (`deepseek-v4-flash`, `https://api.deepseek.com`) — the default. Other
@@ -137,6 +142,11 @@ osu-critique pair
 osu-critique batch --charts
 # build / refresh the derived SQLite index of out/ (safe to delete; --check for drift)
 osu-critique index [--rebuild|--check]
+# feature-scan every installed beatmap into the index (the recommendation pool)
+osu-critique library scan [--rebuild] [--status] [--source DIR]
+# what to play next, and never suggest these again
+osu-critique recommend [--limit 6] [--json]
+osu-critique blacklist add --map <md5> | --set <BeatmapSetID>
 # local web frontend: map listing, per-map attempts, per-run detail ([web] extra)
 osu-critique serve [--host 0.0.0.0] [--port 8765] [--no-index]
 
@@ -230,7 +240,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 345 tests (6 need real replays, 76 need [web])
+pytest -q                     # 439 tests (6 need real replays, 76 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic

@@ -234,8 +234,116 @@ def anonymize_fixtures():
         print(f"anonymized {name}.osr ({len(data)} -> {len(new)} bytes)")
 
 
+def make_library_map(title, objects, *, mode=0, bpm=180.0, cs=4.0, ar=9.0,
+                     od=8.0, hp=5.0, version="test"):
+    """A minimal, valid ``.osu`` for the library-scan fixtures (no replay).
+
+    ``objects`` is a list of ``(kind, t_ms, x, y, extra)``; ``extra`` is the
+    slider tail point for ``"slider"`` and ignored otherwise. Deliberately
+    separate from :func:`make_osu`: the replay fixtures' md5s are baked into
+    committed ``.osr`` files, so that text must not move.
+    """
+    beat_ms = 60000.0 / bpm
+    lines = [
+        "osu file format v14", "",
+        "[General]", "AudioFilename: dummy.mp3", "AudioLeadIn: 0",
+        "PreviewTime: -1", "Countdown: 0", "SampleSet: Soft",
+        "StackLeniency: 0.7", f"Mode: {mode}", "",
+        "[Metadata]", f"Title:{title}", f"TitleUnicode:{title}",
+        "Artist:synthetic", "ArtistUnicode:synthetic",
+        "Creator:osu-critique", f"Version:{version}", "",
+        "[Difficulty]", f"HPDrainRate:{hp}", f"CircleSize:{cs}",
+        f"OverallDifficulty:{od}", f"ApproachRate:{ar}",
+        "SliderMultiplier:1.4", "SliderTickRate:1", "",
+        "[TimingPoints]", f"0,{beat_ms:.6f},4,2,1,25,1,0", "",
+        "[HitObjects]",
+    ]
+    for kind, t, x, y, extra in objects:
+        if kind == "slider":
+            x2, y2 = extra
+            lines.append(f"{x},{y},{int(t)},2,0,L|{x2}:{y2},1,100")
+        else:
+            lines.append(f"{x},{y},{int(t)},1,0")
+    text = "\n".join(lines) + "\n"
+    return text, hashlib.md5(text.encode("utf-8")).hexdigest()
+
+
+def _cycle(n, step, cx, cy, radius, start=0.0):
+    """``n`` points on a ring, visited ``step`` positions at a time.
+
+    A polygon walked ``step`` positions per object gives a constant chord and a
+    constant turn, which is what makes a fixture's spacing/angle bucket known:
+    chord ``2R sin(step*pi/n)``, turn ``180 - 360*step/n`` degrees.
+    """
+    import math
+    pts = []
+    for i in range(n):
+        a = start + i * 2 * math.pi / n
+        pts.append((round(cx + radius * math.cos(a), 1),
+                    round(cy + radius * math.sin(a), 1)))
+    return [pts[(i * step) % n] for i in range(10 ** 6)]
+
+
+def generate_library():
+    """Write ``tests/fixtures/library/``: maps whose features are known.
+
+    No replays, so nothing needs anonymising: these describe the map side only.
+    """
+    out = FIX / "library"
+    out.mkdir(parents=True, exist_ok=True)
+    beat = 60000.0 / 180.0                       # 333.3 ms; 1/4 = 83.3 ms
+
+    # jumps: 160 notes, 1/2 apart, chord 4.65 r (jump bucket), 90 deg turns
+    seq = _cycle(8, 2, 256.0, 192.0, 120.0)
+    objs = [("circle", 1000 + i * beat / 2, x, y, None)
+            for i, (x, y) in enumerate(seq[:160])]
+    text, _ = make_library_map("lib_jumps", objs)
+    (out / "lib_jumps.osu").write_text(text)
+
+    # stream: 160 notes, 1/4 apart, chord 2.3 r (stream bucket), steady speed
+    seq = _cycle(8, 2, 256.0, 192.0, 60.0)
+    objs = [("circle", 1000 + i * beat / 4, x, y, None)
+            for i, (x, y) in enumerate(seq[:160])]
+    text, _ = make_library_map("lib_stream", objs)
+    (out / "lib_stream.osu").write_text(text)
+
+    # anti-flow: every step reverses (~180 deg turn), ~4.7 r jumps
+    pts = [(100.0, 142.0), (240.0, 242.0)]
+    objs = [("circle", 1000 + i * beat / 2, *pts[i % 2], None) for i in range(160)]
+    text, _ = make_library_map("lib_antiflow", objs)
+    (out / "lib_antiflow.osu").write_text(text)
+
+    # slider-heavy: 120 objects, 90 of them sliders, 1/1 apart
+    objs = []
+    for i in range(120):
+        t = 1000 + i * beat
+        x, y = (120.0, 96.0) if i % 2 == 0 else (392.0, 288.0)
+        if i % 4 != 3:
+            objs.append(("slider", t, int(x), int(y),
+                         (int(x + 60), int(y + 40))))
+        else:
+            objs.append(("circle", t, int(x), int(y), None))
+    text, _ = make_library_map("lib_sliders", objs)
+    (out / "lib_sliders.osu").write_text(text)
+
+    # mania: must be stored, and excluded by the gate (mode != 0)
+    objs = [("circle", 1000 + i * (beat / 4), 64 + 128 * (i % 4), 192, None)
+            for i in range(48)]
+    text, _ = make_library_map("lib_mania", objs, mode=3, cs=4.0)
+    (out / "lib_mania.osu").write_text(text)
+
+    # short: 12 notes over ~6.7 s, below the recommendation length gate
+    objs = [("circle", 1000 + i * beat / 2, *pts[i % 2], None) for i in range(12)]
+    text, _ = make_library_map("lib_short", objs)
+    (out / "lib_short.osu").write_text(text)
+
+    print(f"wrote {len(list(out.glob('*.osu')))} library fixtures to {out}")
+
+
 if __name__ == "__main__":
     if "--anonymize" in sys.argv:
         anonymize_fixtures()
+    elif "--library" in sys.argv:
+        generate_library()
     else:
         generate()

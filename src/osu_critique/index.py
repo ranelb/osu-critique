@@ -1,9 +1,14 @@
 """SQLite index of the analysis corpus.
 
-``out/`` stays the source of truth: every row here is a projection of an
+``out/`` stays the source of truth: every run row here is a projection of an
 ``out/<tag>_metrics.json`` that can be rebuilt at any time. The web frontend
 queries this because a listing page must not parse 3 000 JSON files, and the
 map page needs "every attempt of this map" without a directory scan.
+
+One table is derived from something else: ``library_beatmaps`` holds features
+of every installed ``.osu`` (played or not), which ``library scan`` fills and
+which exists so recommendations can score maps no replay ever touched. It is
+rebuilt the same way — deleting the DB loses nothing.
 
 What the index deliberately does **not** hold: the per-object records and the
 heavy metric blocks (``autopsy``, ``aim_mode``, ``breakdown``, ``profile``,
@@ -33,7 +38,7 @@ DB_FILENAME = "index.sqlite"
 
 class SchemaMismatch(RuntimeError):
     """The DB was written by another build; it is derived, so rebuild it."""
-SCHEMA_VERSION = 6  # v6: answers mirrored (metadata only, bodies stay on disk)
+SCHEMA_VERSION = 8  # v8: blacklist mirror (candidates you never want again)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meta (
@@ -167,6 +172,69 @@ CREATE TABLE IF NOT EXISTS answers (
     bytes       INTEGER,
     source_path TEXT
 );
+
+-- derived from the .osu files on disk, not from an out/ artifact: one row per
+-- installed beatmap, whether or not it was ever played. `library scan` owns it
+-- (src/osu_critique/library.py); like every other table here it is disposable.
+-- The gate/filter columns are first-class; everything else rides in
+-- features_json so a new feature does not need a migration.
+CREATE TABLE IF NOT EXISTS library_beatmaps (
+    beatmap_md5       TEXT PRIMARY KEY,
+    map_path          TEXT NOT NULL,
+    mtime             REAL,
+    size              INTEGER,
+    feature_version   INTEGER,
+    parsed_at         TEXT,
+    set_id            INTEGER,
+    beatmap_id        INTEGER,
+    mode              INTEGER,
+    title             TEXT,
+    artist            TEXT,
+    creator           TEXT,
+    version           TEXT,
+    sr                REAL,
+    bpm               REAL,
+    length_ms         REAL,
+    ar                REAL,
+    od                REAL,
+    cs                REAL,
+    hp                REAL,
+    n_objects         INTEGER,
+    n_circles         INTEGER,
+    n_sliders         INTEGER,
+    n_spinners        INTEGER,
+    slider_ratio      REAL,
+    density           REAL,      -- objects per second
+    dense_share       REAL,      -- <= 2 circle radii
+    stream_share      REAL,      -- 2-4 r
+    jump_share        REAL,      -- 4-7 r
+    bigjump_share     REAL,      -- > 7 r
+    anti_flow_share   REAL,      -- turn >= 135 deg
+    flow_share        REAL,      -- turn <= 45 deg
+    kiai_share        REAL,
+    strain_aim_max    REAL,
+    strain_speed_max  REAL,
+    sustained_share   REAL,      -- objects inside a detected sustained run
+    sustained_max     INTEGER,   -- longest run, notes
+    sustained_nps     REAL,      -- median notes/s of those runs
+    rank_status       TEXT,      -- joined from beatmap_status.json (API)
+    status_checked    TEXT,
+    features_json     TEXT
+);
+
+-- authored, canonical in out/blacklist.json: one row per blocked difficulty
+-- (scope 'map', key = beatmap md5) or blocked beatmapset (scope 'set',
+-- key = "set:<BeatmapSetID>"). Mirrored, never the source of truth.
+CREATE TABLE IF NOT EXISTS blacklist (
+    key         TEXT PRIMARY KEY,
+    scope       TEXT NOT NULL CHECK (scope IN ('map', 'set')),
+    created_at  TEXT,
+    source_path TEXT
+);
+
+CREATE INDEX IF NOT EXISTS library_by_mode ON library_beatmaps (mode, sr);
+CREATE INDEX IF NOT EXISTS library_by_sr   ON library_beatmaps (sr);
+CREATE INDEX IF NOT EXISTS library_by_path ON library_beatmaps (map_path);
 """
 
 
@@ -611,6 +679,7 @@ def sweep(outdir=None, rebuild: bool = False, quiet: bool = False,
             sync_annotations(conn, root)
             sync_critiques(conn, root)
             sync_answers(conn, root)
+            sync_blacklist(conn, root)
             conn.commit()
         stats["beatmaps"] = conn.execute("SELECT COUNT(*) FROM beatmaps").fetchone()[0]
         stats["runs"] = conn.execute("SELECT COUNT(*) FROM runs").fetchone()[0]
@@ -684,6 +753,13 @@ def sync_critiques(conn: sqlite3.Connection, outdir) -> int:
              doc.get("created"), doc["body"],
              os.fspath(critiques.path_for(outdir, doc["run_id"]))))
     return len(rows)
+
+
+def sync_blacklist(conn: sqlite3.Connection, outdir) -> int:
+    """Replace the blacklist mirror from ``out/blacklist.json`` (canonical)."""
+    from . import blacklist as _blacklist
+
+    return _blacklist.mirror(conn, outdir)
 
 
 def sync_answers(conn: sqlite3.Connection, outdir) -> int:
