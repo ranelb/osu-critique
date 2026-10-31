@@ -14,23 +14,34 @@ Fields added to each result row (see ``docs/object_schema.md`` for the units):
     bpm            BPM at this object, as written in the .osu
     bpm_eff        BPM as played (``bpm`` scaled by DT/HT)
     angle_deg      turn between the previous two movement vectors: 0 = straight
-                   (flow), 180 = a full reversal (anti-flow)
+                   (flow), 180 = a full reversal (anti-flow); slider tails are
+                   used for the incoming and outgoing direction
     strain_aim     osu!'s aim strain for this object (mod-aware)
     strain_speed   osu!'s speed strain for this object (mod-aware)
+    sv             scroll velocity multiplier at the object (green lines)
+    kiai           whether the kiai flag was on at the object
+    curve_type     slider curve class (Linear/Perfect/MultiBezier/...)
+    slider_path_px one span's path length in osu! px (slider only)
+    repeats        total spans incl. repeats (1 = no repeat)
+    slider_tail_x  cursor position at the slider's final tail
+    slider_tail_y  ... (Hard Rock reflected like every other position)
+    stack          this head lands on the previous object's end (<0.15r)
 """
 from __future__ import annotations
 
 import bisect
 import math
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # the record fields written to out/<tag>_objects.json, in order
 OBJECT_FIELDS = ("i", "t", "kind", "end_t", "x", "y", "result", "error_ms",
                  "aim_px", "aim_r", "key", "cursor_speed", "spacing_r",
                  "pattern", "snap", "bpm", "bpm_eff", "angle_deg", "strain_aim",
                  "strain_speed", "slider_tail_off", "slider_missed_ticks",
-                 "slider_off_pct")
+                 "slider_off_pct", "sv", "kiai", "curve_type", "slider_path_px",
+                 "repeats", "slider_tail_x", "slider_tail_y", "stack")
+STACK_R = 0.15          # no meaningful travel: a stack / 2B-style overlap
 
 
 def beat_grid(bm):
@@ -49,9 +60,16 @@ def _beat_ms_at(times, beats, t_ms):
 
 
 def _angle(a, b, c):
-    """Turn in degrees between the movement into b and the movement into c."""
-    v1 = (b["x"] - a["x"], b["y"] - a["y"])
-    v2 = (c["x"] - b["x"], c["y"] - b["y"])
+    """Turn in degrees between the movement into b and the movement out of b.
+
+    The incoming leg starts at a's *end* (a slider's tail) and the outgoing leg
+    starts at b's *end*, because that is the path the cursor actually has to
+    walk. With circles (end == head) this is the old head-to-head angle.
+    """
+    ax, ay = a.get("end_x", a["x"]), a.get("end_y", a["y"])
+    bx, by = b.get("end_x", b["x"]), b.get("end_y", b["y"])
+    v1 = (b["x"] - ax, b["y"] - ay)
+    v2 = (c["x"] - bx, c["y"] - by)
     n1 = math.hypot(*v1)
     n2 = math.hypot(*v2)
     if n1 <= 1e-6 or n2 <= 1e-6:
@@ -101,6 +119,8 @@ def annotate(results, bm, radius, scale, strain_mods=None, bpm_scale=None):
         if strains is not None and 0 < i <= len(strains):
             x["strain_speed"] = float(strains[i - 1][0])
             x["strain_aim"] = float(strains[i - 1][1])
+        spacing = x.get("spacing_r")
+        x["stack"] = bool(spacing is not None and spacing <= STACK_R)
     return results
 
 
@@ -137,5 +157,15 @@ def object_records(results, radius):
             "slider_tail_off": x.get("slider_tail_off"),
             "slider_missed_ticks": x.get("slider_missed_ticks"),
             "slider_off_pct": _r(x.get("slider_off_pct"), 1),
+            "sv": _r(x.get("sv"), 3),
+            "kiai": x.get("kiai"),
+            "curve_type": x.get("curve_type"),
+            "slider_path_px": _r(x.get("slider_path_px"), 2),
+            "repeats": x.get("repeats"),
+            "slider_tail_x": (_r(x.get("end_x"), 1)
+                              if x.get("kind") == "Slider" else None),
+            "slider_tail_y": (_r(x.get("end_y"), 1)
+                              if x.get("kind") == "Slider" else None),
+            "stack": bool(x.get("stack")),
         })
     return records

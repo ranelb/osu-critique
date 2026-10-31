@@ -8,6 +8,8 @@ HR arrives at the reflected position, so aim error must be measured against it.
 """
 from __future__ import annotations
 
+import bisect
+
 import slider
 
 PLAYFIELD_HEIGHT = 384.0
@@ -17,13 +19,72 @@ def load_beatmap(map_path):
     return slider.Beatmap.from_path(map_path)
 
 
-def mod_scale(r):
-    """Map-time -> real-time multiplier (DT speeds up, HT slows down)."""
+def mod_scale(r, score_meta=None):
+    """Map-time -> real-time multiplier (DT speeds up, HT slows down).
+
+    A lazer export can carry a *custom* rate in its trailing score-info block
+    (e.g. DT at 1.2x). The legacy mod bitmask only says "DT", so when
+    ``score_meta`` is available its ``speed_change`` wins: ``1 / rate`` is the
+    real time multiplier. Falls back to the flag for stable-era replays.
+    """
+    speed = (score_meta or {}).get("speed_change")
+    if speed and speed > 0:
+        return 1.0 / float(speed)
     if r.double_time:
         return 2.0 / 3.0
     if r.half_time:
         return 4.0 / 3.0
     return 1.0
+
+
+def rate_label(r, score_meta=None):
+    """Human label for the rate the score block (or the flags) implies."""
+    speed = (score_meta or {}).get("speed_change")
+    if speed and speed > 0 and abs(speed - 1.0) > 1e-9:
+        name = "DT" if speed > 1.0 else "HT"
+        return f"{name} at {speed:.2f}x"
+    if r.double_time:
+        return "DT"
+    if r.half_time:
+        return "HT"
+    return None
+
+
+def timing_context(bm):
+    """Sorted timing points and their offsets (ms), for per-object SV/kiai."""
+    points = sorted(getattr(bm, "timing_points", []) or [],
+                    key=lambda p: p.offset)
+    return points, [p.offset.total_seconds() * 1000.0 for p in points]
+
+
+def sv_kiai_at(points, offsets, t_ms):
+    """(SV multiplier, kiai) at map time ``t_ms``.
+
+    osu! stores inherited (green) points with a negative ``ms_per_beat``; their
+    SV multiplier is ``-100 / ms_per_beat``. An uninherited point resets SV to
+    1.0. Kiai is inherited from the latest point of either kind.
+    """
+    if not points:
+        return 1.0, False
+    i = max(0, bisect.bisect_right(offsets, t_ms) - 1)
+    point = points[i]
+    sv = 1.0
+    ms_per_beat = getattr(point, "ms_per_beat", None)
+    if ms_per_beat is not None and ms_per_beat < 0:
+        sv = -100.0 / ms_per_beat
+    return (float(sv) if sv > 0 else 1.0), bool(getattr(point, "kiai_mode", False))
+
+
+def slider_tail(oo):
+    """Cursor position at the slider's final tail (repeats fold back)."""
+    spans = max(1, int(getattr(oo, "repeat", 1) or 1))
+    at = 0.0 if spans % 2 == 0 else 1.0
+    try:
+        pos = oo.curve(at)
+        return float(pos.x), float(pos.y)
+    except Exception:                      # exotic curve: fall back to the head
+        pos = oo.position
+        return float(pos.x), float(pos.y)
 
 
 def od_for(bm, r):
@@ -60,21 +121,46 @@ def od_windows(od, scale):
 
 
 def build_objects(bm, scale, hard_rock=False):
-    """list of dicts: {t, end, x, y, kind} with t/end in real ms.
+    """list of dicts: geometry, slider tails and per-object timing context.
+
+    ``t``/``end`` are real ms. ``end_x``/``end_y`` are where the cursor must be
+    when the object ends (a slider's tail, repeats folded back); spacing and the
+    required cursor speed use that, not the slider head. ``sv`` and ``kiai`` are
+    the map's own scroll-velocity multiplier and kiai flag at the object;
+    ``curve_type``/``slider_path_px``/``repeats`` describe a slider's body.
 
     ``hard_rock`` reflects the playfield vertically (``obj.hard_rock`` does the
     transform in slider, so slider paths/positions stay consistent with the
     library's own judgement code).
     """
+    points, offsets = timing_context(bm)
     objs = []
     for o in bm.hit_objects():
         oo = o.hard_rock if hard_rock else o
         kind = type(o).__name__
-        t = oo.time.total_seconds() * 1000.0 * scale
+        map_ms = oo.time.total_seconds() * 1000.0
+        t = map_ms * scale
         end = getattr(oo, "end_time", oo.time)
         end = end.total_seconds() * 1000.0 * scale
         pos = oo.position
-        objs.append({"t": t, "end": end, "x": pos.x, "y": pos.y, "kind": kind})
+        sv, kiai = sv_kiai_at(points, offsets, map_ms)
+        is_slider = kind == "Slider"
+        if is_slider:
+            end_x, end_y = slider_tail(oo)
+        else:
+            end_x, end_y = float(pos.x), float(pos.y)
+        objs.append({
+            "t": t, "end": end, "x": pos.x, "y": pos.y, "kind": kind,
+            "end_x": end_x, "end_y": end_y,
+            "sv": sv, "kiai": kiai,
+            "curve_type": (type(getattr(oo, "curve", None)).__name__
+                           if is_slider else None),
+            "slider_path_px": ((float(getattr(oo, "pixel_length", None)
+                                       or getattr(oo, "length", None) or 0.0))
+                               if is_slider else None),
+            "repeats": (max(1, int(getattr(oo, "repeat", 1) or 1))
+                        if is_slider else None),
+        })
     objs.sort(key=lambda d: d["t"])
     return objs
 

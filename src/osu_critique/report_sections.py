@@ -101,6 +101,14 @@ def sections(metrics: dict, baseline: dict | None = None) -> list[dict]:
     if metrics.get("map_version_mismatch"):
         headline.append(note("NOTE: replay/map timing mismatch detected; analysis "
                              "unreliable past the replay end.", "warn"))
+    sm = metrics.get("score_meta") or {}
+    if sm.get("paused"):
+        pauses = sm.get("pauses_ms") or []
+        headline.append(note(
+            f"PAUSED {len(pauses)} time(s)"
+            + (f" at {', '.join(f'{p / 1000:.1f}s' for p in pauses[:3])}"
+               f"{'…' if len(pauses) > 3 else ''}" if pauses else "")
+            + " — sections are wall-clock and include the pause.", "warn"))
     out.append(_section("summary", "Summary", *headline))
 
     # -- map profile ---------------------------------------------------------
@@ -176,6 +184,30 @@ def sections(metrics: dict, baseline: dict | None = None) -> list[dict]:
             items.append(kv(f"context · {ctx['after']}",
                             f"{ctx['non300_rate'] * 100:.1f}%", f"n={ctx['n']}"))
         out.append(_section("profile", "Map profile", *items))
+
+    # -- score provenance ----------------------------------------------------
+    truth = metrics.get("slider_truth") or {}
+    if sm or truth:
+        items = []
+        if sm.get("online_id") is not None:
+            items.append(kv("online score", str(sm.get("online_id")),
+                            f"client {sm.get('client_version') or '—'}"
+                            + (f" · rank {sm['rank']}" if sm.get("rank") else "")))
+        if sm:
+            rate = sm.get("speed_change")
+            items.append(kv("rate source", "lazer score info" if rate else "legacy mod flag",
+                            (f"{rate:.2f}x" if rate else None)))
+            if sm.get("paused"):
+                items.append(kv("pauses", str(len(sm.get("pauses_ms") or [])),
+                                "wall-clock sections include them"))
+        if truth.get("tail_total") is not None:
+            items.append(kv(
+                "slider tails (game)",
+                f"{truth['tail_hit']} of {truth['tail_total']} hit "
+                f"({truth['tail_missed']} missed)",
+                f"frame model says {truth['measured_tail_off']} tail_off — "
+                "aggregate truth, not per-object"))
+        out.append(_section("score", "Score info", *items))
 
     # -- timing --------------------------------------------------------------
     timing_items = []
@@ -331,6 +363,35 @@ def sections(metrics: dict, baseline: dict | None = None) -> list[dict]:
             items.append(note("No pattern stands out as a weakness — clean run.",
                               "good"))
         out.append(_section("patterns", "Patterns", *items))
+
+    # -- sequence labels -----------------------------------------------------
+    seq = metrics.get("sequences") or {}
+    run_rows = [r for r in seq.get("runs") or [] if r.get("reported")]
+    shape_rows = [s for s in seq.get("shapes") or [] if s.get("reported")]
+    if run_rows or shape_rows:
+        items = []
+        if run_rows:
+            items.append(table(
+                ["fast group", "notes", "non-300", "median gap"],
+                [[r["class"], r["n"], f"{r['non300_rate'] * 100:.1f}%",
+                  f"{r['gap_ms_median']:.0f} ms" if r.get("gap_ms_median") is not None else "—"]
+                 for r in run_rows]))
+        if shape_rows:
+            items.append(table(
+                ["turn shape", "objects", "non-300"],
+                [[s["class"], s["n"], f"{s['non300_rate'] * 100:.1f}%"]
+                 for s in shape_rows]))
+        stand = seq.get("standouts") or []
+        if stand:
+            items.append(note(
+                "Contrast: " + "; ".join(
+                    f"{s['class']} {s['non300_rate'] * 100:.1f}% vs "
+                    f"{seq['overall_non300_rate'] * 100:.1f}% overall (n={s['n']})"
+                    for s in stand), "target"))
+        else:
+            items.append(note("No sequence label separates from the play's own "
+                              "rate at this sample size.", "info"))
+        out.append(_section("sequences", "Sequence labels", *items))
 
     # -- streams -------------------------------------------------------------
     st = metrics.get("streams") or {}

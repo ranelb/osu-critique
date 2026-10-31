@@ -31,6 +31,14 @@ it does not need a schema change.
 
 ## Shipped since 0.12.0
 
+- **Unreleased — the data layer.** The lazer `.osr` trailing score-info block is
+  read (`online_id`, exact mod settings incl. custom rate, pauses, per-category
+  `statistics` / `maximum_statistics`); `speed_change` drives the player time
+  base; `slider_truth` exposes the game's aggregate slider tails for
+  calibration. The per-object schema v2 adds `sv`, `kiai`, `curve_type`,
+  `slider_path_px`, `repeats`, `slider_tail_x/y`, `stack`, and `spacing_r` /
+  required speed now start at a slider's tail. A small `sequences` block adds
+  n-gated fast-group and turn-shape labels over the existing rows.
 - **0.24.x — critique tab refinements.** The size threshold warns instead of
   blocking; list pickers load 40 rows at a time on scroll; the mod filter covers
   maps and ranges only; the LLM answer sits above the deterministic summary; each

@@ -1,6 +1,9 @@
 # How it works
 
-1. **Parse** the `.osr`/`.osu` with the `slider` library.
+1. **Parse** the `.osr`/`.osu` with the `slider` library. The lazer trailing
+   score-info block is read separately (`io/replay.py: read_score_meta`): exact
+   mod settings (`speed_change`), `online_id`, pauses and per-category
+   `statistics` / `maximum_statistics`.
 2. **Frames** — replay actions sorted by time (some export tools emit
    out-of-order trailing frames; sorting is required for correct press
    detection and cursor interpolation).
@@ -10,13 +13,15 @@
    circle radius behind that gate come from the **mod-adjusted** difficulty
    (Hard Rock raises OD/AR/CS and reflects the playfield vertically, Easy halves
    them).
-4. **Calibration** — the time scale is auto-selected (mod-based first, then
+4. **Calibration** — the time scale is auto-selected (`player_scale` first, then
    unscaled) by the whole recorded count vector, not by the miss count alone.
-   Some lazer exports and mod flags are misleading; this step disambiguates.
+   `player_scale` is `1 / speed_change` when the score block has a custom rate,
+   else the legacy DT/HT flag; either way some exports still store frames in
+   another clock, and this step disambiguates them.
 5. **Metrics** — hit/aim error, UR (also as a share of the 300-window), aim error
-   against cursor speed, pattern buckets, regions, quarters, stream segments,
-   whiffs by cause, tapping style, plus `failed_play` / `map_version_mismatch`
-   flags and a `trust` block.
+   against cursor speed, pattern buckets, sequence labels, regions, quarters,
+   stream segments, whiffs by cause, tapping style, plus `failed_play` /
+   `map_version_mismatch` flags, `score_meta` / `slider_truth` and a `trust` block.
 6. **Cursor arrival** — the frames are sampled around every note to measure where
    the cursor actually was: distance at the note, closest approach and its
    timing, the along/lateral split and the speed-conditioned ceiling curve
@@ -31,9 +36,10 @@
    are followed from the frames: how much of the body the cursor traced, which
    ticks it missed, whether the tail was dropped (`metrics.sliders`, and the
    `slider_*` fields in the per-object records).
-9. **Records** — every object is written out with its rhythm snap, spacing, flow
-   angle, strains and slider-body measurements (`out/<tag>_objects.json`): the
-   schema later analyses read.
+9. **Records** — every object is written out with its rhythm snap, tail-aware
+   spacing, flow angle, strains, slider-body measurements, SV/kiai, slider curve
+   and tail, and stack flag (`out/<tag>_objects.json`): the schema later analyses
+   read.
 10. **Tiers** — `report` renders a deterministic critique from the JSON;
     `coach` upgrades it with one LLM API call (system prompt encodes the same
     critique framework; optional baseline + profile give it context).

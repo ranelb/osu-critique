@@ -22,9 +22,12 @@ recomputes from the sibling `<tag>_objects.json`.
 
 The **required cursor speed** for an object is recomputed here as
 
-    dist(previous object -> this object) / dt          # px/ms
+    dist(previous object's end -> this object's head) / dt   # px/ms
 
-from the object's `x` / `y` / `t`. It does **not** read
+A slider's **end** is its tail (repeats folded back), not its head: the cursor
+has to walk the body before the next jump starts. For circles the two are equal.
+The speed is computed from the object's `slider_tail_x` / `slider_tail_y` (or
+`x` / `y` when there is no slider tail) and `t`. It does **not** read
 `objects[].cursor_speed`, because that field is null on a no-press miss — binning
 on it would silently hide exactly the misses the block is about (this produced a
 wrong "1.8% miss" cliff before it was caught).

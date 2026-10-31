@@ -28,7 +28,9 @@ their beat count instead of pretending to be a divisor.
 A family is `<kind>_<divisor>_<spacing>`: `circle_1/2_jump` is a circle arriving
 half a beat after the previous object at more than 4 circle radii of spacing —
 "1/2 jumps"; `slider_1/4_dense` is a slider half a quarter-note after the
-previous object at ≤2r — a dense slider chain. Each entry carries `n`, `share`
+previous object at ≤2r — a dense slider chain. Spacing is measured from the
+previous object's end (`spacing_r`), so a slider's tail is where the jump
+starts. Each entry carries `n`, `share`
 of the map, `non300` / `non300_rate`, `mean_err_ms`, `std_err_ms` and
 `mean_aim_r`, with `reported: false` below 10 objects so nothing is concluded
 from a handful of notes.

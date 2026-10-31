@@ -1,6 +1,8 @@
 """The per-object record schema: written beside the metrics, frozen, additive."""
 import json
 
+import pytest
+
 from osu_critique.cli import main
 from osu_critique.metrics.structure import OBJECT_FIELDS, SCHEMA_VERSION
 from osu_critique.report import analyze
@@ -66,3 +68,39 @@ def test_no_objects_flag_skips_the_file(tmp_path):
     assert rc == 0
     assert (tmp_path / "noobj_metrics.json").exists()
     assert not (tmp_path / "noobj_objects.json").exists()
+
+
+def test_slider_context_and_tail_aware_spacing(tmp_path):
+    metrics, path = _run(tmp_path)
+    doc = json.loads(path.read_text())
+    radius = metrics["spacing_radius"]
+
+    sliders = [r for r in doc["objects"] if r["kind"] == "Slider"]
+    assert sliders, "the fixture has a slider"
+    for rec in sliders:
+        assert rec["sv"] > 0
+        assert isinstance(rec["kiai"], bool)
+        assert rec["curve_type"] in ("Linear", "Perfect", "MultiBezier", "Catmull")
+        assert rec["slider_path_px"] is not None and rec["slider_path_px"] > 0
+        assert rec["repeats"] >= 1
+        assert rec["slider_tail_x"] is not None and rec["slider_tail_y"] is not None
+    assert all(isinstance(r["stack"], bool) for r in doc["objects"])
+
+    # tail-aware spacing is a pure function of the rows; the fixture's only
+    # slider is last, so pin it on a synthetic pair
+    from osu_critique.metrics.patterns import add_pattern_labels
+    rows = [{"x": 0.0, "y": 0.0, "end_x": 100.0, "end_y": 0.0},
+            {"x": 0.0, "y": 0.0}]
+    add_pattern_labels(rows, radius=10.0)
+    assert rows[1]["spacing_r"] == pytest.approx(10.0)   # 100 px from the tail
+
+
+def test_the_metrics_carry_the_lazer_ground_truth(tmp_path):
+    metrics, _path = _run(tmp_path)
+    assert metrics["score_meta"]["online_id"] == 6931937233
+    assert metrics["score_meta"]["source"].startswith("lazer")
+    truth = metrics["slider_truth"]
+    assert truth["tail_total"] == 1          # aaaaa has one slider
+    assert truth["tail_missed"] is not None
+    assert "sequences" in metrics and "runs" in metrics["sequences"]
+    assert metrics["trust"]["rate_source"] in ("lazer score info", "legacy mod flag")

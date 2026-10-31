@@ -18,14 +18,17 @@ import numpy as np
 import slider as _slider  # noqa: F401  (re-exported for convenience; used by circle_radius)
 
 from .io.beatmap import (build_objects, circle_radius, cs_for, load_beatmap,
-                         mod_scale, mod_string, od_for, od_windows)
-from .io.replay import build_frames, cursor_at, find_presses, load_replay
+                         mod_scale, mod_string, od_for, od_windows, rate_label)
+from .io.replay import (build_frames, cursor_at, find_presses, load_replay,
+                        read_score_meta)
 from .metrics.assignment import judge
 from .metrics.aim import build_aim
 from .metrics.autopsy import build as build_autopsy
 from .metrics.breakdown import build as build_breakdown
 from .metrics.patterns import add_pattern_labels, pattern_stats
 from .metrics.profile import build_profile, primary_target
+from .metrics.sequences import build as build_sequences
+from .metrics.sequences import console_lines as sequence_lines
 from .metrics.sliders import annotate as annotate_sliders
 from .metrics.structure import SCHEMA_VERSION, annotate, object_records
 from .metrics.sections import quarter_stats, region_stats
@@ -91,21 +94,59 @@ def build_trust(detected, recorded, scale, mod_scale_value, judged,
     }
 
 
-def _time_base_note(scale, mod_scale_value, factor, w300):
+def _time_base_note(scale, player_scale, factor, w300, rate=None):
     """Say, in words, which clock the milliseconds in this file are in.
 
-    Some exports store frames in one clock while the mod flag claims another
-    (a DT replay whose frames are in map time), so the same hit window is two
-    different numbers depending on who is reading it. Everything in the metrics
-    is the *frames'* base unless it says "player"; only the map profile converts.
+    Some exports store frames in one clock while the score claims another (a DT
+    replay whose frames are in map time), so the same hit window is two different
+    numbers depending on who is reading it. Everything in the metrics is the
+    *frames'* base unless it says "player"; only the map profile converts.
+
+    ``player_scale`` comes from the lazer score block when it has one, so a
+    custom DT at 1.2x is described as 1.2x, not as the legacy 1.5x flag.
     """
     if abs(factor - 1.0) < 1e-9:
         return None
-    claim = "DT" if mod_scale_value < scale else "HT"
-    return (f"the replay claims {claim} but its frames are in another clock: every "
+    claim = rate or ("DT" if player_scale < scale else "HT")
+    return (f"the replay is {claim} but its frames are in another clock: every "
             f"ms here is the frames' base unless it says 'player'. The 300-window "
             f"is {w300:.0f} ms of frames = {w300 * factor:.0f} ms of real play "
             f"(x{factor:.3f}); metrics.profile is already player time.")
+
+
+def slider_truth(score_meta, slider_block):
+    """Aggregate slider ground truth from the lazer score-info block.
+
+    ``maximum_statistics.slider_tail_hit`` is the number of slider tails the map
+    offered and ``statistics.slider_tail_hit`` the number hit, which makes the
+    existing frame-based tail measurement comparable per play. The other
+    categories are kept raw on purpose: lazer's tick names do not map 1:1 to
+    ticks/repeats, and pretending they do would be a new unvalidated model.
+    """
+    if not score_meta:
+        return None
+    stats = score_meta.get("statistics") or {}
+    maximum = score_meta.get("maximum_statistics") or {}
+    if not stats or not maximum:
+        return None
+    total = maximum.get("slider_tail_hit")
+    hit = stats.get("slider_tail_hit")
+    measured = slider_block or {}
+    categories = {}
+    for key in sorted(set(stats) | set(maximum)):
+        categories[key] = {"hit": stats.get(key),
+                           "maximum": maximum.get(key)}
+    return {
+        "tail_total": total,
+        "tail_hit": hit,
+        "tail_missed": (total - hit)
+        if isinstance(total, (int, float)) and isinstance(hit, (int, float)) else None,
+        "measured_tail_off": measured.get("tail_off"),
+        "categories": categories,
+        "source": "lazer score-info statistics / maximum_statistics",
+        "note": ("aggregate per-play category counts, not per-object results; "
+                 "use the tail row to calibrate metrics.sliders"),
+    }
 
 
 MAX_CURSOR_SPEED = 50.0     # px/ms; above this it is an export artefact, not a flick
@@ -164,6 +205,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     outdir = outdir or _default_outdir()
 
     r = load_replay(replay_path)
+    score_meta = read_score_meta(replay_path)
     bm = load_beatmap(map_path)
     with open(map_path, "rb") as fh:
         beatmap_md5 = hashlib.md5(fh.read()).hexdigest()
@@ -182,6 +224,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     press_times = [p[0] for p in presses]
     # windows and geometry come from the mod-adjusted difficulty: HR tightens
     # CS/OD (and reflects the playfield in build_objects), EZ loosens them
+    player_scale = mod_scale(r, score_meta)
     od = od_for(bm, r)
     radius = circle_radius(cs_for(bm, r))
     search_od = (200 - 10 * od) + 120  # 50-window + slack
@@ -198,7 +241,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     # try candidate time scales (mod-based first), keep the one whose detected
     # miss count agrees best with the recorded miss count. Losing candidates
     # are dropped immediately so only one full result set is ever retained.
-    candidates = [mod_scale(r), 1.0]
+    candidates = [player_scale, 1.0]
     best = None
     for scale in dict.fromkeys(candidates):  # dedupe, keep order
         objs = build_objects(bm, scale, hard_rock=r.hard_rock)
@@ -224,8 +267,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     scale = best["scale"]
     w300, w100, w50 = best["w300"], best["w100"], best["w50"]
     del best
-    if scale != mod_scale(r):
-        print(f"!! calibrated time scale: mod-scale {mod_scale(r):.3f} -> {scale:.3f} "
+    if scale != player_scale:
+        print(f"!! calibrated time scale: mod-scale {player_scale:.3f} -> {scale:.3f} "
               f"(mod flag may be misleading)", file=sys.stderr)
 
     # version sanity: the map's last object must not be far beyond the replay end
@@ -234,9 +277,23 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     map_version_mismatch = bool(objs) and last_obj_t > last_frame_t + 1000
     failed_play = bool(objs) and judged_total < n_map_objects - 2
 
-    trust = build_trust(detected, recorded, scale, mod_scale(r), judged_total,
+    trust = build_trust(detected, recorded, scale, player_scale, judged_total,
                         map_version_mismatch, failed_play,
                         relax=bool(getattr(r, "relax", False)))
+    if score_meta:
+        if score_meta.get("paused"):
+            pauses = score_meta.get("pauses_ms") or []
+            trust["notes"].append(
+                f"paused {len(pauses)} time(s) ({', '.join(f'{p / 1000:.1f}s' for p in pauses[:3])}"
+                f"{'…' if len(pauses) > 3 else ''}); "
+                "sections/quarters are wall-clock and include the pause")
+        speed = score_meta.get("speed_change")
+        if speed and abs(speed - 1.5) > 1e-6 and abs(speed - 0.75) > 1e-6:
+            trust["notes"].append(
+                f"lazer score info: rate mod at {speed:.2f}x (player time from the "
+                "score block, not the legacy DT flag)")
+        trust["rate_source"] = ("lazer score info" if score_meta.get("speed_change")
+                                else "legacy mod flag")
 
     # --- metrics ---
     hits = [x for x in results if x["result"] != "miss"]
@@ -249,18 +306,23 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
 
     add_pattern_labels(results, radius)
     # rhythm/geometry/difficulty per object: the frozen schema Tier 1 buckets
+    custom_rate = bool(score_meta and score_meta.get("speed_change") and
+                       abs(score_meta["speed_change"] - 1.5) > 1e-6 and
+                       abs(score_meta["speed_change"] - 0.75) > 1e-6)
     annotate(results, bm, radius, scale,
              strain_mods={"easy": r.easy, "hard_rock": r.hard_rock,
-                          "double_time": scale == 2.0 / 3.0,
-                          "half_time": scale == 4.0 / 3.0},
-             bpm_scale=mod_scale(r))
+                          "double_time": (not custom_rate
+                                          and player_scale == 2.0 / 3.0),
+                          "half_time": (not custom_rate
+                                        and player_scale == 4.0 / 3.0)},
+             bpm_scale=player_scale)
     patterns = pattern_stats(results)
     # rows are in calibrated time; the player's time base is the mod scale, so
     # when calibration overrides a mod flag every ms in the profile is converted
     # rows are in the frames' clock; the player's clock is the mod scale. They
     # differ exactly when calibration overrode a misleading mod flag, and every
     # ms in this file is the former unless a consumer says otherwise.
-    time_factor = (mod_scale(r) / scale) if scale else 1.0
+    time_factor = (player_scale / scale) if scale else 1.0
     profile = build_profile(results, bm, scale,
                             windows={"300": w300, "100": w100, "50": w50},
                             radius=radius, time_factor=time_factor)
@@ -282,6 +344,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                                    aim_rows=aim_rows, presses=presses, w50=w50,
                                    is_relax=is_relax)
                      if write_autopsy else None)
+    sequences = build_sequences(results)
+    truth = slider_truth(score_meta, slider_block)
     records = object_records(results, radius)
 
     metrics = {
@@ -297,17 +361,19 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                  "EZ": r.easy, "RX": bool(getattr(r, "relax", False)),
                  "AP": bool(getattr(r, "auto_pilot", False))},
         "mod_string": mod_string(r),
+        "score_meta": score_meta,
         "time_scale": scale,
         "windows_ms": {"300": w300, "100": w100, "50": w50},
         "time_base": {
-            "overridden": bool(scale != mod_scale(r)),
+            "overridden": bool(scale != player_scale),
             "rows_scale": scale,
-            "player_scale": mod_scale(r),
+            "player_scale": player_scale,
             "rows_to_player": time_factor,
             "windows_ms_player": {"300": w300 * time_factor,
                                   "100": w100 * time_factor,
                                   "50": w50 * time_factor},
-            "note": _time_base_note(scale, mod_scale(r), time_factor, w300),
+            "note": _time_base_note(scale, player_scale, time_factor, w300,
+                                    rate=rate_label(r, score_meta)),
         },
         "difficulty": {"CS": cs_for(bm, r),
                        "AR": bm.ar(easy=r.easy, hard_rock=r.hard_rock),
@@ -353,6 +419,8 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                     for q, d in regions.items()},
         "quarters": quarters,
         "sliders": slider_block,
+        "slider_truth": truth,
+        "sequences": sequences,
         "spinners": {"n": sum(1 for x in results if x["kind"] == "Spinner")},
         "streams": {"n_segments": len(segs), "segments": segs,
                     **summarise_streams(segs)},
@@ -423,6 +491,21 @@ def console_summary(metrics, out_json=None, out_objects=None):
     tb = metrics.get("time_base") or {}
     if tb.get("note"):
         print(f"  ! time base: {tb['note']}")
+    sm = metrics.get("score_meta") or {}
+    if sm.get("online_id") is not None:
+        rate = sm.get("speed_change")
+        extra = []
+        if rate and abs(rate - 1.5) > 1e-6 and abs(rate - 0.75) > 1e-6:
+            extra.append(f"rate {rate:.2f}x")
+        if sm.get("paused"):
+            extra.append(f"paused {len(sm.get('pauses_ms') or [])}x")
+        print(f"  score info: online {sm['online_id']}"
+              + (f" ({', '.join(extra)})" if extra else ""))
+    truth = metrics.get("slider_truth") or {}
+    if truth.get("tail_total") is not None:
+        print(f"  slider truth (lazer): tails {truth.get('tail_hit')}/{truth.get('tail_total')} "
+              f"= {truth.get('tail_missed')} missed; frame model says "
+              f"{truth.get('measured_tail_off')} tail_off")
     print(f"whiffed presses (hit nothing): {metrics['whiffed_presses']}")
     w = metrics.get("whiffs") or {}
     if w.get("n"):
@@ -468,6 +551,8 @@ def console_summary(metrics, out_json=None, out_objects=None):
         print(f"  {p:8s} n={d['n']:4d} miss={d['miss']:3d} ({d['miss_rate']:.1%})  "
               f"err={('%.1f' % d['mean_err']) if d['mean_err'] is not None else '--':>6}ms "
               f"std={('%.1f' % d['std_err']) if d['std_err'] is not None else '--'}")
+    for line in sequence_lines(metrics.get("sequences")):
+        print(line)
     print("regions:")
     for q, d in metrics["regions"].items():
         rate = f"{d['miss_rate']:.1%}" if d["miss_rate"] is not None else "--"

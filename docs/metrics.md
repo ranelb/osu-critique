@@ -49,7 +49,19 @@ Per-play metrics include:
   which weaknesses are worse than the play itself *every* time, and which just
   swing between sessions
 - **Patterns**: miss rates by spacing bucket — dense (≤2r), stream (2–4r),
-  jump (4–7r), bigjump (>7r)
+  jump (4–7r), bigjump (>7r). Spacing is measured from the previous object's
+  **end** (a slider's tail), not its head
+- **Sequence labels** (`sequences`): n-gated fast groups (double / triple / quad,
+  burst 5–9, stream 10–31, deathstream 32+, sustained when the rhythm is slow)
+  found by steady gaps, and turn shapes (square / triangle / staircase / zigzag)
+  over three legs. Each class carries `n`, its non-300 rate, `reported` and
+  `standout` (≥1.5× or ≤0.6× the play's own rate)
+- **Score provenance** (`score_meta`, `slider_truth`): read from the lazer `.osr`
+  trailing block — `online_id`, exact mods with `settings`, `speed_change`
+  (custom DT/HT rate), `pauses_ms`, and per-category `statistics` /
+  `maximum_statistics`. The player's time base uses `speed_change` when present;
+  `slider_truth` puts the game's aggregate `slider_tail_hit` next to the frame
+  model's `tail_off`
 - **Streams**: runs of sustained notes found by **rhythm and velocity
   continuity** (steady gap ≤250 ms, required speed `spacing/dt` steady within
   40 %, any object kind — the old "≥4 circles at ≤4r spacing" rule used spacing
@@ -68,7 +80,9 @@ Per-play metrics include:
   pattern families (`kind_divisor_spacing`) with n-gated hit rates, slider
   character (path length and the cursor speed demanded), stamina (notes/s,
   longest sustained run, breaks), chains with hit rate by position, and
-  signed bias per family ([profile.md](profile.md))
+  signed bias per family ([profile.md](profile.md)). Per-object `sv`, `kiai`,
+  `curve_type`, `slider_path_px`, `repeats`, `slider_tail_x/y` and `stack` are
+  in the object records
 - **Trust**: per-count deltas against the game's own recorded hits, the scale the
   calibration chose, and whether the judgement can be trusted at all
 - **Flags**: `failed_play`, `map_version_mismatch`, mods

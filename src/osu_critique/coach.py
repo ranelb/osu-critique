@@ -60,6 +60,21 @@ Critique framework - use the numbers, don't invent others:
   off_pct_median. Turn them into coaching ("you cut 25% of the sliders"), but do
   not treat them as judgements: measured on these replays the game still counts a
   cut slider as a 300, so cuts cost combo and flow, not accuracy points.
+  metrics.slider_truth is the game's own aggregate: tail_hit/tail_total and
+  tail_missed from lazer's score-info block, next to measured_tail_off from the
+  frame model. Compare the two, never present a frame-model tail count as fact.
+- Score provenance (metrics.score_meta): online_id, the exact mods with their
+  settings, speed_change, statistics/maximum_statistics and pauses_ms. When
+  speed_change is present it is the authority for the rate (a DT at 1.2x is not
+  1.5x); time_base.player_scale and profile already use it. When paused is true
+  the sections/quarters are wall-clock and include the break - do not read a
+  post-pause recovery as stamina.
+- Sequence labels (metrics.sequences): fast groups (double/triple/quad, burst
+  5-9, stream 10-31, deathstream 32+) found by steady rhythm, and turn shapes
+  (square ~90deg, triangle ~120deg, staircase, zigzag) over three legs. Each
+  entry carries n and reported; only classes that clear the gate are evidence,
+  and standouts lists the ones whose rate is 1.5x above (or 0.6x below) the
+  play's own rate. A label is not a verdict - it names the material.
 - Patterns: the spacing buckets (dense/stream/jump/bigjump) are coarse - one
   bucket mixes a 1/2 jump with a 1/6 one. Prefer the shape classes
   (metrics.autopsy.shapes) and the per-family composition: they are built from

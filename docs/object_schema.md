@@ -15,7 +15,7 @@ all query these rows rather than re-deriving them. Skip it with `--no-objects`.
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "tag": "example",
   "player": "TestPlayer",
   "map": "Example Song [Extra]",
@@ -43,7 +43,7 @@ all query these rows rather than re-deriving them. Skip it with `--no-objects`.
 | `aim_r` | circle radii | `aim_px / radius` (the comparable form) |
 | `key` | `A`/`B` | which tap button resolved the object |
 | `cursor_speed` | px/ms | cursor speed at press time, from the bracketing frames |
-| `spacing_r` | circle radii | distance to the previous object's centre |
+| `spacing_r` | circle radii | distance from the previous object's **end** (a slider's tail, repeats folded back) to this object's head |
 | `pattern` | — | legacy spacing-only bucket: `dense` / `stream` / `jump` / `bigjump` |
 | `snap` | quarter-beats | gap to the previous object in 1/4-beat units: `1.0` = 1/4 note, `2.0` = 1/2, `4.0` = 1/1; null without an uninherited timing point |
 | `bpm` | BPM | the map's BPM at this object, as written in the .osu |
@@ -54,6 +54,14 @@ all query these rows rather than re-deriving them. Skip it with `--no-objects`.
 | `slider_tail_off` | bool | slider only: the cursor was outside the follow circle (or the button was up) at the slider's last tick; null on circles |
 | `slider_missed_ticks` | — | slider only: how many of the slider's ticks the cursor missed; null on circles |
 | `slider_off_pct` | % | slider only: share of the slider body spent outside the follow circle; null on circles |
+| `sv` | × | scroll-velocity multiplier at the object (green lines): `1.0` = base, `0.5` = half, `2.0` = double |
+| `kiai` | bool | the kiai flag was on at the object |
+| `curve_type` | — | slider only: `Linear` / `Perfect` (arc) / `MultiBezier` / `Catmull`; null on circles |
+| `slider_path_px` | osu! px | slider only: one span's curve length |
+| `repeats` | spans | slider only: total spans incl. repeats (`1` = no repeat) |
+| `slider_tail_x` | osu! px | slider only: cursor position at the final tail, Hard Rock reflected |
+| `slider_tail_y` | osu! px | ... |
+| `stack` | bool | this head lands within 0.15r of the previous object's end (a stack / 2B-style overlap) |
 
 The three `slider_*` fields are **measurements of the body**, not verdicts: the
 game does not degrade a slider whose body was cut on any of the reference plays
@@ -62,11 +70,26 @@ reported and never change the judgement. See `docs/ROADMAP.md` item 3.
 
 ## Rules
 
-- **Additive only.** New fields may be appended; existing names, units and
-  meanings do not change. A breaking change bumps `schema_version`.
+- **Additive only, except when the meaning changes.** New fields may be appended;
+  existing names, units and meanings do not change unless `schema_version` is
+  bumped and this file says so. v2 changes one meaning: `spacing_r` is now
+  measured from the previous object's **end** (slider tail) instead of its head,
+  and fixes the same travel used by `breakdown.required_speeds`. Everything else
+  in v2 is additive.
 - **Null means unknown, never zero.** A missing timing point, first-object
   spacing, a spinner's aim — all `null`; consumers must treat them as "no data",
   and must not silently drop the row.
 - **Nothing here interprets the play.** Buckets, taxonomies and verdicts belong
   to the analysis layers above; this file is measurement only, so every later
   question can be asked of the same rows after the fact.
+
+## Provenance and the score block
+
+The metrics JSON also carries `score_meta`, read from the lazer trailing block
+(not from these per-object rows): `online_id`, exact mods with `settings`,
+`speed_change` (a DT at 1.2x), `statistics` / `maximum_statistics` (per-play
+category counts, including `slider_tail_hit`) and `pauses_ms`. `slider_truth`
+compares the game's aggregate `slider_tail_hit` with the frame-based
+`metrics.sliders` tail count: aggregate truth, never per-object. `sequences`
+holds the n-gated fast-group and turn-shape labels, and `breakdown` / `profile`
+read the tail-aware spacing.

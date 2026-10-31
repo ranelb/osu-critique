@@ -93,3 +93,13 @@ def test_build_ramp_reports_the_missiest_window():
     assert ramp["miss"] >= 4
     assert any(20 <= i <= 23 for i in ramp["object_ids"])
     assert ramp["t0"] <= ramp["t1"] and ramp["speed"] is not None
+
+
+def test_required_speed_starts_at_a_slider_tail():
+    """A jump after a slider starts where the cursor leaves the body."""
+    objs = [
+        {"i": 0, "x": 0.0, "y": 0.0, "t": 0.0, "result": "300",
+         "slider_tail_x": 100.0, "slider_tail_y": 0.0},
+        {"i": 1, "x": 0.0, "y": 0.0, "t": 100.0, "result": "300"},
+    ]
+    assert B.required_speeds(objs)[1] == pytest.approx(1.0)   # 100 px / 100 ms

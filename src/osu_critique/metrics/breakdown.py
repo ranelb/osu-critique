@@ -36,18 +36,32 @@ def _num(x, k):
     return v if isinstance(v, (int, float)) else None
 
 
-def required_speeds(objs, max_gap_ms=MAX_GAP_MS):
-    """``{i: px/ms}`` needed to travel from the previous object to object ``i``.
+def _end_position(x):
+    """Where the cursor leaves an object: a slider's tail, else its head."""
+    tx = x.get("slider_tail_x")
+    ty = x.get("slider_tail_y")
+    if tx is None:
+        tx = x.get("end_x")
+    if ty is None:
+        ty = x.get("end_y")
+    return (x["x"] if tx is None else tx, x["y"] if ty is None else ty)
 
-    Gaps longer than ``max_gap_ms`` are breaks, not travel, and are skipped;
-    the first object has no predecessor and no entry.
+
+def required_speeds(objs, max_gap_ms=MAX_GAP_MS):
+    """``{i: px/ms}`` needed to travel from the previous object's *end*.
+
+    For a slider that is its tail, repeats folded back, not its head: the cursor
+    has to walk the body before it can start the next jump. Gaps longer than
+    ``max_gap_ms`` are breaks, not travel, and are skipped; the first object has
+    no predecessor and no entry.
     """
     req = {}
     for a, b in zip(objs, objs[1:]):
         dt = b["t"] - a["t"]
         if dt <= 0 or dt > max_gap_ms:
             continue
-        req[b["i"]] = math.hypot(b["x"] - a["x"], b["y"] - a["y"]) / dt
+        ax, ay = _end_position(a)
+        req[b["i"]] = math.hypot(b["x"] - ax, b["y"] - ay) / dt
     return req
 
 
