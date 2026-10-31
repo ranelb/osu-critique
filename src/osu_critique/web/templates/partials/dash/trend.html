@@ -1,6 +1,7 @@
+{% from "partials/gloss.html" import learn with context %}
 {% set t = data.trend %}
 <section class="panel" id="w-trend">
-  <h2>accuracy &amp; UR <span class="count">{{ t.points | length }} weeks</span></h2>
+  <h2>accuracy &amp; UR {{ learn('ur') }} <span class="count">{{ t.points | length }} weeks</span></h2>
   {% if not t.points %}
     <p class="muted">No plays in the last {{ t.weeks }} weeks.</p>
   {% else %}

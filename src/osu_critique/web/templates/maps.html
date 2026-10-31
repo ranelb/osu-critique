@@ -24,6 +24,8 @@
 
 <div class="grid">
 {% for m in maps %}
+  {% set blocked = (m.md5 in blocked_maps) or (m.set_id in blocked_sets) %}
+  <div class="card-wrap{{ ' is-blocked' if blocked }}">
   <a class="card" href="/map/{{ m.md5 }}">
     <div class="cover">
       <img src="/api/cover/{{ m.md5 }}?size=thumb" alt="" loading="lazy" decoding="async"
@@ -49,6 +51,20 @@
       </div>
     </div>
   </a>
+  <form class="card-x" method="post"
+        action="{{ '/blacklist/remove' if blocked else '/blacklist' }}">
+    <input type="hidden" name="md5" value="{{ m.md5 }}">
+    <input type="hidden" name="next"
+           value="{{ request.url.path }}{% if request.url.query %}?{{ request.url.query }}{% endif %}">
+    {% if blocked %}
+    <button class="x" name="scope" value="map" title="suggest this map again"
+            aria-label="unblock">↺</button>
+    {% else %}
+    <button class="x" name="scope" value="map"
+            title="never suggest this map" aria-label="blacklist">×</button>
+    {% endif %}
+  </form>
+  </div>
 {% else %}
   <p class="empty">
     No maps indexed. Run <code>osu-critique batch</code>, then

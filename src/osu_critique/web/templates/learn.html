@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}learn · osu-critique{% endblock %}
+{% block body %}
+<section class="page-head dash-head">
+  <div>
+    <h1>learn</h1>
+    <p class="muted">Every number the dashboard prints, defined once. The formulas
+      live in <code>docs/</code>; the wording lives here, so a tooltip and this
+      page cannot drift apart.</p>
+  </div>
+  <a class="clear" href="/">← dashboard</a>
+</section>
+
+{% for key, label, terms in sections %}
+<section class="panel learn-group" id="{{ key }}">
+  <h2>{{ label }}</h2>
+  <dl class="glossary">
+    {% for t in terms %}
+    <div class="gterm" id="{{ t.id }}">
+      <dt>{{ t.term }}</dt>
+      <dd>
+        <p class="gshort">{{ t.short }}</p>
+        <p>{{ t.long }}</p>
+        {% if t.how %}
+        <ul class="ghow">
+          {% for line in t.how %}<li>{{ line }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if t.doc %}<p class="fineprint"><a href="{{ t.doc }}">how it is computed →</a></p>{% endif %}
+        <p class="fineprint"><a href="#{{ key }}">back to {{ label }}</a></p>
+      </dd>
+    </div>
+    {% endfor %}
+  </dl>
+</section>
+{% endfor %}
+{% endblock %}

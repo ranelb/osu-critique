@@ -19,6 +19,7 @@ skip), then serves until interrupted.
 |---|---|
 | `/` | the **dashboard**: configurable widgets — form (30/90 d), recommendations, skill profile, weak spots, accuracy+UR trend, activity calendar, recently played, what's new. See [The dashboard](#the-dashboard). |
 | `/maps` | one card per beatmap: cover, difficulty, star pill, ranked status, attempts, best accuracy, last played. Search by artist/title/difficulty; sort by recency, accuracy, SR, attempts or pp; filter by status or "trustworthy only". |
+| `/learn` | the glossary: every term the dashboard prints, defined once with an anchor, a one-liner and how it is computed. Linked from every card label (native `title` tooltip) and from the widget headers. See [Teaching](#teaching). |
 | `/settings` | dashboard layout (player, stretch, card count, buckets, widget order/windows), the blacklist manager, and read-only resolved paths. See [Settings](#settings). |
 | `POST /blacklist`, `POST /blacklist/remove` | the × on a card and the manager: add/remove a difficulty or a whole beatmapset. Canonical in `out/blacklist.json` (see [recommend.md](recommend.md)). |
 | `/map/<beatmap_md5>` | hero cover + `[Metadata]` from the `.osu`, star/status pills, attempt table (sortable via htmx, no page reload), the cross-attempt block (first → latest per family/shape, with the `attempts` gate and verdict). |
@@ -82,6 +83,30 @@ The × on a recommendation card blocks a difficulty; the second button blocks
 the whole beatmapset. Both post to `/blacklist`, which writes the sidecar and
 mirrors it into the index. The manager in settings lists both scopes with an
 unblock button, because a list you cannot undo is a trap.
+
+The same × sits on every `/maps` card (a sibling of the card link — a form
+inside an `<a>` is invalid markup, so the card is wrapped) and on the map page,
+where "whole set" is offered too. A blocked map is dimmed with an unblock
+button, so nothing becomes unreachable.
+
+## Teaching
+
+The dashboard's vocabulary — "band-corrected miss rate", "excess", "improver",
+"comfort SR" — is defined **once**, in `web/glossary.py`, and everything else
+points at it:
+
+- `learn.html` renders the whole list at `/learn`, grouped into numbers /
+  profile / recommendations, with stable anchors (`#improver`).
+- `partials/gloss.html` has two macros: `gloss(id, label)` turns a label into a
+  link whose `title` is the one-liner (hover on a desktop, long-press on a
+  phone, no JavaScript), and `learn(id)` is the `?` in a widget header.
+- `docs/` stays the authority for formulas; each entry links there instead of
+  restating a derivation, so there is exactly one wording and exactly one
+  formula source.
+
+`tests/test_dashboard.py` asserts the mechanical half: every `href="/learn#…"`
+on `/` resolves to an anchor that exists, so a rename cannot leave a dead
+tooltip behind.
 
 ## The rail
 

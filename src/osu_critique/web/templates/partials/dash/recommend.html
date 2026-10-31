@@ -1,6 +1,8 @@
+{% from "partials/gloss.html" import gloss, learn with context %}
 {% set r = data.recommend %}
+{% set bucket_term = {'new': 'new-bucket', 'improver': 'improver', 'maintain': 'maintain'} %}
 <section class="panel" id="w-recommend">
-  <h2>recommendations
+  <h2>recommendations {{ learn('candidate-gates') }}
     <span class="count">{{ r.recommendations | length }}</span></h2>
   {% if r.error %}
     <p class="muted">{{ r.error }}</p>
@@ -14,15 +16,16 @@
       maps — the page is not going to invent a weakness to look clever.
       {% else %}
       Chosen against your weaknesses below, each inside
-      {{ r.comfort_sr | num(2) }}★ ± 1. Scores are deterministic; the line under
-      each card is its evidence.
+      {{ gloss('comfort-sr') }} {{ r.comfort_sr | num(2) }}★ ± 1
+      ({{ gloss('stretch') }} {{ r.stretch }}). Scores are deterministic; the line
+      under each card is its evidence.
       {% endif %}
     </p>
     <div class="recs">
     {% for c in r.recommendations %}
       <article class="rec">
         <div class="rec-head">
-          <span class="pill b-{{ c.bucket }}">{{ c.bucket }}</span>
+          <span class="pill b-{{ c.bucket }}">{{ gloss(bucket_term[c.bucket], c.bucket) }}</span>
           <span class="pill star">{{ c.sr | star }}</span>
           <a class="rec-title" href="/map/{{ c.beatmap_md5 }}">{{ c.artist }} — {{ c.title }}</a>
           <span class="muted rec-ver">[{{ c.version }}]</span>
@@ -44,9 +47,11 @@
     {% endfor %}
     </div>
     <p class="fineprint">
-      pool: {{ r.counts.new }} new · {{ r.counts.improver }} improver ·
-      {{ r.counts.maintain }} maintain · {{ r.counts.gated }} outside the gates
-      {% if r.counts.blocked %} · {{ r.counts.blocked }} blacklisted{% endif %}
+      pool: {{ r.counts.new }} {{ gloss('new-bucket', 'new') }} ·
+      {{ r.counts.improver }} {{ gloss('improver') }} ·
+      {{ r.counts.maintain }} {{ gloss('maintain') }} ·
+      {{ r.counts.gated }} outside the {{ gloss('candidate-gates', 'gates') }}
+      {% if r.counts.blocked %} · {{ r.counts.blocked }} {{ gloss('blacklist', 'blacklisted') }}{% endif %}
       {% if r.counts.relax_only %} · {{ r.counts.relax_only }} played only in relax{% endif %}
     </p>
   {% endif %}

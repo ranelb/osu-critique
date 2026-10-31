@@ -1,0 +1,18 @@
+{# Turn a label into a link to its glossary anchor, with the one-liner as a
+   native tooltip. No JavaScript: `title` works on hover, and on a long-press on
+   a phone. `label` lets a card say "miss rate" while linking to the longer
+   term name. #}
+{% macro gloss(id, label=None) -%}
+{%- set t = glossary.BY_ID.get(id) -%}
+{%- if t -%}
+<a class="gloss" href="/learn#{{ t.id }}" title="{{ t.short }}">{{ label or t.term }}</a>
+{%- else -%}
+{{ label or id }}
+{%- endif -%}
+{%- endmacro %}
+
+{# A widget header with its "?" link — the entry point when the term is not in
+   the visible text. #}
+{% macro learn(term_id) -%}
+<a class="gloss-mark" href="/learn#{{ term_id }}" title="what this means">?</a>
+{%- endmacro %}

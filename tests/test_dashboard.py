@@ -89,6 +89,15 @@ def build_corpus(tmp_path: Path) -> Path:
         path = out / f"{doc['tag']}_metrics.json"
         path.write_text(json.dumps(doc))
         index.upsert_run(doc, path, outdir=out)
+    # the .osu would carry the set id; the fixture has no map file, so set it
+    # after the runs exist (the first upsert creates the beatmaps row)
+    conn = index.connect(index.db_path(out))
+    try:
+        conn.execute("UPDATE beatmaps SET set_id = 1 WHERE beatmap_md5 = ?",
+                     (MAP_PLAYED,))
+        conn.commit()
+    finally:
+        conn.close()
     return out
 
 
@@ -328,3 +337,78 @@ def test_settings_lists_and_unblocks(client, settings_file):
     client.post("/blacklist/remove", data={"md5": MAP_NEW, "next": "/settings"},
                 follow_redirects=False)
     assert blacklist.load(out)["maps"] == []
+
+
+# ------------------------------------------------------------------ learn --
+
+def test_learn_defines_every_term_with_a_stable_anchor(client):
+    r = client.get("/learn")
+    assert r.status_code == 200
+    from osu_critique.web import glossary
+    for term in glossary.TERMS:
+        assert f'id="{term["id"]}"' in r.text
+        assert term["short"] and term["long"] and term["how"] and term["doc"]
+        assert term["id"] == term["id"].lower().replace(" ", "-")
+    ids = [t["id"] for t in glossary.TERMS]
+    assert len(ids) == len(set(ids))
+
+
+def test_every_glossary_link_on_the_dashboard_resolves(client):
+    """The done-when: no card may point at an anchor that does not exist."""
+    import re
+    page = client.get("/").text
+    learn = client.get("/learn").text
+    targets = set(re.findall(r'href="/learn#([a-z0-9-]+)"', page))
+    assert targets, "the dashboard links to no glossary anchor at all"
+    missing = sorted(t for t in targets if f'id="{t}"' not in learn)
+    assert missing == []
+
+
+def test_terms_carry_a_tooltip_not_just_a_link(client):
+    page = client.get("/").text
+    assert 'class="gloss"' in page
+    assert 'title="your miss rate minus your own median' in page
+
+
+def test_learn_is_linked_from_the_dashboard_header(client):
+    assert 'href="/learn"' in client.get("/").text
+
+
+def test_glossary_internal_backlinks_exist(client):
+    import re
+    learn = client.get("/learn").text
+    backlinks = set(re.findall(r'href="#([a-z]+)"', learn))
+    for target in backlinks:
+        assert f'id="{target}"' in learn
+
+
+# ---------------------------------------------------- blacklist everywhere --
+
+def test_the_listing_card_can_blacklist_and_unblock(client):
+    out = client.app.state.outdir
+    page = client.get("/maps").text
+    assert 'class="card-x"' in page
+    assert "never suggest this map" in page
+    client.post("/blacklist", data={"md5": MAP_PLAYED, "scope": "map",
+                                    "next": "/maps"})
+    blocked_page = client.get("/maps").text
+    assert "card-wrap is-blocked" in blocked_page
+    assert "suggest this map again" in blocked_page
+    assert MAP_PLAYED in blacklist.load(out)["maps"]
+    client.post("/blacklist/remove", data={"md5": MAP_PLAYED, "next": "/maps"})
+    assert blacklist.load(out)["maps"] == []
+    assert "card-wrap is-blocked" not in client.get("/maps").text
+
+
+def test_the_map_page_can_blacklist_the_difficulty_and_the_set(client):
+    out = client.app.state.outdir
+    page = client.get(f"/map/{MAP_PLAYED}").text
+    assert "never suggest this difficulty" in page
+    assert "whole set" in page
+    client.post("/blacklist", data={"md5": MAP_PLAYED, "scope": "map",
+                                    "next": f"/map/{MAP_PLAYED}"})
+    page = client.get(f"/map/{MAP_PLAYED}").text
+    assert "blacklisted" in page and "unblock" in page
+    client.post("/blacklist/remove", data={"md5": MAP_PLAYED,
+                                           "next": f"/map/{MAP_PLAYED}"})
+    assert "never suggest this difficulty" in client.get(f"/map/{MAP_PLAYED}").text

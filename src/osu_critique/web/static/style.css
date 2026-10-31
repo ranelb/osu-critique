@@ -306,7 +306,7 @@ details.all-objects summary { cursor: pointer; color: var(--muted); font-size: .
 
 /* ------------------------------------------------------------ responsive - */
 @media (max-width: 620px) {
-  /* five nav links do not fit beside the brand on a phone: wrap, and drop the
+  /* six nav links do not fit beside the brand on a phone: wrap, and drop the
      version number, which is the least useful thing in the header */
   .topbar { flex-wrap: wrap; gap: .45rem .9rem; }
   .nav { flex-wrap: wrap; gap: .45rem .9rem; font-size: .85rem; }
@@ -746,4 +746,42 @@ table.data tr.is-weak td { background: #ff5f6d0d; }
   .rec-act { flex-direction: column; align-items: flex-start; }
   .kv { grid-template-columns: 1fr; gap: .1rem; }
   .kv dt { margin-top: .4rem; }
+  /* the dense row puts the title under the card's top-right corner: centre the
+     blacklist button and reserve its width, or it eats the title */
+  .card-x { top: 50%; transform: translateY(-50%); }
+  .card-wrap .card-body { padding-right: 2.1rem; }
 }
+
+/* ------------------------------------------------------------ glossary ---- */
+
+.gloss { border-bottom: 1px dotted #ff66aa66; color: inherit; }
+.gloss:hover { color: var(--pink); border-bottom-color: var(--pink); }
+.gloss-mark { display: inline-block; width: 1.05rem; height: 1.05rem;
+  line-height: 1.05rem; text-align: center; border-radius: 999px;
+  border: 1px solid var(--line); color: var(--muted); font-size: .68rem;
+  font-weight: 600; vertical-align: .12em; margin-left: .3rem; }
+.gloss-mark:hover { border-color: var(--pink); color: var(--pink); }
+.pill a { color: inherit; border-bottom: 0; }
+.pill a:hover { color: inherit; filter: brightness(1.15); }
+
+.glossary { margin: 0; display: grid; gap: 1.1rem; }
+.gterm { scroll-margin-top: 5rem; }
+.gterm dt { font-weight: 700; font-size: 1rem; margin-bottom: .2rem; }
+.gterm dd { margin: 0; font-size: .9rem; color: #c3cbdc; line-height: 1.5; }
+.gshort { color: var(--pink); font-size: .82rem; margin: 0 0 .35rem; }
+.ghow { margin: .4rem 0 .3rem; padding-left: 1.1rem; font-size: .8rem;
+  color: var(--muted); }
+.gterm:target dt { color: var(--pink); }
+
+/* --------------------------------------------------- blacklist buttons ---- */
+
+.card-wrap { position: relative; min-width: 0; display: flex; }
+.card-wrap .card { width: 100%; }
+.card-wrap.is-blocked { opacity: .5; }
+.card-x { position: absolute; top: .45rem; right: .45rem; z-index: 2; }
+button.x { width: 1.6rem; height: 1.6rem; padding: 0; border-radius: 999px;
+  background: #0a0c12cc; border: 1px solid #ffffff33; color: #eef2fa;
+  font-size: .9rem; line-height: 1; display: grid; place-items: center; }
+button.x:hover { border-color: var(--pink); color: var(--pink); }
+.map-actions { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
+.dash-links { display: flex; gap: 1rem; flex-wrap: wrap; }

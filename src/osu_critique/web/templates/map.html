@@ -10,7 +10,7 @@
     <img class="hero-img" src="/api/cover/{{ md5 }}?size=hero" alt="" onerror="this.remove()">
     <div class="hero-shade"></div>
     <div class="hero-text">
-      <div class="crumbs"><a href="/">maps</a><span>/</span>{{ beatmap.version or '—' }}</div>
+      <div class="crumbs"><a href="/maps">maps</a><span>/</span>{{ beatmap.version or '—' }}</div>
       <h1>{{ title_display }}</h1>
       <p class="meta">
         {% if beatmap.creator %}mapped by <b>{{ beatmap.creator }}</b>{% endif %}
@@ -20,6 +20,34 @@
       </p>
     </div>
   </header>
+
+  {% set is_blocked = (md5 in blocked_maps) or (beatmap.set_id in blocked_sets) %}
+  <p class="fineprint map-actions">
+    {% if is_blocked %}
+      <span class="pill bad-pill">blacklisted</span> — the recommender will not
+      suggest this again.
+      <form method="post" action="/blacklist/remove" class="inline">
+        <input type="hidden" name="md5" value="{{ md5 }}">
+        {% if beatmap.set_id %}<input type="hidden" name="set_id" value="{{ beatmap.set_id }}">{% endif %}
+        <input type="hidden" name="next" value="{{ request.url.path }}">
+        <button class="link">unblock</button>
+      </form>
+    {% else %}
+      <form method="post" action="/blacklist" class="inline">
+        <input type="hidden" name="md5" value="{{ md5 }}">
+        <input type="hidden" name="next" value="{{ request.url.path }}">
+        <button class="link" name="scope" value="map">× never suggest this difficulty</button>
+      </form>
+      {% if beatmap.set_id %}
+      <form method="post" action="/blacklist" class="inline">
+        <input type="hidden" name="md5" value="{{ md5 }}">
+        <input type="hidden" name="set_id" value="{{ beatmap.set_id }}">
+        <input type="hidden" name="next" value="{{ request.url.path }}">
+        <button class="link" name="scope" value="set">× whole set</button>
+      </form>
+      {% endif %}
+    {% endif %}
+  </p>
 
   <section class="statrow">
     <div class="statcard"><span class="k">attempts</span><span class="v">{{ n_attempts }}</span></div>

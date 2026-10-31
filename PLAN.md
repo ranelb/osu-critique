@@ -153,6 +153,16 @@ the settings manager, docs updates (`docs/web.md`, `docs/ROADMAP.md`,
 glossary anchor that exists, `pytest -q` is green including the `[web]` extra,
 and `docs/web.md` describes only what the code does.
 
+Shipped: `web/glossary.py` (20 terms, three groups, one-liner + long + how +
+doc link), `/learn`, `partials/gloss.html` (`gloss`/`learn` macros with native
+`title` tooltips), × on `/maps` cards and the map page (difficulty and whole
+set, with unblock), `tests/test_dashboard.py` +7 tests. Anchor integrity is a
+test, not a promise.
+
+Not done, deliberately: commit-able screenshots from the synthetic corpus
+(`docs/web.md`'s "0.20.0 polish" wish). `docs/img/*.webp` still come from the
+owner's real corpus, and re-rendering them is its own job, not a code change.
+
 ## Open questions
 
 None blocking. Two known edges, accepted: orphaned `.osu` blobs count as

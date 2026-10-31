@@ -30,7 +30,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .. import (__version__, annotations, answers, blacklist, coach, covers,
                 critiques, dashboard, digest, index, markdown, recommend, scope)
 from ..config import outdir as default_outdir
-from . import data, icons
+from . import data, glossary, icons
 
 ROOT = Path(__file__).parent
 STATIC = ROOT / "static"
@@ -123,6 +123,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
 
     templates.env.globals.update(
         version=__version__,
+        glossary=glossary,
         asset_v=asset_v,
         table_limit=TABLE_LIMIT,
         brand="osu-critique",
@@ -150,6 +151,11 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             conn.close()
         return render("dashboard.html", request, **page)
 
+    @app.get("/learn", response_class=HTMLResponse)
+    def learn(request: Request):
+        return render("learn.html", request, sections=glossary.SECTIONS,
+                      terms=glossary.TERMS)
+
     @app.get("/maps", response_class=HTMLResponse)
     def maps(request: Request, q: str | None = None,
              sort: str = "recent", status: str | None = None,
@@ -163,8 +169,11 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
                                   offset=max(0, offset))
         finally:
             conn.close()
+        blocked = blacklist.load(out)
         return render("maps.html", request, **page, q=q or "",
                       status=status or "", trust=trust or "",
+                      blocked_maps=set(blocked["maps"]),
+                      blocked_sets=set(blocked["sets"]),
                       sorts=list(data.SORTS.items()))
 
     # ---------------------------------------------------------- settings --
@@ -310,6 +319,9 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
         if page is None:
             raise HTTPException(status_code=404, detail="no such beatmap")
         page["notes"] = annotations.for_map(out, beatmap_md5)
+        blocked = blacklist.load(out)
+        page["blocked_maps"] = set(blocked["maps"])
+        page["blocked_sets"] = set(blocked["sets"])
         page["toc"] = data.map_toc(page)
         return render("map.html", request, **page)
 

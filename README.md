@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.27.0** — 461 tests (289 run anywhere without optional extras), CI on
+> **Status: 0.27.0** — 468 tests (289 run anywhere without optional extras), CI on
 > Python 3.10-3.14. The judgement is validated against the game's own recorded
 > counts; see [Validation and trust](#validation-and-trust).
 
@@ -97,7 +97,7 @@ See [Commands](#commands) for every command, or run `osu-critique --help`.
 | **Stars/pp** | `stars`, `pp` | optional extra (`[stars]`) | star ratings and pp per play |
 | **Profile** | `profile` | osu! API creds (BYO, optional) | player stats for context |
 | **Status** | `status` | osu! API creds (BYO, optional) | pp-eligible vs unranked split |
-| **Web** | `serve` | optional extra (`[web]`) | local frontend: a configurable dashboard (recommendations, skill profile, form, trend, calendar), the map showcase, run pages with near-miss boards, the ask tab, the feed, settings |
+| **Web** | `serve` | optional extra (`[web]`) | local frontend: a configurable dashboard (recommendations, skill profile, form, trend, calendar), the map showcase, run pages with near-miss boards, the ask tab, the feed, **learn** (the glossary), settings |
 | **Library** | `library scan` | optional extra (`[stars]`) for star ratings | map-side features for **every installed beatmap**, played or not — the candidate pool behind map recommendations |
 | **Recommend** | `recommend` | no | what to play next: your weaknesses from miss rates, then maps that train them (`new` / `improver` / `maintain`), each with its own evidence line |
 | **Annotate** | `annotate` | no | notes the coach reads, in map time |
@@ -240,7 +240,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 461 tests (6 need real replays, 76 need [web])
+pytest -q                     # 468 tests (6 need real replays, 76 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
