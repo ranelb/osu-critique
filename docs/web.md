@@ -89,6 +89,20 @@ inside an `<a>` is invalid markup, so the card is wrapped) and on the map page,
 where "whole set" is offered too. A blocked map is dimmed with an unblock
 button, so nothing becomes unreachable.
 
+## "Open in osu!"
+
+`/learn` is not the only way out of the page: a recommendation card and the map
+page carry an **open in osu!** link, which is a protocol-handler URL, not an API
+call — `osu://b/<beatmap id>` is lazer's `OpenBeatmap` action (`osu://s/<set id>`
+is `OpenBeatmapSet`), parsed by `MessageFormatter` on every platform. There is no
+server round trip and no key: the browser hands the URL to the registered `osu`
+scheme handler and lazer opens the map.
+
+A map imported from a folder without online ids cannot be pointed at, so the
+button degrades honestly: the set when only a set id exists, and a disabled "no
+online id" label (with the reason in its tooltip) when neither does. On a phone
+the scheme often has no handler; the link is simply inert there.
+
 ## Teaching
 
 The dashboard's vocabulary — "band-corrected miss rate", "excess", "improver",

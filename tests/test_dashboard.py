@@ -412,3 +412,60 @@ def test_the_map_page_can_blacklist_the_difficulty_and_the_set(client):
     client.post("/blacklist/remove", data={"md5": MAP_PLAYED,
                                            "next": f"/map/{MAP_PLAYED}"})
     assert "never suggest this difficulty" in client.get(f"/map/{MAP_PLAYED}").text
+
+
+# ------------------------------------------------------------ open in osu --
+
+def test_a_recommendation_links_into_osu_lazer(client):
+    """`osu://b/<id>` is lazer's OpenBeatmap action (MessageFormatter.cs)."""
+    out = client.app.state.outdir
+    conn = index.connect(index.db_path(out))
+    try:
+        conn.execute("UPDATE library_beatmaps SET beatmap_id = 424242, "
+                     "set_id = 31337 WHERE beatmap_md5 = ?", (MAP_NEW,))
+        conn.commit()
+    finally:
+        conn.close()
+    page = client.get("/").text
+    assert 'href="osu://b/424242"' in page
+    assert 'href="osu://s/31337"' not in page      # the map link wins
+
+
+def test_without_a_beatmap_id_the_set_is_opened_instead(client):
+    out = client.app.state.outdir
+    conn = index.connect(index.db_path(out))
+    try:
+        conn.execute("UPDATE library_beatmaps SET beatmap_id = NULL, "
+                     "set_id = 31337 WHERE beatmap_md5 = ?", (MAP_NEW,))
+        conn.commit()
+    finally:
+        conn.close()
+    assert 'href="osu://s/31337"' in client.get("/").text
+
+
+def test_without_any_online_id_the_button_says_so(client):
+    out = client.app.state.outdir
+    conn = index.connect(index.db_path(out))
+    try:
+        conn.execute("UPDATE library_beatmaps SET beatmap_id = NULL, set_id = NULL "
+                     "WHERE beatmap_md5 = ?", (MAP_NEW,))
+        conn.commit()
+    finally:
+        conn.close()
+    page = client.get("/").text
+    assert "no online id" in page
+    assert 'href="osu://b/' not in page
+
+
+def test_the_map_page_offers_the_game_link(client):
+    out = client.app.state.outdir
+    conn = index.connect(index.db_path(out))
+    try:
+        conn.execute("UPDATE beatmaps SET beatmap_id = 555001, set_id = 999001 "
+                     "WHERE beatmap_md5 = ?", (MAP_PLAYED,))
+        conn.commit()
+    finally:
+        conn.close()
+    page = client.get(f"/map/{MAP_PLAYED}").text
+    assert 'href="osu://b/555001"' in page
+    assert "play in osu!" in page

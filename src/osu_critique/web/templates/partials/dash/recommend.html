@@ -1,4 +1,5 @@
 {% from "partials/gloss.html" import gloss, learn with context %}
+{% from "partials/osu.html" import osu_open with context %}
 {% set r = data.recommend %}
 {% set bucket_term = {'new': 'new-bucket', 'improver': 'improver', 'maintain': 'maintain'} %}
 <section class="panel" id="w-recommend">
@@ -32,6 +33,7 @@
         </div>
         <p class="rec-why">{{ c.why }}</p>
         <div class="rec-act">
+          {{ osu_open(c.beatmap_id, c.set_id) }}
           <a class="open" href="/map/{{ c.beatmap_md5 }}">history →</a>
           <form method="post" action="/blacklist">
             <input type="hidden" name="md5" value="{{ c.beatmap_md5 }}">

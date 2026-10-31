@@ -785,3 +785,13 @@ button.x { width: 1.6rem; height: 1.6rem; padding: 0; border-radius: 999px;
 button.x:hover { border-color: var(--pink); color: var(--pink); }
 .map-actions { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; }
 .dash-links { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+/* ------------------------------------------------------- open in osu! ---- */
+
+.osu-open { display: inline-flex; align-items: center; gap: .3rem;
+  border: 1px solid #ff66aa66; background: var(--pink-soft); color: #ffb3d2;
+  border-radius: 999px; padding: .12rem .6rem; font-size: .78rem;
+  font-weight: 600; white-space: nowrap; }
+.osu-open:hover { border-color: var(--pink); color: #ffd6e8; }
+.osu-open.off { border-color: var(--line); background: none; color: var(--muted);
+  font-weight: 400; }

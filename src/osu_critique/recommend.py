@@ -512,6 +512,7 @@ def _build(conn, outdir, player, limit, stretch, buckets, use_blacklist) -> dict
         score = (0.5 + similarity) * diff_fit * bucket_term
         scored.append({
             "beatmap_md5": md5,
+            "beatmap_id": row["beatmap_id"],
             "set_id": set_id,
             "title": row["title"],
             "artist": row["artist"],

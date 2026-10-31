@@ -1,0 +1,17 @@
+{# "open in osu!" is a protocol handler link, not an API call: lazer registers
+   `osu://` on every platform and MessageFormatter maps
+   `osu://b/<beatmap id>` -> OpenBeatmap and `osu://s/<set id>` -> OpenBeatmapSet.
+   A map imported from a folder without online ids cannot be pointed at, and
+   saying so beats a dead button. #}
+{% macro osu_open(beatmap_id, set_id=None, label='open in osu!') -%}
+{%- if beatmap_id -%}
+<a class="osu-open" href="osu://b/{{ beatmap_id }}"
+   title="opens this difficulty in osu!lazer (osu://b/{{ beatmap_id }})">▶ {{ label }}</a>
+{%- elif set_id -%}
+<a class="osu-open" href="osu://s/{{ set_id }}"
+   title="this difficulty has no online id; opens the beatmapset instead (osu://s/{{ set_id }})">▶ open set in osu!</a>
+{%- else -%}
+<span class="osu-open off"
+      title="this map has no online id in its .osu, so osu! cannot be pointed at it">▶ no online id</span>
+{%- endif -%}
+{%- endmacro %}
