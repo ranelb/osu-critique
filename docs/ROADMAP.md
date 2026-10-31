@@ -31,14 +31,24 @@ it does not need a schema change.
 
 ## Shipped since 0.12.0
 
-- **Unreleased — the data layer.** The lazer `.osr` trailing score-info block is
-  read (`online_id`, exact mod settings incl. custom rate, pauses, per-category
-  `statistics` / `maximum_statistics`); `speed_change` drives the player time
-  base; `slider_truth` exposes the game's aggregate slider tails for
-  calibration. The per-object schema v2 adds `sv`, `kiai`, `curve_type`,
-  `slider_path_px`, `repeats`, `slider_tail_x/y`, `stack`, and `spacing_r` /
-  required speed now start at a slider's tail. A small `sequences` block adds
-  n-gated fast-group and turn-shape labels over the existing rows.
+- **0.28.0 — the data layer, the map side, the dashboard.** The lazer `.osr`
+  trailing score-info block is read (`online_id`, exact mod settings incl. custom
+  rate, pauses, per-category `statistics` / `maximum_statistics`);
+  `speed_change` drives the player time base; `slider_truth` exposes the game's
+  aggregate slider tails for calibration. The per-object schema v2 adds `sv`,
+  `kiai`, `curve_type`, `slider_path_px`, `repeats`, `slider_tail_x/y`, `stack`,
+  and `spacing_r` / required speed now start at a slider's tail. A `sequences`
+  block adds n-gated fast-group and turn-shape labels over the existing rows.
+
+  Then the map side ([library.md](library.md)): `library scan` parses every
+  installed `.osu` into `library_beatmaps` (SR, spacing buckets, sustained runs,
+  anti-flow share), so maps you have never played can be measured. On top of it,
+  `recommend` ([recommend.md](recommend.md)) reads band-corrected miss rates into
+  a skill profile and produces three deterministic buckets — `new`, `improver`
+  (with its proof), `maintain` — plus `out/blacklist.json`. The web frontend
+  ([web.md](web.md)) gained a widget dashboard at `/` (the listing moved to
+  `/maps`), a settings page whose file *is* the layout, `/learn` for the
+  vocabulary, and a blacklist × on every card.
 - **0.24.x — critique tab refinements.** The size threshold warns instead of
   blocking; list pickers load 40 rows at a time on scroll; the mod filter covers
   maps and ranges only; the LLM answer sits above the deterministic summary; each

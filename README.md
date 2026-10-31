@@ -8,9 +8,15 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.27.0** — 468 tests (289 run anywhere without optional extras), CI on
-> Python 3.10-3.14. The judgement is validated against the game's own recorded
-> counts; see [Validation and trust](#validation-and-trust).
+> **Status: 0.28.0** — 474 tests on Python 3.10–3.14 (the `[web]` extra is
+> installed on one interpreter; the analysis core needs no optional extras). The
+> judgement is validated against the game's own recorded counts; see
+> [Validation and trust](#validation-and-trust).
+>
+> 0.28.0 adds the map side: `osu-critique library scan` measures every installed
+> beatmap, `recommend` turns your runs into a skill profile and three
+> recommendation buckets, and the web frontend gained a dashboard at `/`,
+> a settings page and a glossary at `/learn`.
 
 ## Table of Contents
 
@@ -59,7 +65,7 @@ That is the core loop. Optional extras, all bring-your-own-key:
 No git? Install the wheel from the latest release:
 
 ```sh
-pip install https://github.com/ranelb/osu-critique/releases/download/v0.10.1/osu_critique-0.10.1-py3-none-any.whl
+pip install https://github.com/ranelb/osu-critique/releases/download/v0.28.0/osu_critique-0.28.0-py3-none-any.whl
 ```
 
 See [Commands](#commands) for every command, or run `osu-critique --help`.
@@ -240,7 +246,7 @@ Full list: [docs/trust.md](docs/trust.md).
 
 ```sh
 pip install -e ".[dev]"
-pytest -q                     # 468 tests (6 need real replays, 76 need [web])
+pytest -q                     # 474 tests (6 need real replays, 117 need [web])
 ```
 
 - `tests/fixtures/` — committed golden replays + maps, plus synthetic
