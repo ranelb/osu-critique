@@ -8,7 +8,7 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.29.0** — 481 tests on Python 3.10–3.14 (the `[web]` extra is
+> **Status: 0.29.1** — 481 tests on Python 3.10–3.14 (the `[web]` extra is
 > installed on one interpreter; the analysis core needs no optional extras). The
 > judgement is validated against the game's own recorded counts; see
 > [Validation and trust](#validation-and-trust).

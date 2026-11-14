@@ -144,11 +144,37 @@ the **server** launches the game:
 1. the md5 is looked up in `library_beatmaps` (then `beatmaps`) — the client
    never supplies a URI, so the route cannot be turned into "open anything";
 2. the id becomes `osu://b/<beatmap id>` (or `osu://s/<set id>` when only a set
-   id exists) — lazer's `OpenBeatmap` / `OpenBeatmapSet` actions, parsed by
-   `MessageFormatter` on every platform;
-3. `gio open` (then `xdg-open`) hands it to the desktop, in the user session the
-   service already runs in;
-4. the redirect says what happened (`?open=ok`, `open=error`, `open=no-id`).
+   id exists) — lazer's `OpenBeatmap` / `OpenBeatmapSet` actions;
+3. **the flatpak app id is launched directly** when the scheme's desktop entry
+   starts one, then `gio open`, then `xdg-open`;
+4. the launch is *checked* (see below), and the redirect says what happened
+   (`?open=ok`, `open=error`, `open=no-id`).
+
+### Why the launch path is not just `gio open`
+
+Measured on osu!lazer 2026.1005 (flatpak), 2026-11-14, and the reason this
+button appeared to do nothing while the page said "osu! was asked to open that
+map":
+
+- The flatpak's exported `sh.ppy.osu.desktop` runs
+  `flatpak run … --file-forwarding sh.ppy.osu @@ %F @@`. `%F` is file
+  forwarding: a **URI** is treated as a path, so `gio open osu://b/1876815`
+  becomes `error: Failed to open ‘/tmp/osu:/b/1876815’` inside flatpak. The
+  launcher is detached, so **`gio open` still exits 0** — a silent failure that
+  reads as success.
+- `flatpak run sh.ppy.osu osu://b/1876815` skips that rewrite and the running
+  game receives the link (verified in its log: `BeatmapSetOverlay` focus at the
+  moment of the POST).
+
+So `_launch_candidates()` reads the `Exec=` line of whatever owns
+`x-scheme-handler/osu`, extracts the flatpak app id, and prefers
+`flatpak run <id> <uri>`; `gio open`/`xdg-open` remain for non-flatpak installs.
+`_launch_uri()` waits up to 3 s for the launcher: a non-zero exit is a real
+failure and its stderr goes to the server log, while a still-running child means
+the game is starting and counts as launched.
+
+An id that is not a real beatmap id is not an error: lazer ignores it silently,
+so the page cannot promise more than "handed it over".
 
 Doing it server-side is not a preference: a browser only launches an unknown
 scheme if it delegates to the OS, which Firefox-based browsers do not do for

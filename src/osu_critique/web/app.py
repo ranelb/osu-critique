@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import json
 import queue
+import shlex
 import subprocess
 import sys
 import threading
@@ -66,17 +67,100 @@ def _game_uri(conn, md5: str) -> str | None:
             return f"osu://{prefix}/{value}"
     return None
 
-def _launch_uri(uri: str) -> bool:
-    """Hand the URI to the desktop; the service runs in the user session."""
-    for argv in (["gio", "open", uri], ["xdg-open", uri]):
+def _handler_exec() -> str | None:
+    """The ``Exec=`` line of whatever owns ``x-scheme-handler/osu``.
+
+    Read, not guessed: the handler is the flatpak's exported desktop entry on
+    this box, but it is a plain desktop file on any other.
+    """
+    try:
+        default = subprocess.run(
+            ["xdg-mime", "query", "default", "x-scheme-handler/osu"],
+            capture_output=True, text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    name = (default.stdout or "").strip()
+    if not name:
+        return None
+    for directory in (Path.home() / ".local/share/applications",
+                      Path("/var/lib/flatpak/exports/share/applications"),
+                      Path("/usr/share/applications")):
+        entry = directory / name
+        if not entry.is_file():
+            continue
+        for line in entry.read_text(errors="replace").splitlines():
+            if line.startswith("Exec="):
+                return line[5:].strip()
+    return None
+
+
+def _flatpak_app_id(exec_line: str | None) -> str | None:
+    """The flatpak app id in a desktop entry's ``Exec``, if it launches one.
+
+    ``flatpak run --branch=stable --command=start-osu sh.ppy.osu %u`` -> the
+    token that is neither an option nor the ``run`` verb.
+    """
+    if not exec_line:
+        return None
+    try:
+        tokens = shlex.split(exec_line)
+    except ValueError:
+        return None
+    if not tokens or Path(tokens[0]).name != "flatpak":
+        return None
+    if "run" not in tokens[1:4]:
+        return None
+    for token in tokens[tokens.index("run", 1) + 1:]:
+        if token.startswith("-") or token in ("@@", "@@u", "@@F", "%u", "%U", "%f", "%F"):
+            continue
+        return token
+    return None
+
+
+def _launch_candidates(uri: str, exec_line: str | None = None) -> list[list[str]]:
+    """Ways to hand ``uri`` to the game, best first.
+
+    The flatpak's exported entry passes arguments through ``--file-forwarding``
+    with ``@@ %F @@``, which treats a URI as a *path*: `gio open osu://b/1`
+    becomes ``Failed to open ‘/tmp/osu:/b/1’`` and, being a detached launcher,
+    still exits 0 (measured on osu! 2026.1005 flatpak). Calling the app id
+    directly skips the rewrite, so a URL arrives intact.
+    """
+    candidates: list[list[str]] = []
+    app_id = _flatpak_app_id(exec_line)
+    if app_id:
+        candidates.append(["flatpak", "run", app_id, uri])
+    candidates.append(["gio", "open", uri])
+    candidates.append(["xdg-open", uri])
+    return candidates
+
+
+def _launch_uri(uri: str, exec_line: str | None = None) -> tuple[bool, str]:
+    """Launch ``uri`` and report whether the launcher actually accepted it.
+
+    ``flatpak run`` blocks while it is the foreground process, so a still-running
+    child after a couple of seconds means "starting the game with this URI" and
+    counts as success. An immediate non-zero exit is a real failure and its
+    stderr is worth showing: the difference between that and a silent no-op is
+    the whole reason this route exists.
+    """
+    for argv in _launch_candidates(uri, exec_line):
         try:
-            subprocess.Popen(argv, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL,
-                             start_new_session=True)
-            return True
+            proc = subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.PIPE, text=True,
+                                    start_new_session=True)
         except (OSError, ValueError):
             continue
-    return False
+        try:
+            _, err = proc.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            return True, ""          # still running: the game is coming up
+        if proc.returncode == 0:
+            return True, ""
+        stderr = (err or "").strip()
+        if stderr:
+            return False, stderr.splitlines()[-1][:200]
+    return False, "no launcher could be started"
 
 def _with_flag(url: str, flag: str) -> str:
     return f"{url}{'&' if '?' in url else '?'}{flag}"
@@ -339,7 +423,9 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
                 conn.close()
         if target is None:
             return _redirect(_with_flag(next_url, "open=no-id"))
-        ok = _launch_uri(target)
+        ok, reason = _launch_uri(target, _handler_exec())
+        if not ok:
+            print(f"[open] {target}: {reason}", file=sys.stderr)
         return _redirect(_with_flag(next_url, "open=ok" if ok else "open=error"))
 
     @app.post("/blacklist")

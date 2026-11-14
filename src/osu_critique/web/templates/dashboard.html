@@ -13,8 +13,11 @@
 <p class="fineprint warn open-note">That map has no online id in its .osu, so osu!
   cannot be pointed at it.</p>
 {% elif open_note == 'error' %}
-<p class="fineprint warn open-note">Could not launch osu! — is the desktop handler
-  available to the service? (<code>gio open 'osu://b/&lt;id&gt;'</code>)</p>
+<p class="fineprint warn open-note">Could not launch osu! — the launcher refused the
+  link. The server log has its exact error (<code>journalctl --user -u
+  osu-critique-web</code>). A flatpak's exported desktop entry passes URLs through
+  file forwarding and breaks them; this button calls the app id directly for that
+  reason.</p>
 {% endif %}
 
 {% set h = data.hero %}
