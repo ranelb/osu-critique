@@ -102,6 +102,33 @@ def when(value) -> str:
     return value[:16].replace("T", " ")
 
 
+def ago(value) -> str:
+    """'2 hours ago' for a stored ISO timestamp, '' when it cannot be read.
+
+    Deliberately coarse: the dashboard says when you last played, not when the
+    file was written.
+    """
+    from datetime import datetime
+
+    try:
+        then = datetime.fromisoformat(str(value))
+    except (TypeError, ValueError):
+        return ""
+    secs = (datetime.now() - then).total_seconds()
+    if secs < 0:
+        return "just now"
+    if secs < 120:
+        return "just now"
+    if secs < 7200:
+        return f"{int(secs // 60)} min ago"
+    if secs < 172800:
+        return f"{int(secs // 3600)} hours ago"
+    days = int(secs // 86400)
+    if days < 60:
+        return f"{days} days ago"
+    return then.strftime("%Y-%m-%d")
+
+
 def clock(seconds) -> str:
     if seconds is None:
         return "—"
@@ -144,7 +171,7 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
 
     templates = Jinja2Templates(directory=TEMPLATES)
-    templates.env.filters.update(pct=pct, num=num, star=star, when=when,
+    templates.env.filters.update(pct=pct, num=num, star=star, when=when, ago=ago,
                                  clock=clock, mmss=mmss, ts=ts,
                                  fmt_t=annotations.fmt_time, md=markdown.render)
     # Static assets are busted by their own fingerprint, not the release number:
@@ -775,6 +802,11 @@ def create_app(outdir=None, index_on_boot: bool = True) -> FastAPI:
             raise HTTPException(status_code=404, detail="no index")
         try:
             bm = index.get_beatmap(conn, beatmap_md5)
+            if bm is None or not bm["set_id"]:
+                # A recommendation is usually a map you have never played, and
+                # ``beatmaps`` only holds played ones — the library row is the
+                # fallback, and it is the row that carries the set id.
+                bm = index.get_library_beatmap(conn, beatmap_md5)
         finally:
             conn.close()
         if bm is None or not bm["set_id"]:

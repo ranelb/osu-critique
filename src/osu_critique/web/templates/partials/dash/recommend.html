@@ -3,8 +3,10 @@
 {% set r = data.recommend %}
 {% set bucket_term = {'new': 'new-bucket', 'improver': 'improver', 'maintain': 'maintain'} %}
 <section class="panel" id="w-recommend">
-  <h2>recommendations {{ learn('candidate-gates') }}
-    <span class="count">{{ r.recommendations | length }}</span></h2>
+  <h2>Maps that train the thing you are worst at
+    {{ learn('candidate-gates') }}
+    <span class="count">{{ r.recommendations | length }} picks</span></h2>
+    <p class="fineprint libr">library: {% if library.scanned %}{{ library.maps }} maps,{% if library.age_days is not none %} scanned {{ library.age_days | num(1) }}d ago{% endif %}{% else %}<span class="warn">not scanned</span> — recommendations need <code>osu-critique library scan</code>{% endif %}</p>
   {% if r.error %}
     <p class="muted">{{ r.error }}</p>
   {% elif not r.recommendations %}
@@ -18,45 +20,80 @@
       {% else %}
       Chosen against your weaknesses below, each inside
       {{ gloss('comfort-sr') }} {{ r.comfort_sr | num(2) }}★ ± 1
-      ({{ gloss('stretch') }} {{ r.stretch }}). Scores are deterministic; the line
-      under each card is its evidence.
+      ({{ gloss('stretch') }} {{ r.stretch }}). Scores are deterministic; the
+      line under each card is its evidence.
       {% endif %}
     </p>
     <div class="recs">
     {% for c in r.recommendations %}
-      <article class="rec">
-        <div class="rec-head">
-          <span class="pill b-{{ c.bucket }}">{{ gloss(bucket_term[c.bucket], c.bucket) }}</span>
-          <span class="pill star">{{ c.sr | star }}</span>
-          <a class="rec-title" href="/map/{{ c.beatmap_md5 }}">{{ c.artist }} — {{ c.title }}</a>
-          <span class="muted rec-ver">[{{ c.version }}]</span>
-        </div>
-        <p class="rec-why">{{ c.why }}</p>
-        <div class="rec-act">
-          {% if c.beatmap_id or c.set_id %}
-          {{ open_in_osu(c.beatmap_md5, '/#w-recommend') }}
-          {% else %}<span class="osu-open off" title="no online id in this .osu">▶ no online id</span>{% endif %}
-          <a class="open" href="/map/{{ c.beatmap_md5 }}">history →</a>
-          <form method="post" action="/blacklist">
-            <input type="hidden" name="md5" value="{{ c.beatmap_md5 }}">
-            <input type="hidden" name="next" value="/">
-            <button class="link" name="scope" value="map" title="never suggest this difficulty">× difficulty</button>
-            {% if c.set_id %}
-            <input type="hidden" name="set_id" value="{{ c.set_id }}">
-            <button class="link" name="scope" value="set" title="never suggest this beatmapset">× set</button>
+      {# `title` carries the whole deterministic sentence: the markup below is a
+         re-render of it, with the two numbers that matter coloured. #}
+      <article class="rec" title="{{ c.why }}">
+        <a class="rec-cover" href="/map/{{ c.beatmap_md5 }}" tabindex="-1" aria-hidden="true">
+          <img src="/api/cover/{{ c.beatmap_md5 }}?size=card" alt="" loading="lazy">
+          {% if c.sr %}<span class="sr">{{ c.sr | star }}</span>{% endif %}
+        </a>
+        <div class="rec-main">
+          <div class="rec-head">
+            <span class="pill b-{{ c.bucket }}">{{ gloss(bucket_term[c.bucket], c.bucket) }}</span>
+            <a class="rec-title" href="/map/{{ c.beatmap_md5 }}">{{ c.artist }} — {{ c.title }}</a>
+            <span class="rec-ver">[{{ c.version }}]</span>
+          </div>
+          <p class="rec-why">
+            {% if c.weakness %}
+            {{ c.material }}, and you miss
+            <span class="over">{{ c.weakness.miss_bad_pct | num(1) }}%</span> on
+            that half against
+            <span class="under">{{ c.weakness.miss_good_pct | num(1) }}%</span>
+            on the other (n {{ c.weakness.n_bad }}/{{ c.weakness.n_good }}).{% if c.bucket == 'new' %}
+            Never played.{% endif %}
+            {% else %}
+            Difficulty-appropriate: no material weakness cleared the gate.
             {% endif %}
-          </form>
+            {% if c.bucket == 'improver' %}
+            Best here <b>{{ c.best_accuracy | num(1) }}%</b> over
+            {{ c.n_attempts }} run{{ '' if c.n_attempts == 1 else 's' }}, this
+            band's median <b>{{ c.band_median_accuracy | num(1) }}%</b>, last
+            attempt <b>{{ c.latest_accuracy | num(1) }}%</b>.
+            {% elif c.bucket == 'maintain' %}
+            You hold <b>{{ c.latest_accuracy | num(1) }}%</b> here and last
+            touched it {{ c.days_since }} days ago.
+            {% endif %}
+          </p>
+          <div class="rec-specs">
+            {% if c.bpm %}<span>{{ c.bpm | num(0) }} BPM</span>{% endif %}
+            <span>{{ c.length }}</span>
+            <span>{{ c.material }}</span>
+          </div>
+          <div class="rec-act">
+            {% if c.beatmap_id or c.set_id %}
+            {{ open_in_osu(c.beatmap_md5, '/#w-recommend', 'open in osu!') }}
+            {% else %}<span class="osu-open off"
+              title="no online id in this .osu">no online id</span>{% endif %}
+            <a class="open" href="/map/{{ c.beatmap_md5 }}">history</a>
+            <form method="post" action="/blacklist">
+              <input type="hidden" name="md5" value="{{ c.beatmap_md5 }}">
+              <input type="hidden" name="next" value="/">
+              <button class="link" name="scope" value="map"
+                      title="never suggest this difficulty">never this map</button>
+              {% if c.set_id %}
+              <input type="hidden" name="set_id" value="{{ c.set_id }}">
+              <button class="link" name="scope" value="set"
+                      title="never suggest this beatmapset">or its set</button>
+              {% endif %}
+            </form>
+          </div>
         </div>
       </article>
     {% endfor %}
     </div>
     <p class="fineprint">
-      pool: {{ r.counts.new }} {{ gloss('new-bucket', 'new') }} ·
-      {{ r.counts.improver }} {{ gloss('improver') }} ·
-      {{ r.counts.maintain }} {{ gloss('maintain') }} ·
+      pool: {{ r.counts.new }} {{ gloss('new-bucket', 'new') }},
+      {{ r.counts.improver }} {{ gloss('improver') }},
+      {{ r.counts.maintain }} {{ gloss('maintain') }},
       {{ r.counts.gated }} outside the {{ gloss('candidate-gates', 'gates') }}
-      {% if r.counts.blocked %} · {{ r.counts.blocked }} {{ gloss('blacklist', 'blacklisted') }}{% endif %}
-      {% if r.counts.relax_only %} · {{ r.counts.relax_only }} played only in relax{% endif %}
+      {%- if r.counts.blocked %}, {{ r.counts.blocked }} {{ gloss('blacklist', 'blacklisted') }}{% endif %}
+      {%- if r.counts.relax_only %}, {{ r.counts.relax_only }} played only in relax{% endif %}.
     </p>
   {% endif %}
 </section>

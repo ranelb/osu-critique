@@ -199,11 +199,43 @@ def form(conn, player) -> dict:
             "days": days,
             "plays": len(rows),
             "accuracy": round(100.0 * _mean(accs), 2) if accs else None,
+            "accuracy_median": round(100.0 * _median(accs), 2) if accs else None,
             "ur": round(_median(urs), 1) if urs else None,
             "pp": round(pp, 1) if pp else None,
             "maps": len({r["beatmap_md5"] for r in rows}),
         }
     return out
+
+
+def hero(conn, player, window: int = 30) -> dict | None:
+    """What the page opens on: the last play, the window's figures, and the
+    median they are read against.
+
+    The 30-day block is the same numbers the form widget prints, so the hero
+    never contradicts it; the median is what lets one figure be coloured
+    (above or below your own baseline) instead of decorating three of them.
+    """
+    rows = _play_rows(conn, player)
+    if not rows:
+        return None
+    last = rows[0]
+    figures = form(conn, player)[str(window)]
+    plays_by_day = figures["plays"] / window if window else None
+    return {
+        "player": player,
+        "window": window,
+        "figures": figures,
+        "per_day": round(plays_by_day, 1) if plays_by_day else None,
+        "last": {
+            "run_id": last["run_id"],
+            "beatmap_md5": last["beatmap_md5"],
+            "map": last["map_name"],
+            "played_at": last["played_at"],
+            "accuracy": last["accuracy"],
+            "mods": last["mod_string"] or "NM",
+        },
+    }
+
 
 
 def trend(conn, player, weeks: int) -> dict:
@@ -232,12 +264,17 @@ def trend(conn, player, weeks: int) -> dict:
     accs = [p["accuracy"] for p in points if p["accuracy"] is not None]
     lo, hi = (min(accs), max(accs)) if accs else (0.0, 1.0)
     span = max(hi - lo, 2.0)                       # a flat week is not a dramatic one
+    median = round(_median(accs), 2) if accs else None
     n = len(points)
     for i, pnt in enumerate(points):
         pnt["x"] = round(100.0 * i / (n - 1), 2) if n > 1 else 50.0
         acc = pnt["accuracy"] if pnt["accuracy"] is not None else lo
         pnt["y"] = round(100.0 * (hi - acc) / span, 2)
+        # the colour of a dot is the verdict: at or above your own median or not
+        pnt["under"] = (median is not None and pnt["accuracy"] is not None
+                        and pnt["accuracy"] < median)
     return {"weeks": weeks, "points": points, "lo": round(lo, 1), "hi": round(hi, 1),
+            "median": median, "plays": sum(p["plays"] for p in points),
             "best": max(points, key=lambda p: p["accuracy"] or 0) if points else None}
 
 
@@ -332,6 +369,7 @@ def build(conn, outdir, settings: dict) -> dict:
 
     if "form" in on:
         data["form"] = form(conn, player)
+    data["hero"] = hero(conn, player)
     if "trend" in on:
         data["trend"] = trend(conn, player, windows.get("trend") or 26)
     if "calendar" in on:

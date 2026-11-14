@@ -37,6 +37,52 @@ that carry no md5. Re-exports of one play share an id; the newest artifact wins.
 
 ## The dashboard
 
+## Visual design
+
+The pages are built out of two things the game already owns: **the cover art of
+the maps** and **the four judgement colours**. Colour is semantic, not
+decoration, and that is the whole system:
+
+| token | value | role |
+|---|---|---|
+| `--bg` / `--panel` | `#08070d` / `#171223` | violet-black ink and surface — a neutral grey makes every cover look pasted on |
+| `--pink` | `#ff66aa` | osu!'s brand: interaction, the primary action, the current nav item. Nothing else. |
+| `--cyan` | `#66ccff` | a 300, and any figure at or above your own median |
+| `--green` / `--c100` | `#9acd32` / `#88b300` | a 100: the easier half of a split, ranked status |
+| `--gold` | `#ffcc22` | a 50: below your median, the improver bucket, a warning |
+| `--red` / `--miss` | `#ff5f6d` / `#ed2d3f` | a miss, the gap you are being shown |
+
+Two faces, each with a job: **Poppins** (the shippable stand-in for osu!'s Torus,
+see `static/VENDOR.md`) carries prose and display; **JetBrains Mono** carries
+every number, table head and bar key, because columns have to line up. The type
+scale is six named steps (`--t-label` … `--t-h1`); a new block picks one instead
+of inventing another `0.84rem`.
+
+Structural rules, all of which the dashboard follows:
+
+- **A section is a rule and air.** `.panel` has no background, no radius and no
+  border except a 1px top rule. Cards are reserved for things you can pick — a
+  map, a recommendation.
+- **An image earns its place.** The dashboard opens on the cover of the map you
+  played last (`dashboard.hero()`, `/api/cover/<md5>?size=hero`), sharp on the
+  right, with the 30-day figures on ink on the left. Recommendation cards carry
+  their map's cover; recent plays carry a 44px thumb. The covers saturate and
+  scale 5 % on hover, which is the only hover transition in the app.
+- **One motion.** The accuracy line draws itself once, `pathLength="100"` and a
+  CSS `stroke-dashoffset` animation, no JavaScript. Everything else is static.
+  `prefers-reduced-motion` removes it.
+- **No ALL-CAPS chrome.** Section headings, rail titles, table heads and form
+  labels are sentence case. `text-transform: uppercase` appears nowhere.
+- **The chart colour is the verdict.** A week's dot is cyan at or above your own
+  median and amber below it; the median is drawn as a dashed line. The legend
+  states the rule rather than a gradient.
+
+`/api/cover/<md5>` resolves through `library_beatmaps` when `beatmaps` has no
+row: a recommendation is usually a map you have never played, and the played
+maps table cannot answer for it.
+
+### The widgets
+
 `/` is a page of **widgets**, and the widget list *is* the settings: order,
 on/off, and a window where a window means something. The catalogue lives in
 `dashboard.WIDGETS` (id, label, allowed windows); a template cannot fall out of

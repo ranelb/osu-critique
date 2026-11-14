@@ -858,3 +858,15 @@ def runs_for_map(conn, beatmap_md5: str, order: str = "played_at",
 def get_beatmap(conn, beatmap_md5: str):
     return conn.execute("SELECT * FROM beatmaps WHERE beatmap_md5 = ?",
                         (beatmap_md5,)).fetchone()
+
+
+def get_library_beatmap(conn, beatmap_md5: str):
+    """An installed map, played or not.
+
+    ``beatmaps`` only holds maps that appear in ``out/``, so it cannot answer
+    for a recommendation (a map you have never played is the whole point of the
+    ``new`` bucket). The library row is the fallback, and it is the one that
+    knows the ``set_id`` a cover needs.
+    """
+    return conn.execute("SELECT * FROM library_beatmaps WHERE beatmap_md5 = ?",
+                        (beatmap_md5,)).fetchone()

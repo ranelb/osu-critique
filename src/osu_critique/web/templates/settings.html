@@ -14,7 +14,7 @@
 </section>
 
 <form method="post" action="/settings" class="panel settings-form">
-  <h2>dashboard</h2>
+  <h2>Dashboard</h2>
   <div class="wgrid three">
     <label class="field">
       <span class="k">player</span>
@@ -53,7 +53,7 @@
       the recommendation list.</span>
   </fieldset>
 
-  <h2>widgets</h2>
+  <h2>Widgets</h2>
   <p class="fineprint">Switch a block off, or move it up and down. Saving is one
     form, so a move keeps whatever toggles you changed in the same click.</p>
   <ul class="wrows">
@@ -89,7 +89,7 @@
 </form>
 
 <section class="panel" id="blacklist">
-  <h2>blacklist <span class="count">{{ (blocked.maps | length) + (blocked.sets | length) }}</span></h2>
+  <h2>Blacklist <span class="count">{{ (blocked.maps | length) + (blocked.sets | length) }}</span></h2>
   <p class="fineprint">Written to <code>{{ paths.out }}/blacklist.json</code>; the
     recommender never suggests these again. A set entry blocks every difficulty.</p>
   {% if not (blocked.maps or blocked.sets) %}

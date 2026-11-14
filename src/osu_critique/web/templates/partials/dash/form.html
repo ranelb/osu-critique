@@ -1,7 +1,7 @@
 {% from "partials/gloss.html" import gloss, learn with context %}
 {% set f = data.form %}
 <section class="panel" id="w-form">
-  <h2>form {{ learn('accuracy') }} <span class="count">30d / 90d</span></h2>
+   <h2>Form {{ learn('accuracy') }} <span class="count">30d / 90d</span></h2>
   <div class="wgrid two">
   {% for key in ['30', '90'] %}
     {% set w = f[key] %}
@@ -16,7 +16,7 @@
         <div class="statcard">
           <span class="k">{{ gloss('accuracy') }}</span>
           <span class="v">{{ w.accuracy | num(2) }}<span class="unit">%</span></span>
-          <span class="k2">mean per play</span>
+          <span class="k2">median {{ w.accuracy_median | num(1) }}</span>
         </div>
         <div class="statcard">
           <span class="k">{{ gloss('ur') }}</span>
@@ -26,7 +26,7 @@
         <div class="statcard">
           <span class="k">{{ gloss('pp') }}</span>
           <span class="v">{{ w.pp | num(1) }}</span>
-          <span class="k2">sum of cached pp</span>
+          <span class="k2">cached pp</span>
         </div>
       </div>
     </div>

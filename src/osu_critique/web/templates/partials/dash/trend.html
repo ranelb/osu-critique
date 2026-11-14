@@ -1,21 +1,50 @@
-{% from "partials/gloss.html" import learn with context %}
+{% from "partials/gloss.html" import gloss, learn with context %}
 {% set t = data.trend %}
 <section class="panel" id="w-trend">
-  <h2>accuracy &amp; UR {{ learn('ur') }} <span class="count">{{ t.points | length }} weeks</span></h2>
+  <h2>Accuracy per week {{ learn('ur') }}</h2>
   {% if not t.points %}
     <p class="muted">No plays in the last {{ t.weeks }} weeks.</p>
   {% else %}
-    <p class="fineprint">Mean accuracy per week (line) — {{ t.lo | num(2) }}% to
-      {{ t.hi | num(2) }}%{% if t.best %} · best week {{ t.best.week }} at
-      {{ t.best.accuracy | num(2) }}%{% endif %}.</p>
-    <svg class="spark" viewBox="0 0 100 100" preserveAspectRatio="none"
-         role="img" aria-label="mean accuracy per week">
-      <polyline points="{% for p in t.points %}{{ p.x }},{{ p.y }} {% endfor %}"></polyline>
-      {% for p in t.points %}<circle cx="{{ p.x }}" cy="{{ p.y }}" r="1.4">
-        <title>{{ p.week }}: {{ p.accuracy | num(2) }}% · {{ p.plays }} plays{% if p.ur %} · UR {{ p.ur | num(1) }}{% endif %}</title>
-      </circle>{% endfor %}
-    </svg>
-    <div class="tscroll"><table class="data tight">
+    <div class="trend-legend">
+      <span><i style="background: var(--cyan)"></i>at or above your median</span>
+      <span><i style="background: var(--gold)"></i>below</span>
+    </div>
+    <div class="trend-card">
+      <div class="trend-top">
+        <span class="trend-meta">median {{ t.median | num(2) }}% ·
+          {{ t.points | length }} weeks · {{ t.plays }} plays</span>
+        {% if t.best %}<span class="trend-delta">best week {{ t.best.week }}
+          at {{ t.best.accuracy | num(2) }}%</span>{% endif %}
+      </div>
+      {# Percentage coordinates in a 100x100 box, stretched by CSS: no JS, and the
+         line draws itself once because pathLength normalises the dash to 100. #}
+      <svg class="trend" viewBox="0 0 100 100" preserveAspectRatio="none"
+           role="img" aria-label="mean accuracy per week, {{ t.lo | num(1) }}% to {{ t.hi | num(1) }}%">
+        <defs>
+          <linearGradient id="trendfade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#66ccff" stop-opacity=".3"></stop>
+            <stop offset="1" stop-color="#66ccff" stop-opacity="0"></stop>
+          </linearGradient>
+        </defs>
+        {% for level in [0, 33.3, 66.6, 100] %}
+        <line class="grid" x1="0" x2="100" y1="{{ level }}" y2="{{ level }}"></line>
+        {% endfor %}
+        <line class="med" x1="0" x2="100"
+              y1="{{ (100 * (t.hi - t.median) / ((t.hi - t.lo) if (t.hi - t.lo) >= 2 else 2)) | round(2) }}"
+              y2="{{ (100 * (t.hi - t.median) / ((t.hi - t.lo) if (t.hi - t.lo) >= 2 else 2)) | round(2) }}"></line>
+        <polygon class="area"
+                 points="{% for p in t.points %}{{ p.x }},{{ p.y }} {% endfor %}100,100 0,100"></polygon>
+        <polyline class="line" pathLength="100"
+                  points="{% for p in t.points %}{{ p.x }},{{ p.y }} {% endfor %}"></polyline>
+        {% for p in t.points %}
+        <circle class="dot{{ ' under' if p.under }}" cx="{{ p.x }}" cy="{{ p.y }}" r="1">
+          <title>{{ p.week }}: {{ p.accuracy | num(2) }}% over {{ p.plays }} plays{% if p.ur %} · UR {{ p.ur | num(1) }}{% endif %}</title>
+        </circle>
+        {% endfor %}
+      </svg>
+    </div>
+    <div class="trend-table"><div class="tscroll">
+      <table class="data tight">
       <thead><tr><th>week</th><th class="num">plays</th>
         <th class="num">accuracy</th><th class="num">UR</th></tr></thead>
       <tbody>
@@ -25,6 +54,6 @@
           <td class="num">{{ p.ur | num(1) }}</td></tr>
       {% endfor %}
       </tbody>
-    </table></div>
+    </table></div></div>
   {% endif %}
 </section>

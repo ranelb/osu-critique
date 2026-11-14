@@ -127,7 +127,10 @@ def ids(html: str) -> list[str]:
 def test_dashboard_is_the_home_page_and_maps_moved(client):
     home = client.get("/")
     assert home.status_code == 200
-    assert '<h1>dashboard</h1>' in home.text
+    # the h1 is the page's name for a screen reader; sighted readers get the
+    # hero, which is the numbers, not a label saying "dashboard"
+    assert '<h1 class="sr-only">dashboard</h1>' in home.text
+    assert 'class="hero"' in home.text
     assert 'class="card"' not in home.text
     maps = client.get("/maps")
     assert maps.status_code == 200

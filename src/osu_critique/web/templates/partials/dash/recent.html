@@ -1,24 +1,20 @@
 {% set rows = data.recent %}
 <section class="panel" id="w-recent">
-  <h2>recently played <span class="count">{{ rows | length }}</span></h2>
+  <h2>Recently played <span class="count">{{ rows | length }}</span></h2>
   {% if not rows %}
     <p class="muted">Nothing yet.</p>
   {% else %}
-  <div class="tscroll"><table class="data tight">
-    <thead><tr><th>when</th><th>map</th><th>mods</th>
-      <th class="num">acc</th><th class="num">UR</th><th></th></tr></thead>
-    <tbody>
+  <div class="recent">
     {% for r in rows %}
-      <tr>
-        <td class="muted">{{ r.played_at | when }}</td>
-        <td><a href="/map/{{ r.beatmap_md5 }}">{{ r.map }}</a></td>
-        <td><span class="mods">{{ r.mods }}</span></td>
-        <td class="num">{{ r.accuracy | pct }}</td>
-        <td class="num">{{ r.ur | num(1) }}</td>
-        <td class="num"><a class="open" href="/run/{{ r.run_id }}">open →</a></td>
-      </tr>
+    <a class="rrow" href="/run/{{ r.run_id }}">
+      <img src="/api/cover/{{ r.beatmap_md5 }}?size=card" alt="" loading="lazy">
+      <span class="t">{{ r.map }}</span>
+      <span class="m">{{ r.mods }}</span>
+      <span class="acc">{{ r.accuracy | pct }}</span>
+      <span class="ur">{{ r.ur | num(1) }}</span>
+      <span class="go">open</span>
+    </a>
     {% endfor %}
-    </tbody>
-  </table></div>
+  </div>
   {% endif %}
 </section>

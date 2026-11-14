@@ -1,6 +1,6 @@
 {% set c = data.calendar %}
 <section class="panel" id="w-calendar">
-  <h2>activity <span class="count">{{ c.total }}</span></h2>
+  <h2>Activity <span class="count">{{ c.total }}</span></h2>
   <p class="fineprint">{{ c.total }} plays on {{ c.active_days }} day{{ '' if c.active_days == 1 else 's' }}
     {% if c.avg_per_active %}· {{ c.avg_per_active | num(1) }} per active day{% endif %}
     · busiest day {{ c.max }}</p>

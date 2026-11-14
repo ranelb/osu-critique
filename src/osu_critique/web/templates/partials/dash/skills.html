@@ -1,29 +1,40 @@
 {% from "partials/gloss.html" import gloss, learn with context %}
 {% set s = data.skills %}
 <section class="panel" id="w-skills">
-  <h2>skill profile {{ learn('band-corrected-miss-rate') }}</h2>
+  <h2>Where the misses come from {{ learn('band-corrected-miss-rate') }}</h2>
   {% if not s or not s.n_runs %}
     <p class="muted">No runs can speak about skill yet (relax plays do not count
       for tapping).</p>
   {% else %}
     <p class="fineprint">
-      {{ s.n_runs }} runs ({{ s.window }}) · {{ s.excluded_relax }} relax excluded
-      · {{ gloss('band-corrected-miss-rate') }}: {{ s.miss_basis }}.
+      {{ s.n_runs }} runs ({{ s.window }}), {{ s.excluded_relax }} relax excluded,
+      {{ gloss('band-corrected-miss-rate') }}: {{ s.miss_basis }}.
     </p>
     {% if s.weaknesses %}
-    <h3>weak</h3>
-    <ul class="skilllist">
-      {% for w in s.weaknesses %}
-      <li>
+    {# One axis for every bar, normalised to the worst weakness on the page, so
+       the bars are comparable: the red segment is the gap between your two
+       halves, which is the thing being claimed. #}
+    {% set scale = (s.weaknesses | map(attribute='miss_bad_pct') | max) * 1.04 %}
+    {% for w in s.weaknesses %}
+    <div class="skill">
+      <div class="skill-top">
         <span class="skill-name">{{ w.label }}</span>
-        <span class="muted">you miss <b>{{ w.miss_bad_pct | num(2) }}%</b> on the
-          {{ 'harder' if w.bad_side == 'high' else 'lighter' }} half vs
-          <b>{{ w.miss_good_pct | num(2) }}%</b> on the other
-          · +{{ w.gap_pp | num(2) }} pp {{ gloss('excess') }} · {{ w.ratio }}×
-          · n = {{ w.n_bad }}/{{ w.n_good }}</span>
-      </li>
-      {% endfor %}
-    </ul>
+        <span class="skill-x">{{ w.ratio }}× · n {{ w.n_bad }}/{{ w.n_good }}</span>
+      </div>
+      <div class="skillbar">
+        <span class="track"></span>
+        <span class="gap" style="left: {{ (100 * w.miss_good_pct / scale) | round(1) }}%;
+              width: {{ (100 * (w.miss_bad_pct - w.miss_good_pct) / scale) | round(1) }}%"></span>
+        <span class="pip lo" style="left: {{ (100 * w.miss_good_pct / scale) | round(1) }}%"></span>
+        <span class="pip hi" style="left: {{ (100 * w.miss_bad_pct / scale) | round(1) }}%"></span>
+      </div>
+      <div class="skill-key">
+        <span class="k1">{{ w.miss_good_pct | num(2) }}% other half</span>
+        <span class="k2">{{ w.miss_bad_pct | num(2) }}% {{ 'harder' if w.bad_side == 'high' else 'lighter' }} half</span>
+        <span>+{{ w.gap_pp | num(2) }} pp {{ gloss('excess') }}</span>
+      </div>
+    </div>
+    {% endfor %}
     {% if s.strengths %}
     <h3>holding up</h3>
     <ul class="skilllist good">

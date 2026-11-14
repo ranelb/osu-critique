@@ -1,26 +1,11 @@
 {% extends "base.html" %}
 {% from "partials/rail.html" import rail with context %}
+{% from "partials/osu.html" import open_in_osu with context %}
 {% block title %}dashboard · osu-critique{% endblock %}
 {% block main_class %}has-rail{% endblock %}
 {% block rail %}{{ rail(toc, 'dashboard') }}{% endblock %}
 {% block body %}
-<section class="page-head dash-head">
-  <div>
-    <h1>dashboard</h1>
-    <p class="muted">
-      {% if player %}<b>{{ player }}</b>{% else %}no runs yet{% endif %}
-      {% if library.scanned %}
-        · library: {{ library.maps }} maps, scanned
-        {% if library.age_days is not none %}{{ library.age_days | num(1) }}d ago{% endif %}
-      {% else %}
-        · library: <span class="warn">not scanned</span> — recommendations need
-        <code>osu-critique library scan</code>
-      {% endif %}
-    </p>
-  </div>
-  <span class="dash-links"><a class="clear" href="/learn">learn →</a>
-    <a class="clear" href="/settings">settings →</a></span>
-</section>
+<h1 class="sr-only">dashboard</h1>
 
 {% if open_note == 'ok' %}
 <p class="fineprint pos open-note">osu! was asked to open that map.</p>
@@ -30,6 +15,52 @@
 {% elif open_note == 'error' %}
 <p class="fineprint warn open-note">Could not launch osu! — is the desktop handler
   available to the service? (<code>gio open 'osu://b/&lt;id&gt;'</code>)</p>
+{% endif %}
+
+{% set h = data.hero %}
+{% if h %}
+{# The page opens on the map you played last: the subject is a game about these
+   images, so the art is the backdrop and the numbers sit on it directly. #}
+<section class="hero" id="hero">
+  <div class="hero-art" aria-hidden="true">
+    <img src="/api/cover/{{ h.last.beatmap_md5 }}?size=hero" alt="">
+  </div>
+  <div class="hero-veil" aria-hidden="true"></div>
+  <div class="hero-body">
+    <p class="hero-eyebrow">
+      <b>{{ h.player }}</b> · last {{ h.window }} days,
+      {{ h.figures.maps }} map{{ '' if h.figures.maps == 1 else 's' }}
+    </p>
+    <div class="hero-figures">
+      {% set f = h.figures %}
+      <div class="hfig lead{% if f.accuracy is not none and f.accuracy_median is not none and f.accuracy >= f.accuracy_median %} above{% endif %}">
+        <span class="n">{{ f.accuracy | num(2) }}<u>%</u></span>
+        <span class="l">accuracy per play ·
+          <b>median {{ f.accuracy_median | num(1) }}</b></span>
+      </div>
+      <div class="hfig">
+        <span class="n">{{ f.ur | num(1) }}</span>
+        <span class="l">unstable rate · <b>median</b></span>
+      </div>
+      <div class="hfig">
+        <span class="n">{{ f.plays }}</span>
+        <span class="l">plays · <b>{{ h.per_day | num(0) }} a day</b></span>
+      </div>
+    </div>
+    <div class="hero-last">
+      <p class="hero-when">last played {{ h.last.played_at | ago }}</p>
+      <a class="hero-song" href="/run/{{ h.last.run_id }}">
+        {{ h.last.map }}
+        <span class="hero-mods">{{ h.last.mods }} · {{ h.last.accuracy | pct }}</span>
+      </a>
+      {{ open_in_osu(h.last.beatmap_md5, '/', 'play in osu!') }}
+    </div>
+  </div>
+</section>
+{% else %}
+<section class="page-head">
+  <div><h1>dashboard</h1><p class="muted">no runs yet — analyze one to see it here</p></div>
+</section>
 {% endif %}
 
 {% if not widgets %}
