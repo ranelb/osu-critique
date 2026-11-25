@@ -37,12 +37,13 @@ from .config import (cache_dir, lazer_files, maps_dir,
                      outdir as _default_outdir, stable_songs)
 from .io import pairing
 from .io.beatmap import build_objects, circle_radius
+from .metrics import geometry, rhythm
 from .metrics.patterns import add_pattern_labels
 from .metrics.structure import annotate
 from .metrics.streams import find_runs
 
 #: bump when a feature's definition changes: rows are re-extracted on next scan
-FEATURE_VERSION = 1
+FEATURE_VERSION = 2   # 2: geometry + tempo block (metrics/geometry.py, rhythm.py)
 
 #: angle boundaries for the flow/anti-flow split, in degrees
 FLOW_DEG = 45.0
@@ -166,6 +167,14 @@ def extract(path, md5: str | None = None, want_sr: bool = True) -> dict:
         if span > 0:
             run_nps.append(1000.0 * (len(run) - 1) / span)
 
+    segs = rhythm.tag(objs, geometry.classify(objs, radius))
+    shape_sum = geometry.summarize(segs, n)
+    by_label = {}
+    for sg in segs:
+        d = by_label.setdefault(sg["label"], {"segments": 0, "notes": 0})
+        d["segments"] += 1
+        d["notes"] += sg["n"]
+
     feats = {
         "beatmap_md5": md5,
         "map_path": str(path),
@@ -204,6 +213,9 @@ def extract(path, md5: str | None = None, want_sr: bool = True) -> dict:
         "sustained_max": max((len(r) for r in runs), default=0),
         "sustained_nps": _median(run_nps),
         "patterns": dict(patterns),
+        # what the runs of notes are: shape x tempo (unlabelled is a valid answer)
+        "geometry": {"coverage": round(shape_sum["coverage"], 4),
+                     "shapes": shape_sum["shapes"], "labels": by_label},
         "angles": {
             "flow": sum(1 for a in angles if a <= FLOW_DEG),
             "anti": sum(1 for a in angles if a >= ANTI_FLOW_DEG),

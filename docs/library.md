@@ -97,3 +97,11 @@ contains no replays, so nothing needs anonymising. Regenerate with:
 ```sh
 python scripts/make_synthetic_fixtures.py --library
 ```
+
+## Geometry block (FEATURE_VERSION 2)
+
+`features_json["geometry"]` = `{coverage, shapes, labels}` from `metrics/geometry.py` +
+`metrics/rhythm.py`: share of notes explained by a shape, per-shape segment/note counts, and
+per-label ("spaced circle stream", "triangle jumps") segment/note counts. Not a column: it is
+a long-tail feature, read from the JSON. `patterns.bucket` features are unchanged and still
+what `recommend.py` reads until the map side is replaced (`docs/NEXT.md`).
