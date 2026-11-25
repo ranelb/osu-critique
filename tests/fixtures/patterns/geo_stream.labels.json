@@ -1,0 +1,112 @@
+{
+ "map": "geo_stream",
+ "note": "every shape at stream tempo and tight spacing",
+ "gap_ms": 83.33333333333333,
+ "beat_ms": 333.333,
+ "radius_px": 36.48,
+ "n_objects": 263,
+ "blocks": [
+  {
+   "shape": "line",
+   "dir": null,
+   "t0": 1500,
+   "t1": 2000
+  },
+  {
+   "shape": "triangle",
+   "dir": "cw",
+   "t0": 2583,
+   "t1": 3083
+  },
+  {
+   "shape": "back_and_forth",
+   "dir": null,
+   "t0": 3667,
+   "t1": 4250
+  },
+  {
+   "shape": "square",
+   "dir": "cw",
+   "t0": 4833,
+   "t1": 5500
+  },
+  {
+   "shape": "zigzag",
+   "dir": null,
+   "t0": 6083,
+   "t1": 6667
+  },
+  {
+   "shape": "star",
+   "dir": "cw",
+   "t0": 7250,
+   "t1": 8083
+  },
+  {
+   "shape": "triangle",
+   "dir": "ccw",
+   "t0": 8667,
+   "t1": 9167
+  },
+  {
+   "shape": "circle",
+   "dir": "cw",
+   "t0": 9750,
+   "t1": 10833
+  },
+  {
+   "shape": "pentagon",
+   "dir": "ccw",
+   "t0": 11417,
+   "t1": 12250
+  },
+  {
+   "shape": "arc",
+   "dir": "ccw",
+   "t0": 12833,
+   "t1": 13333
+  },
+  {
+   "shape": "hexagon",
+   "dir": "cw",
+   "t0": 13917,
+   "t1": 14917
+  },
+  {
+   "shape": "stack",
+   "dir": null,
+   "t0": 15500,
+   "t1": 15833
+  },
+  {
+   "shape": "square",
+   "dir": "ccw",
+   "t0": 16417,
+   "t1": 17083
+  },
+  {
+   "shape": "line",
+   "dir": null,
+   "t0": 17667,
+   "t1": 18167
+  },
+  {
+   "shape": "circle",
+   "dir": "ccw",
+   "t0": 18750,
+   "t1": 19833
+  },
+  {
+   "shape": "zigzag",
+   "dir": null,
+   "t0": 20417,
+   "t1": 21000
+  },
+  {
+   "shape": "triangle",
+   "dir": "cw",
+   "t0": 21583,
+   "t1": 22333
+  }
+ ]
+}
