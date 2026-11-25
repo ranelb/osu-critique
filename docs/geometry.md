@@ -56,3 +56,13 @@ same format a hand-labelled real map uses. Measured over 60 unseen seeds (1,020
 blocks per condition): exact and light-jitter, tempo-stream and wide-spacing maps
 read back with 0–0.2 % misses and no false positives; a deliberately extreme
 jitter (σ 0.28 r per axis) loses ~13 %, mostly lines and circles.
+
+## Tempo (`metrics/rhythm.py`)
+
+Shape says *where* the notes are; tempo says *how fast they come*. `rhythm.tag(objs, segs)`
+(objs annotated) adds `tempo` (`stream` ≤160 ms median gap, `burst` ≤250 ms, else `jumps`),
+`run_share` (fraction of the segment inside a `streams.find_runs` run) and a `label` such as
+"spaced circle stream" or "triangle jumps". Runs come from the existing stream detector, so
+there is still one detector. A segment counts as in-run at ≥80 %; spacing < 1 r is "dense",
+≥ 2 r "spaced". On FREEDOM DiVE this turns 143 arc/circle segments into "spaced/tight arc/circle
+stream", which is what the map is.
