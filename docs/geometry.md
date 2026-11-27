@@ -34,8 +34,9 @@ Winding: osu! has y pointing down, so `cw` is clockwise as drawn on the playfiel
 
 ## Known gaps
 
-- Sliders are nodes by their **head** only; a shape built from slider tails is
-  invisible. Segments touching a slider carry `has_sliders`.
+- Sliders are nodes by their **head** by default; a shape built from slider tails is
+  invisible unless `slider_tails` is on (below). Segments touching a slider carry
+  `has_sliders`.
 - Radial bursts through a centre, drifting or rotating polygons, crosses.
 - There is no rhythm layer yet (`rate_ms` and `beats` are reported per segment,
   but "stream" / "burst" / "jump section" are not segments).
@@ -56,6 +57,41 @@ same format a hand-labelled real map uses. Measured over 60 unseen seeds (1,020
 blocks per condition): exact and light-jitter, tempo-stream and wide-spacing maps
 read back with 0–0.2 % misses and no false positives; a deliberately extreme
 jitter (σ 0.28 r per axis) loses ~13 %, mostly lines and circles.
+
+## Slider tails (`classify(..., slider_tails=True)`, default **off**)
+
+A slider's exit is where the cursor must be when it ends, so a shape can be drawn
+through tails. With the flag on, `classify` runs the detectors over three views of
+the map and keeps the longest candidate at each start (mixed first on ties):
+
+- `mixed`: the historical view (head nodes, exit-to-head legs). Kept because
+  zigzags on real maps need those legs; dropping it lost segments on a real map.
+- `head`: head nodes, head-to-head legs. Fixes shapes whose heads are exact but whose
+  slider bodies pad the exit-to-head legs (those legs fail the leg-ratio tests).
+- `exit`: exit nodes, exit-to-exit legs.
+
+Segments carry `nodes` when the flag is on and the map has sliders; a map with no
+sliders is classified identically either way. Ground truth: `geo_tail*` (every note a
+slider whose *tail* sits on the vertex, head 1.6-2.4 r away), `geo_head` (control),
+`geo_tail_junk`.
+
+Labelled set (`scripts/eval_patterns.py [--slider-tails|--no-slider-tails]`), found / blocks:
+
+| map | off | on |
+|---|---|---|
+| geo_clean, geo_stream, geo_wide | 17/17 | 17/17 |
+| geo_sloppy | 13/17 | 13/17 |
+| geo_head | 11/17 | 17/17 |
+| geo_tail | 0/17 | 17/17 |
+| geo_tail_sloppy | 0/17 | 17/17 |
+| geo_junk, geo_tail_junk | 0 false positives | 0 false positives |
+
+The default stays off: the circle-only maps cannot move (the flag is a no-op without
+sliders), so the only evidence for "on" is fixtures generated for this feature, and
+there are no owner labels on slider-heavy real windows yet. On eight real maps (by
+eye, no labels) coverage moved by 0 to +1.7 points with 0-2 boundary shifts per
+map, mostly new 4-note `stack`s of exit positions. Flipping `SLIDER_TAILS_DEFAULT`
+also changes `library` features, so it needs a `FEATURE_VERSION` bump and a re-baseline.
 
 ## Tempo (`metrics/rhythm.py`)
 

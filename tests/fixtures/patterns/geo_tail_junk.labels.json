@@ -1,0 +1,9 @@
+{
+ "map": "geo_tail_junk",
+ "note": "irregular filler as sliders: nothing may be labelled",
+ "gap_ms": 166.66666666666666,
+ "beat_ms": 333.333,
+ "radius_px": 36.48,
+ "n_objects": 20,
+ "blocks": []
+}

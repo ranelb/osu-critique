@@ -48,6 +48,8 @@ def main(argv=None):
     ap.add_argument("labels")
     ap.add_argument("maps", nargs="+")
     ap.add_argument("--write", metavar="DIR")
+    ap.add_argument("--slider-tails", action=argparse.BooleanOptionalAction, default=None,
+                    help="override geometry.SLIDER_TAILS_DEFAULT (compare on vs off)")
     a = ap.parse_args(argv)
 
     entries = load(a.labels)
@@ -65,7 +67,9 @@ def main(argv=None):
             continue
         bm = load_beatmap(maps[stem])
         objs = build_objects(bm, 1.0)
-        segs = geometry.classify(objs, circle_radius(bm.cs()), None)
+        segs = geometry.classify(
+            objs, circle_radius(bm.cs()), None,
+            **({} if a.slider_tails is None else {"slider_tails": a.slider_tails}))
         blocks = []
         for e in es:
             shape = e["shape"]

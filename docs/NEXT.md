@@ -93,9 +93,9 @@ and open `/feed`):
 - **Judge fidelity:** 14 of 55 exact against the game's recorded counts. Run
   `scripts/judge_drift.py` on real replays; this is the invariant everything else stands on
   and it was never fixed. It needs the real replays (6 tests skip without them).
-- **Slider-tail nodes:** a slider's end is a position the cursor must reach; geometry
-  currently uses object start positions only (`end_x`/`end_y` exist on the rows). Decide
-  whether a slider-tail pair belongs in a cycle.
+- **Slider-tail nodes:** built behind `classify(slider_tails=True)`, default off (PLAN phase C,
+  `docs/geometry.md`). Open: label slider-heavy real windows, then decide the default
+  (flipping it needs a `FEATURE_VERSION` bump).
 - **Radial bursts / spokes:** notes fanning out from and back to one point. Not detected;
   currently falls out as unlabelled or as shuttle.
 - **Geometry gaps:** no 3D-ish shapes (figure eights), no dynamic shapes whose size changes

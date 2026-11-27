@@ -231,6 +231,12 @@ The owner's judgement is ground truth; the classifier and I are not.
 ## Phase C. Slider tails as nodes
 - Cycle and fit nodes from exit-to-head legs (`end_x`/`end_y`) behind a flag; compare against the phase A
   score before enabling.
+- **Status: built, flag off.** `geometry.classify(..., slider_tails=...)` / `SLIDER_TAILS_DEFAULT = False`;
+  generator ground truth `geo_tail`, `geo_tail_sloppy`, `geo_head`, `geo_tail_junk` in
+  `make_pattern_fixtures.py`. Score off vs on: circle-only maps identical (flag is a no-op without sliders),
+  slider fixtures 0/17 -> 17/17 (tail), 11/17 -> 17/17 (head control), junk false positives 0 -> 0.
+  Not enabled: the only evidence for "on" is fixtures made for it, and there are no owner labels on
+  slider-heavy windows. Enabling also needs a `FEATURE_VERSION` bump. Numbers and views in `docs/geometry.md`.
 
 ## Phase D. Drifting polygons and curvy stream
 - Turn-walk polygons (one lap of same-sign turns near 360 m / n, closure reported as a number, not a gate),

@@ -171,8 +171,30 @@ def junk(rng, n, prev, avoid=()):
 
 # --------------------------------------------------------------------- maps --
 
-def build(name, seed, plan, gap_ms, jitter_r=0.0, junk_n=6):
-    """``plan`` is a list of (builder, kwargs); junk goes between and around."""
+def _slidify(rng, x, y, anchor):
+    """Turn a note at ``(x, y)`` into a linear slider whose *anchor* end sits there.
+
+    ``anchor`` is ``"tail"`` (the exit is the shape's vertex, the head is displaced)
+    or ``"head"`` (the head is the vertex, the exit is displaced). The displaced end
+    is 1.6-2.4 radii away in a random direction, so it never repeats by accident.
+    Returns ``(head, tail)``.
+    """
+    for _ in range(200):
+        a = rng.uniform(0, 2 * math.pi)
+        d = rng.uniform(1.6, 2.4) * RADIUS
+        other = (x + d * math.cos(a), y + d * math.sin(a))
+        if _inside([other]):
+            break
+    return (other, (x, y)) if anchor == "tail" else ((x, y), other)
+
+
+def build(name, seed, plan, gap_ms, jitter_r=0.0, junk_n=6, sliders=None):
+    """``plan`` is a list of (builder, kwargs); junk goes between and around.
+
+    ``sliders`` is None (circles only), ``"tail"`` or ``"head"``: every note,
+    junk included, becomes a slider anchored at the shape's vertex by that end.
+    Objects are ``(x, y, t, tail)`` with ``tail`` None for a circle.
+    """
     rng = random.Random(seed)
     objects, blocks = [], []
     t = 1000.0
@@ -184,7 +206,12 @@ def build(name, seed, plan, gap_ms, jitter_r=0.0, junk_n=6):
         for x, y in points:
             jx = rng.gauss(0, jitter_r * RADIUS) if jitter_r and label else 0.0
             jy = rng.gauss(0, jitter_r * RADIUS) if jitter_r and label else 0.0
-            objects.append((round(x + jx), round(y + jy), round(t)))
+            if sliders:
+                head, tail = _slidify(rng, x + jx, y + jy, sliders)
+                objects.append((round(head[0]), round(head[1]), round(t),
+                                (round(tail[0]), round(tail[1]))))
+            else:
+                objects.append((round(x + jx), round(y + jy), round(t), None))
             t += gap_ms
         if label:
             blocks.append({"shape": label[0], "dir": label[1],
@@ -224,7 +251,7 @@ def build(name, seed, plan, gap_ms, jitter_r=0.0, junk_n=6):
     return name, objects, blocks
 
 
-def write(name, objects, blocks, gap_ms, note):
+def write(name, objects, blocks, gap_ms, note, slider_mult=1.4):
     OUT.mkdir(parents=True, exist_ok=True)
     lines = ["osu file format v14", "", "[General]", "AudioFilename: dummy.mp3",
              "AudioLeadIn: 0", "PreviewTime: -1", "Countdown: 0", "SampleSet: Soft",
@@ -232,9 +259,14 @@ def write(name, objects, blocks, gap_ms, note):
              f"TitleUnicode:{name}", "Artist:synthetic", "ArtistUnicode:synthetic",
              "Creator:osu-critique", "Version:pattern", "", "[Difficulty]",
              f"HPDrainRate:5.0", f"CircleSize:{CS}", "OverallDifficulty:8.0",
-             "ApproachRate:9.0", "SliderMultiplier:1.4", "SliderTickRate:1", "",
+             "ApproachRate:9.0", f"SliderMultiplier:{slider_mult}", "SliderTickRate:1", "",
              "[TimingPoints]", f"0,{BEAT_MS:.6f},4,2,1,25,1,0", "", "[HitObjects]"]
-    lines += [f"{x},{y},{t},1,0" for x, y, t in objects]
+    for x, y, t, tail in objects:
+        if tail is None:
+            lines.append(f"{x},{y},{t},1,0")
+        else:
+            length = math.hypot(tail[0] - x, tail[1] - y)
+            lines.append(f"{x},{y},{t},2,0,L|{tail[0]}:{tail[1]},1,{length:.2f}")
     (OUT / f"{name}.osu").write_text("\n".join(lines) + "\n")
     labels = {"map": name, "note": note, "gap_ms": gap_ms, "beat_ms": round(BEAT_MS, 3),
               "radius_px": RADIUS, "n_objects": len(objects), "blocks": blocks}
@@ -273,25 +305,44 @@ def main():
     half = BEAT_MS / 2          # 1/2 beats
     quarter = BEAT_MS / 4       # 1/4 beats
     specs = [
-        ("geo_clean", 11, shapes_plan(3.2), half, 0.0,
+        ("geo_clean", 11, shapes_plan(3.2), half, 0.0, None,
          "every shape, exact coordinates, 1/2 spacing"),
-        ("geo_sloppy", 12, shapes_plan(3.2), half, 0.28,
+        ("geo_sloppy", 12, shapes_plan(3.2), half, 0.28, None,
          "every shape, hand-placed jitter of ~0.28 radii"),
-        ("geo_stream", 13, shapes_plan(2.2), quarter, 0.0,
+        ("geo_stream", 13, shapes_plan(2.2), quarter, 0.0, None,
          "every shape at stream tempo and tight spacing"),
-        ("geo_wide", 14, shapes_plan(4.5), half, 0.15,
+        ("geo_wide", 14, shapes_plan(4.5), half, 0.15, None,
          "every shape at jump spacing, light jitter"),
-        ("geo_junk", 15, [], half, 0.0, "irregular filler only: nothing may be labelled"),
+        ("geo_junk", 15, [], half, 0.0, None,
+         "irregular filler only: nothing may be labelled"),
+        # slider-tail maps (phase C): every note is a slider, the shape sits at one end
+        ("geo_tail", 16, shapes_plan(3.2), half, 0.0, "tail",
+         "every shape built from slider TAILS; heads wander 1.6-2.4 r off the vertex"),
+        ("geo_tail_sloppy", 17, shapes_plan(3.2), half, 0.15, "tail",
+         "slider-tail shapes with light jitter"),
+        ("geo_head", 18, shapes_plan(3.2), half, 0.0, "head",
+         "control: shapes built from slider HEADS; tails wander off the vertex"),
+        ("geo_tail_junk", 19, [], half, 0.0, "tail",
+         "irregular filler as sliders: nothing may be labelled"),
     ]
-    for name, seed, plan, gap, jit, note in specs:
-        if name == "geo_junk":
+    for name, seed, plan, gap, jit, sliders, note in specs:
+        mult = 3.6 if sliders else 1.4      # fast sliders: a 2 r body fits in one 1/2 gap
+        if name.endswith("junk"):
             rng = random.Random(seed)
             pts, _ = junk(rng, 400, (FIELD[0] / 2, FIELD[1] / 2))
-            objects = [(round(x), round(y), round(1000 + i * gap)) for i, (x, y) in enumerate(pts)]
-            write(name, objects, [], gap, note)
+            objects = []
+            for i, (x, y) in enumerate(pts):
+                t = round(1000 + i * gap)
+                if sliders:
+                    head, tail = _slidify(rng, x, y, sliders)
+                    objects.append((round(head[0]), round(head[1]), t,
+                                    (round(tail[0]), round(tail[1]))))
+                else:
+                    objects.append((round(x), round(y), t, None))
+            write(name, objects, [], gap, note, mult)
             continue
-        _, objects, blocks = build(name, seed, plan, gap, jit)
-        write(name, objects, blocks, gap, note)
+        _, objects, blocks = build(name, seed, plan, gap, jit, sliders=sliders)
+        write(name, objects, blocks, gap, note, mult)
         print(f"{name}: {len(objects)} objects, {len(blocks)} labelled blocks")
 
 

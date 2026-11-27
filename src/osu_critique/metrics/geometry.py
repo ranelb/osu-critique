@@ -70,6 +70,10 @@ STAR_RATIO = 1.5
 #: a triangle's third point must stand at least this many radii off the line of the others
 TRIANGLE_HEIGHT_R = 1.5
 
+#: read sliders' exits as shape nodes as well as their heads (PLAN phase C). Decided
+#: by the labelled-set score; see docs/geometry.md for the numbers.
+SLIDER_TAILS_DEFAULT = False
+
 #: objects a shape needs before it is a segment
 MIN_OBJECTS = {"line": 5, "zigzag": 6, "arc": 5, "circle": 5, "stack": 4}
 #: tie-break when two shapes cover the same number of objects (lower wins)
@@ -99,18 +103,33 @@ def _end(o):
 
 
 class _Path:
-    """Legs and corners of an object list, in radii and degrees."""
+    """Legs and corners of an object list, in radii and degrees.
 
-    def __init__(self, objs, radius):
+    ``nodes`` picks what a shape is drawn through:
+
+    - ``"mixed"`` (default, the historical behaviour): nodes are object heads, but
+      leg i runs from the previous object's *exit* to head i;
+    - ``"head"``: nodes and legs are head to head;
+    - ``"exit"``: nodes and legs are exit to exit (a slider is its tail).
+
+    The last two only differ from each other on sliders (``slider_tails``).
+    """
+
+    def __init__(self, objs, radius, nodes="mixed"):
         self.objs = objs
         self.n = len(objs)
         self.r = float(radius)
+        self.nodes = nodes
         n = self.n
-        self.leg_r = [None] * n        # leg i: previous object's end -> object i's head
+        self.leg_r = [None] * n        # leg i: previous node -> node i (see ``nodes``)
         self.ang = [None] * n          # its heading, degrees, None when too short
         for i in range(1, n):
-            ex, ey = _end(objs[i - 1])
-            dx, dy = objs[i]["x"] - ex, objs[i]["y"] - ey
+            if nodes == "head":
+                ex, ey = objs[i - 1]["x"], objs[i - 1]["y"]
+            else:
+                ex, ey = _end(objs[i - 1])
+            hx, hy = self.pos(i)
+            dx, dy = hx - ex, hy - ey
             length = math.hypot(dx, dy) / self.r
             self.leg_r[i] = length
             if length >= MIN_LEG_R:
@@ -122,6 +141,8 @@ class _Path:
                 self.turn[i] = _wrap(self.ang[i + 1] - self.ang[i])
 
     def pos(self, i):
+        if self.nodes == "exit":
+            return _end(self.objs[i])
         return self.objs[i]["x"], self.objs[i]["y"]
 
     def dist_r(self, i, j):
@@ -300,7 +321,7 @@ _DETECTORS = (_cycle, _zigzag, _arc, _line)
 
 # -------------------------------------------------------------------- build --
 
-def _segment(P, s, e, shape, extra, beat_ms):
+def _segment(P, s, e, shape, extra, beat_ms, tag_nodes=False):
     objs = P.objs
     gaps = [objs[i]["t"] - objs[i - 1]["t"] for i in range(s + 1, e + 1)]
     legs = [P.leg_r[i] for i in range(s + 1, e + 1)]
@@ -316,6 +337,8 @@ def _segment(P, s, e, shape, extra, beat_ms):
         "residual_r": extra.get("residual_r"),
         "turn_sd": st.pstdev(turns) if len(turns) > 1 else None,
     }
+    if tag_nodes:
+        seg["nodes"] = P.nodes
     if "sweep" in extra:
         seg["sweep"] = extra["sweep"]
         seg["dir"] = "cw" if extra["sweep"] > 0 else "ccw"
@@ -329,29 +352,42 @@ def _segment(P, s, e, shape, extra, beat_ms):
 LOOKAHEAD = 3
 
 
-def _best(P, i):
-    """The longest candidate starting at object ``i`` (ties: higher priority)."""
+def _best(Ps, i):
+    """The longest candidate starting at object ``i`` (ties: higher priority, then the
+    earlier path in ``Ps``). Returns ``(key, shape, e, extra, P)``."""
     best = None
-    for detect in _DETECTORS:
-        found = detect(P, i)
-        if found is None:
-            continue
-        shape, e, extra = found
-        key = (e - i, -PRIORITY[shape])
-        if best is None or key > best[0]:
-            best = (key, shape, e, extra)
+    for P in Ps:
+        for detect in _DETECTORS:
+            found = detect(P, i)
+            if found is None:
+                continue
+            shape, e, extra = found
+            key = (e - i, -PRIORITY[shape])
+            if best is None or key > best[0]:
+                best = (key, shape, e, extra, P)
     return best
 
 
-def classify(objs, radius, beat_ms=None):
+def classify(objs, radius, beat_ms=None, slider_tails=SLIDER_TAILS_DEFAULT):
     """Segments of ``objs`` (build_objects rows), left to right, non-overlapping.
 
     ``radius`` is the circle radius in osu! pixels; ``beat_ms`` (optional) adds a
     ``beats`` field (note gap in beats) so a consumer can say "1/4" honestly.
+
+    ``slider_tails`` (see ``SLIDER_TAILS_DEFAULT``) also reads the map through
+    sliders' exits: a shape may be drawn through heads (head-to-head legs) or through
+    tails (exit-to-exit legs), as well as the historical mixed legs (which zigzags
+    on real maps still need), and the longer candidate wins, mixed first on ties. A map with no sliders
+    is classified exactly as with the flag off; segments carry ``nodes`` when it is on.
     """
-    P = _Path(objs, radius)
+    if slider_tails and any(o.get("kind") == "Slider" for o in objs):
+        P = [_Path(objs, radius), _Path(objs, radius, "head"), _Path(objs, radius, "exit")]
+        tag = True
+    else:
+        P, tag = [_Path(objs, radius)], False
+    n_objs = len(objs)
     segs, i = [], 0
-    while i < P.n:
+    while i < n_objs:
         best = _best(P, i)
         if best is None:
             i += 1
@@ -364,8 +400,8 @@ def classify(objs, radius, beat_ms=None):
                 if alt is not None and alt[2] > best[2] and alt[2] - j > best[2] - i:
                     best, i, moved = alt, j, True
                     break
-        _key, shape, e, extra = best
-        segs.append(_segment(P, i, e, shape, extra, beat_ms))
+        _key, shape, e, extra, Pw = best
+        segs.append(_segment(Pw, i, e, shape, extra, beat_ms, tag))
         i = e + 1
     return segs
 
