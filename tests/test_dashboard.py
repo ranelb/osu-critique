@@ -127,7 +127,10 @@ def ids(html: str) -> list[str]:
 def test_dashboard_is_the_home_page_and_maps_moved(client):
     home = client.get("/")
     assert home.status_code == 200
-    assert '<h1>dashboard</h1>' in home.text
+    # the h1 is the page's name for a screen reader; sighted readers get the
+    # hero, which is the numbers, not a label saying "dashboard"
+    assert '<h1 class="sr-only">dashboard</h1>' in home.text
+    assert 'class="hero"' in home.text
     assert 'class="card"' not in home.text
     maps = client.get("/maps")
     assert maps.status_code == 200
@@ -443,12 +446,40 @@ def test_the_open_route_launches_the_beattap_in_the_game(client, monkeypatch):
     finally:
         conn.close()
     seen = []
-    monkeypatch.setattr(web_app, "_launch_uri", lambda uri: seen.append(uri) or True)
+    monkeypatch.setattr(web_app, "_launch_uri",
+                        lambda uri, exec_line=None: (seen.append(uri) or True, ""))
     r = client.post("/open", data={"md5": MAP_NEW, "next": "/#w-recommend"},
                     follow_redirects=False)
     assert r.status_code in (302, 303)
     assert seen == ["osu://b/424242"]
     assert r.headers["location"] == "/#w-recommend?open=ok"
+
+
+def test_a_flatpak_entry_is_launched_by_app_id_not_by_gio(monkeypatch):
+    """The exported flatpak entry passes URLs through --file-forwarding.
+
+    `gio open osu://b/1876815` therefore becomes `Failed to open
+    ‘/tmp/osu:/b/1876815’` — and the detached launcher still exits 0, which is
+    why the button looked like it worked. Calling the app id keeps the URI.
+    """
+    from osu_critique.web import app as web_app
+
+    exec_line = ("/usr/bin/flatpak run --branch=stable --arch=x86_64 "
+                 "--command=start-osu --file-forwarding sh.ppy.osu @@ %F @@")
+    assert web_app._flatpak_app_id(exec_line) == "sh.ppy.osu"
+    argv = web_app._launch_candidates("osu://b/1876815", exec_line)[0]
+    assert argv == ["flatpak", "run", "sh.ppy.osu", "osu://b/1876815"]
+    assert "osu://b/1876815" in argv            # not rewritten to /tmp/...
+    assert "%F" not in argv and "@@" not in argv
+
+
+def test_a_plain_desktop_entry_still_goes_through_gio():
+    from osu_critique.web import app as web_app
+
+    assert web_app._flatpak_app_id("/usr/bin/osu-lazer %u") is None
+    assert web_app._flatpak_app_id(None) is None
+    assert web_app._launch_candidates("osu://b/1", "/usr/bin/osu-lazer %u")[0] == \
+        ["gio", "open", "osu://b/1"]
 
 
 def test_a_map_with_only_a_set_id_opens_the_set(client, monkeypatch):
@@ -463,7 +494,8 @@ def test_a_map_with_only_a_set_id_opens_the_set(client, monkeypatch):
     finally:
         conn.close()
     seen = []
-    monkeypatch.setattr(web_app, "_launch_uri", lambda uri: seen.append(uri) or True)
+    monkeypatch.setattr(web_app, "_launch_uri",
+                        lambda uri, exec_line=None: (seen.append(uri) or True, ""))
     client.post("/open", data={"md5": MAP_NEW, "next": "/"}, follow_redirects=False)
     assert seen == ["osu://s/31337"]
 
@@ -472,7 +504,8 @@ def test_the_open_route_cannot_be_asked_to_open_anything_else(client, monkeypatc
     from osu_critique.web import app as web_app
 
     seen = []
-    monkeypatch.setattr(web_app, "_launch_uri", lambda uri: seen.append(uri) or True)
+    monkeypatch.setattr(web_app, "_launch_uri",
+                        lambda uri, exec_line=None: (seen.append(uri) or True, ""))
     for md5 in ("", "javascript:alert(1)", "../../etc/passwd", "f" * 32):
         r = client.post("/open", data={"md5": md5, "next": "/"},
                         follow_redirects=False)
@@ -491,7 +524,8 @@ def test_a_failed_launch_says_so(client, monkeypatch):
         conn.commit()
     finally:
         conn.close()
-    monkeypatch.setattr(web_app, "_launch_uri", lambda uri: False)
+    monkeypatch.setattr(web_app, "_launch_uri",
+                        lambda uri, exec_line=None: (False, "boom"))
     r = client.post("/open", data={"md5": MAP_NEW, "next": "/"},
                     follow_redirects=False)
     assert r.headers["location"].endswith("open=error")

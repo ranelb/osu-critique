@@ -3,8 +3,10 @@
 (function () {
   "use strict";
 
+  /* the game's own judgement colours: a 300 is cyan, a 100 green, a 50 amber,
+     a miss red. The chart is the one place they are all on screen at once. */
   const COLOR = {
-    "300": "#ff66aa", "100": "#ffd166", "50": "#c9a227", "miss": "#ff5f6d",
+    "300": "#66ccff", "100": "#88b300", "50": "#ffcc22", "miss": "#ed2d3f",
   };
 
   function mmss(ms) {
@@ -51,22 +53,22 @@
     const y = (e) => pad.t + ((limit - e) / (2 * limit)) * (h - pad.t - pad.b);
 
     ctx.clearRect(0, 0, w, h);
-    ctx.font = "11px Poppins, system-ui, sans-serif";
+    ctx.font = "11px 'JetBrains Mono', ui-monospace, monospace";
     ctx.textBaseline = "middle";
 
     // window bands (300 tightest, 50 widest)
-    [[w50, "#ff5f6d18"], [w100, "#ffd16618"], [w300, "#4ade8018"]].forEach(([band, fill]) => {
+    [[w50, "#ed2d3f12"], [w100, "#ffcc220f"], [w300, "#66ccff10"]].forEach(([band, fill]) => {
       ctx.fillStyle = fill;
       ctx.fillRect(pad.l, y(band), w - pad.l - pad.r, y(-band) - y(band));
     });
-    ctx.strokeStyle = "#3a4560";
+    ctx.strokeStyle = "#3a3155";
     ctx.beginPath();
     ctx.moveTo(pad.l, y(0));
     ctx.lineTo(w - pad.r, y(0));
     ctx.stroke();
 
     // y labels
-    ctx.fillStyle = "#6d778c";
+    ctx.fillStyle = "#6f6588";
     ctx.textAlign = "right";
     [limit, limit / 2, 0, -limit / 2, -limit].forEach((v) => {
       ctx.fillText(v.toFixed(0), pad.l - 6, y(v));
@@ -79,8 +81,8 @@
     });
 
     points.forEach((r) => {
-      ctx.fillStyle = COLOR[r.result] || "#8b95ab";
-      ctx.globalAlpha = r.result === "300" ? 0.55 : 0.95;
+      ctx.fillStyle = COLOR[r.result] || "#a196ba";
+      ctx.globalAlpha = r.result === "300" ? 0.6 : 0.95;
       ctx.beginPath();
       ctx.arc(x(r.t), y(r.error_ms), r.result === "300" ? 1.8 : 2.8, 0, Math.PI * 2);
       ctx.fill();

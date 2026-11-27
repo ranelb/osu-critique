@@ -185,7 +185,7 @@ def test_map_page_shows_the_attempts_and_the_cross_attempt_block(client):
     assert "DEAFHEAVEN" in r.text
     assert "attempts" in r.text
     assert r.text.count('href="/run/') == 3
-    assert "cross-attempt structure" in r.text
+    assert "Cross-attempt structure" in r.text
     assert "consistent weakness" in r.text or "swings" in r.text
 
 
@@ -193,9 +193,9 @@ def test_map_page_golden_structure(client):
     """The page's semantic content, pinned: headings, order, and the attempt rows."""
     r = client.get(f"/map/{MAP_A}")
     html = r.text
-    headings = [h for h in ("attempts", "cross-attempt structure", "annotations")
+    headings = [h for h in ("Attempts", "Cross-attempt structure", "Annotations")
                 if h in html]
-    assert headings == ["attempts", "cross-attempt structure", "annotations"]
+    assert headings == ["Attempts", "Cross-attempt structure", "Annotations"]
     # newest attempt first, with its real numbers
     assert html.index("2026-09-20 10:00") < html.index("2026-09-10 10:00")
     assert "95.00%" in html and "80.00%" in html
@@ -229,7 +229,7 @@ def test_run_page_renders_the_good_trust_banner(client):
     assert r.status_code == 200
     assert "banner good" in r.text
     assert "matches the game" in r.text
-    assert "deterministic critique" in r.text
+    assert "Deterministic critique" in r.text
     assert "TestPlayer" not in r.text
 
 
@@ -246,7 +246,7 @@ def test_run_page_makes_an_untrustworthy_run_look_different(client):
 
 def test_run_page_lists_the_interesting_objects(client):
     r = client.get("/run/" + "2" * 32)
-    assert "objects worth looking at" in r.text
+    assert "Objects worth looking at" in r.text
     assert "res-miss" in r.text
     assert "load the full object table" not in r.text  # 1 miss < the table limit
 
@@ -301,6 +301,31 @@ def test_cover_offline_is_a_placeholder_not_an_error(client, monkeypatch):
 
 def test_cover_rejects_an_unknown_size(client):
     assert client.get(f"/api/cover/{MAP_A}", params={"size": "huge"}).status_code == 400
+
+
+def test_cover_falls_back_to_the_library_for_a_map_you_never_played(client):
+    """The `new` bucket is never-played maps, so `beatmaps` cannot answer.
+
+    A recommendation's cover used to 404: the route resolved through the
+    played-maps table only, and a map you have not played has no row there.
+    """
+    out = Path(client.app.state.outdir)
+    index.sweep(out, quiet=True)
+    conn = index.connect(index.db_path(out))
+    try:
+        conn.execute(
+            "INSERT INTO library_beatmaps (beatmap_md5, map_path, set_id, mode, title)"
+            " VALUES (?, ?, ?, 0, ?)",
+            ("f" * 32, "/nowhere/candidate.osu", 4242, "never played"))
+        conn.commit()
+    finally:
+        conn.close()
+    dest = covers.cover_path(out, 4242, "card")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(b"\xff\xd8\xff\xe0fake-jpeg")
+    r = client.get(f"/api/cover/{'f' * 32}", params={"size": "card"})
+    assert r.status_code == 200
+    assert r.content.startswith(b"\xff\xd8")
 
 
 def test_cover_fetches_the_variant_that_was_asked_for(tmp_path, monkeypatch):
@@ -631,7 +656,7 @@ def test_feed_renders_a_digest_as_a_page_not_a_text_blob(tmp_path):
     assert r.status_code == 200
     # structure, not <pre>
     assert 'class="digest-head"' in r.text
-    assert "maps worth another look" in r.text
+    assert "Maps worth another look" in r.text
     assert 'class="minigrid"' in r.text
     assert '<pre class="report">' not in r.text
     # the cards link to the map pages and load covers
@@ -728,7 +753,7 @@ def test_two_digests_at_once_are_refused(monkeypatch, tmp_path):
 def test_run_page_has_a_collapsed_board_section(client):
     page = client.get("/run/" + "2" * 32).text
     assert '<details class="panel fold" id="boards">' in page
-    assert "where it went wrong" in page
+    assert "Where it went wrong" in page
     assert 'id="boards-data"' in page
     assert 'id="miss-boards"' in page
     assert "closest 0.25r" in page or "near-miss" in page
@@ -913,7 +938,7 @@ def test_generating_stores_the_answer_and_the_summary(client, llm):
 
     # the saved list reads the (disposable) mirror, so generating must refresh it
     tab = client.get("/ask").text
-    assert "saved answers" in tab
+    assert "Saved answers" in tab
     assert doc["hash"] in tab
 
 
@@ -1077,7 +1102,7 @@ def test_the_old_critique_urls_redirect_and_keep_the_query(client):
 
 
 def test_the_tab_is_named_ask_and_the_run_page_points_at_it(client):
-    assert '<a href="/ask">ask</a>' in client.get("/").text
+    assert 'href="/ask"' in client.get("/").text
     page = client.get("/run/" + "2" * 32).text
     assert "/ask?runs=" + "2" * 32 in page
 

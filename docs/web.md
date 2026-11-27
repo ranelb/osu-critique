@@ -37,6 +37,52 @@ that carry no md5. Re-exports of one play share an id; the newest artifact wins.
 
 ## The dashboard
 
+## Visual design
+
+The pages are built out of two things the game already owns: **the cover art of
+the maps** and **the four judgement colours**. Colour is semantic, not
+decoration, and that is the whole system:
+
+| token | value | role |
+|---|---|---|
+| `--bg` / `--panel` | `#08070d` / `#171223` | violet-black ink and surface — a neutral grey makes every cover look pasted on |
+| `--pink` | `#ff66aa` | osu!'s brand: interaction, the primary action, the current nav item. Nothing else. |
+| `--cyan` | `#66ccff` | a 300, and any figure at or above your own median |
+| `--green` / `--c100` | `#9acd32` / `#88b300` | a 100: the easier half of a split, ranked status |
+| `--gold` | `#ffcc22` | a 50: below your median, the improver bucket, a warning |
+| `--red` / `--miss` | `#ff5f6d` / `#ed2d3f` | a miss, the gap you are being shown |
+
+Two faces, each with a job: **Poppins** (the shippable stand-in for osu!'s Torus,
+see `static/VENDOR.md`) carries prose and display; **JetBrains Mono** carries
+every number, table head and bar key, because columns have to line up. The type
+scale is six named steps (`--t-label` … `--t-h1`); a new block picks one instead
+of inventing another `0.84rem`.
+
+Structural rules, all of which the dashboard follows:
+
+- **A section is a rule and air.** `.panel` has no background, no radius and no
+  border except a 1px top rule. Cards are reserved for things you can pick — a
+  map, a recommendation.
+- **An image earns its place.** The dashboard opens on the cover of the map you
+  played last (`dashboard.hero()`, `/api/cover/<md5>?size=hero`), sharp on the
+  right, with the 30-day figures on ink on the left. Recommendation cards carry
+  their map's cover; recent plays carry a 44px thumb. The covers saturate and
+  scale 5 % on hover, which is the only hover transition in the app.
+- **One motion.** The accuracy line draws itself once, `pathLength="100"` and a
+  CSS `stroke-dashoffset` animation, no JavaScript. Everything else is static.
+  `prefers-reduced-motion` removes it.
+- **No ALL-CAPS chrome.** Section headings, rail titles, table heads and form
+  labels are sentence case. `text-transform: uppercase` appears nowhere.
+- **The chart colour is the verdict.** A week's dot is cyan at or above your own
+  median and amber below it; the median is drawn as a dashed line. The legend
+  states the rule rather than a gradient.
+
+`/api/cover/<md5>` resolves through `library_beatmaps` when `beatmaps` has no
+row: a recommendation is usually a map you have never played, and the played
+maps table cannot answer for it.
+
+### The widgets
+
 `/` is a page of **widgets**, and the widget list *is* the settings: order,
 on/off, and a window where a window means something. The catalogue lives in
 `dashboard.WIDGETS` (id, label, allowed windows); a template cannot fall out of
@@ -98,11 +144,37 @@ the **server** launches the game:
 1. the md5 is looked up in `library_beatmaps` (then `beatmaps`) — the client
    never supplies a URI, so the route cannot be turned into "open anything";
 2. the id becomes `osu://b/<beatmap id>` (or `osu://s/<set id>` when only a set
-   id exists) — lazer's `OpenBeatmap` / `OpenBeatmapSet` actions, parsed by
-   `MessageFormatter` on every platform;
-3. `gio open` (then `xdg-open`) hands it to the desktop, in the user session the
-   service already runs in;
-4. the redirect says what happened (`?open=ok`, `open=error`, `open=no-id`).
+   id exists) — lazer's `OpenBeatmap` / `OpenBeatmapSet` actions;
+3. **the flatpak app id is launched directly** when the scheme's desktop entry
+   starts one, then `gio open`, then `xdg-open`;
+4. the launch is *checked* (see below), and the redirect says what happened
+   (`?open=ok`, `open=error`, `open=no-id`).
+
+### Why the launch path is not just `gio open`
+
+Measured on osu!lazer 2026.1005 (flatpak), 2026-11-14, and the reason this
+button appeared to do nothing while the page said "osu! was asked to open that
+map":
+
+- The flatpak's exported `sh.ppy.osu.desktop` runs
+  `flatpak run … --file-forwarding sh.ppy.osu @@ %F @@`. `%F` is file
+  forwarding: a **URI** is treated as a path, so `gio open osu://b/1876815`
+  becomes `error: Failed to open ‘/tmp/osu:/b/1876815’` inside flatpak. The
+  launcher is detached, so **`gio open` still exits 0** — a silent failure that
+  reads as success.
+- `flatpak run sh.ppy.osu osu://b/1876815` skips that rewrite and the running
+  game receives the link (verified in its log: `BeatmapSetOverlay` focus at the
+  moment of the POST).
+
+So `_launch_candidates()` reads the `Exec=` line of whatever owns
+`x-scheme-handler/osu`, extracts the flatpak app id, and prefers
+`flatpak run <id> <uri>`; `gio open`/`xdg-open` remain for non-flatpak installs.
+`_launch_uri()` waits up to 3 s for the launcher: a non-zero exit is a real
+failure and its stderr goes to the server log, while a still-running child means
+the game is starting and counts as launched.
+
+An id that is not a real beatmap id is not an error: lazer ignores it silently,
+so the page cannot promise more than "handed it over".
 
 Doing it server-side is not a preference: a browser only launches an unknown
 scheme if it delegates to the OS, which Firefox-based browsers do not do for

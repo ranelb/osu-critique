@@ -63,7 +63,7 @@
 
   {% if cross_attempt and cross_attempt.families %}
   <section class="panel" id="cross">
-    <h2>cross-attempt structure</h2>
+    <h2>Cross-attempt structure</h2>
     <p class="verdict">{{ cross_attempt.verdict }}</p>
     <p class="fineprint">first → latest of {{ cross_attempt.n_attempts }} attempts:
       {{ cross_attempt.attempts[0].played_at | when }}
@@ -96,7 +96,7 @@
   {% endif %}
 
   <section class="panel" id="annotations">
-    <h2>annotations <span class="count">{{ notes.map | length }}</span></h2>
+    <h2>Annotations <span class="count">{{ notes.map | length }}</span></h2>
     {{ note_list(notes.map, "No map notes yet. Write one below — the coach reads these.") }}
     <form method="post" action="/map/{{ md5 }}/annotations" class="note-form">
       <textarea name="body" rows="2" required

@@ -525,6 +525,10 @@ def _build(conn, outdir, player, limit, stretch, buckets, use_blacklist) -> dict
             "score": round(score, 6),
             "weakness": weakness,
             "why": _why(row, values, bucket, detail, weakness),
+            # the card builds its own evidence line from these, so a number can
+            # carry a colour without parsing the sentence back apart
+            "material": _material(values),
+            "length": _clock(row["length_ms"]),
             **detail,
         })
 

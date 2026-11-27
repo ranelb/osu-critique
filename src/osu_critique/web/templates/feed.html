@@ -50,7 +50,7 @@
         ({{ d.ingest.known }} already known{% if d.ingest.failed %}, {{ d.ingest.failed }} failed{% endif %})
         in {{ d.ingest.seconds }}s{% endif %}</p>
     {% else %}
-      <h2>digest</h2>
+      <h2>Digest</h2>
       <p>older digest — text only</p>
     {% endif %}
   </header>
@@ -113,7 +113,7 @@
   </section>
 
   <section class="panel">
-    <h2>plays <span class="count">{{ d.n_runs }}</span></h2>
+    <h2>Plays <span class="count">{{ d.n_runs }}</span></h2>
     <div class="tscroll"><table class="data tight">
       <thead><tr><th>when</th><th>map</th><th>mods</th><th class="num">acc</th>
         <th class="num">UR</th><th class="num">miss</th><th>trust</th><th></th></tr></thead>
@@ -138,7 +138,7 @@
   </section>
 
   <section class="panel">
-    <h2>maps worth another look <span class="count">{{ d.worth | length }}</span></h2>
+    <h2>Maps worth another look <span class="count">{{ d.worth | length }}</span></h2>
     {% if d.worth %}
     <div class="minigrid">
       {% for b in d.worth %}

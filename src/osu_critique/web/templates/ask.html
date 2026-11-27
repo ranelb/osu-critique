@@ -20,7 +20,7 @@
   </section>
 
   <section class="panel" id="tray">
-    <h2>selection <span class="count">{{ tray | length }} selector{{ '' if tray | length == 1 else 's' }}</span></h2>
+    <h2>Selection <span class="count">{{ tray | length }} selector{{ '' if tray | length == 1 else 's' }}</span></h2>
     {% if tray %}
     <ul class="tray">
       {% for chip in tray %}
@@ -64,21 +64,21 @@
 
     <div class="picker-grid">
       <div class="picker">
-        <h3>replays</h3>
+        <h3>Replays</h3>
         <ul class="picklist">
           {{ pickrows(candidates.runs, runs_more, runs_next, 'runs') }}
         </ul>
       </div>
 
       <div class="picker">
-        <h3>maps <span class="muted">(every attempt)</span></h3>
+        <h3>Maps <span class="muted">(every attempt)</span></h3>
         <ul class="picklist">
           {{ pickrows(candidates.maps, maps_more, maps_next, 'maps') }}
         </ul>
       </div>
 
       <div class="picker">
-        <h3>time range</h3>
+        <h3>Time range</h3>
         <p class="fineprint">Ranges read <b>when you played</b>, not when the replay
           was exported. A range adds its runs to the selection.</p>
         <ul class="presets">
@@ -100,7 +100,7 @@
   </section>
 
   <section class="panel" id="generate">
-    <h2>the answer</h2>
+    <h2>The answer</h2>
     {% if not built.n_runs %}
     <p class="muted">Select something first.</p>
     {% elif not llm_allowed %}
@@ -144,7 +144,7 @@
   </section>
 
   <section class="panel" id="summary">
-    <h2>the summary it reads <span class="count">{{ (built.bytes / 1024) | num(0) }} KB</span></h2>
+    <h2>The summary it reads <span class="count">{{ (built.bytes / 1024) | num(0) }} KB</span></h2>
     {% if built.n_runs %}
     <p class="fineprint">Built from the artifacts, offline, no model. This exact text is
       what the model reads — <b>copy</b> it if you would rather paste it
@@ -159,7 +159,7 @@
   </section>
 
   <section class="panel" id="saved">
-    <h2>saved answers <span class="count">{{ saved | length }}</span></h2>
+    <h2>Saved answers <span class="count">{{ saved | length }}</span></h2>
     {% if saved %}
     <div class="tscroll"><table class="data tight">
       <thead><tr><th>when</th><th>question</th><th>runs</th><th>maps</th><th>span</th>

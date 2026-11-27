@@ -8,15 +8,19 @@ style, UR — plus charts, a deterministic report, and an optional AI critique.
 The analysis core is **fully local: no API keys, no network, no account.** All
 optional extras (AI coach, osu! profile) are bring-your-own-key.
 
-> **Status: 0.28.2** — 481 tests on Python 3.10–3.14 (the `[web]` extra is
+> **Status: 0.29.1** — 481 tests on Python 3.10–3.14 (the `[web]` extra is
 > installed on one interpreter; the analysis core needs no optional extras). The
 > judgement is validated against the game's own recorded counts; see
 > [Validation and trust](#validation-and-trust).
 >
-> 0.28.0 adds the map side: `osu-critique library scan` measures every installed
+> 0.28.0 added the map side: `osu-critique library scan` measures every installed
 > beatmap, `recommend` turns your runs into a skill profile and three
 > recommendation buckets, and the web frontend gained a dashboard at `/`,
 > a settings page and a glossary at `/learn`.
+>
+> 0.29.0 is the design pass: the pages are built from the game's own materials —
+> beatmap covers and the four judgement colours — instead of identical rounded
+> cards. See [docs/web.md](docs/web.md#design).
 
 ## Table of Contents
 

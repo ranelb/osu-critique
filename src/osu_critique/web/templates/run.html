@@ -64,7 +64,7 @@
   </section>
 
   <section class="panel" id="chart">
-    <h2>hit error over the map</h2>
+    <h2>Hit error over the map</h2>
     <canvas id="hiterror" class="chart" height="220"
             data-w300="{{ (metrics.get('windows_ms') or {}).get('300') }}"
             data-w100="{{ (metrics.get('windows_ms') or {}).get('100') }}"
@@ -75,7 +75,7 @@
 
   <details class="panel fold" id="boards">
     <summary>
-      <span class="st">where it went wrong</span>
+      <span class="st">Where it went wrong</span>
       <span class="peek">{{ boards.misses | length }} near-miss{{ '' if boards.misses | length == 1 else 'es' }}{% if boards.good %} · {{ boards.good | length }} clean stretch{{ '' if boards.good | length == 1 else 'es' }}{% endif %} — the five-note window around each, every miss on one playfield, and the stretches you already own</span>
     </summary>
     {% if objects_available %}
@@ -95,7 +95,7 @@
       {% endif %}
       {% if boards.good %}
       <div class="stretches">
-        <h3>unusually clean</h3>
+        <h3>Unusually clean</h3>
         <ul>
           {% for g in boards.good %}
           <li><span class="chip">{{ g.t_start | mmss }}–{{ g.t_end | mmss }}</span>
@@ -122,7 +122,7 @@
 
   <details class="panel fold" id="objects">
     <summary>
-      <span class="st">objects worth looking at</span>
+      <span class="st">Objects worth looking at</span>
       <span class="peek">{% if objects_available %}{{ n_interesting }} of {{ n_objects }} objects: every miss and every non-300, in map order{% else %}no per-object records for this run — it was analysed with <code>--no-objects</code>{% endif %}</span>
     </summary>
     {% if objects_available %}
@@ -150,7 +150,7 @@
     <p class="fineprint">… and {{ n_interesting - table_limit }} more below.</p>
     {% endif %}
     <details class="all-objects" id="all-objects-details">
-      <summary>the whole map, object by object <span class="count">{{ n_objects }}</span></summary>
+      <summary>The whole map, object by object <span class="count">{{ n_objects }}</span></summary>
       <div id="object-table"></div>
     </details>
     {% else %}
@@ -160,7 +160,7 @@
 
   <details class="panel fold" id="critique"{% if scope_answer or critique %} open{% endif %}>
     <summary>
-      <span class="st">answer</span>
+      <span class="st">Answer</span>
       <span class="peek">{% if scope_answer %}{{ scope_answer.model or 'model' }} · {{ scope_answer.created | when }} — generated on the ask page{% if scope_answer.question %} · “{{ scope_answer.question[:70] }}”{% endif %}{% elif critique %}{{ critique.model or 'model' }} · {{ critique.created | when }} — the older per-run framework{% if critique_stale %} · <b class="warn">stale</b>{% endif %}{% else %}nothing stored yet; the ask page builds it from the deterministic summary{% endif %}</span>
     </summary>
     {% if scope_answer %}
@@ -193,7 +193,7 @@
 
   <details class="panel fold" id="report">
     <summary>
-      <span class="st">deterministic critique</span>
+      <span class="st">Deterministic critique</span>
       <span class="peek">{{ n_report_sections }} sections of tables and thresholds — the same text
         <code>osu-critique report</code> prints</span>
       <span class="acts">
@@ -241,9 +241,9 @@
       <span class="peek">{{ notes.map | length }} map note{{ '' if notes.map | length == 1 else 's' }}
         · {{ notes.run | length }} on this run</span>
     </summary>
-    <h3>map notes</h3>
+    <h3>Map notes</h3>
     {{ note_list(notes.map, "No map notes yet — add one on the map page.") }}
-    <h3>this run</h3>
+    <h3>This run</h3>
     {{ note_list(notes.run, "No notes for this run yet.") }}
 
     <form method="post" action="/run/{{ run.run_id }}/annotations" class="note-form" id="note-form">

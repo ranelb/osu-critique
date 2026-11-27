@@ -2,7 +2,7 @@
 {% set s = data.skills %}
 {% set term = {'sustained': 'sustained-density', 'stream': 'stream-share', 'jump': 'jump-spacing', 'reversal': 'sharp-reversals', 'slider': 'slider-density'} %}
 <section class="panel" id="w-weakspots">
-  <h2>weak spots {{ learn('median-split') }} <span class="count">{{ (s.dimensions or []) | length }}</span></h2>
+  <h2>Weak spots {{ learn('median-split') }} <span class="count">{{ (s.dimensions or []) | length }}</span></h2>
   {% if not s or not s.dimensions %}
     <p class="muted">Not enough runs per material to split any dimension
       (needs 20 runs on each side of the median).</p>
@@ -10,6 +10,7 @@
     <p class="fineprint">Every dimension the profile looked at, including the ones
       that did <b>not</b> clear the gate. Misses are band-corrected: your rate
       minus your own median at that star rating.</p>
+    {% set top = (s.dimensions | map(attribute='ratio') | max) %}
     <div class="tscroll"><table class="data tight">
       <thead><tr>
         <th>material</th><th>split</th><th>worse half</th>
@@ -24,7 +25,7 @@
           <td>{{ 'high' if d.bad_side == 'high' else 'low' }} &gt; {{ d.split }}</td>
           <td class="num">{{ d.miss_bad_pct | num(2) }}% / {{ d.miss_good_pct | num(2) }}%</td>
           <td class="num">{{ d.excess_bad_pp | num(2) }} pp</td>
-          <td class="num">{{ d.ratio }}</td>
+          <td class="num"><span class="ratio"><i style="width: {{ (34 * d.ratio / top) | round(0) }}px"></i>{{ d.ratio }}</span></td>
           <td class="num">{{ d.n_bad }}/{{ d.n_good }}</td>
           <td>{% if d.key in (s.weaknesses | map(attribute='key') | list) %}
             <span class="pill bad-pill">weak</span>{% endif %}</td>

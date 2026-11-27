@@ -1,7 +1,7 @@
 {% from "partials/gloss.html" import gloss, learn with context %}
 {% set w = data.whatsnew %}
 <section class="panel" id="w-whatsnew">
-  <h2>what's new {{ learn('library-scan') }}</h2>
+  <h2>What's new {{ learn('library-scan') }}</h2>
   {% if w.n_new %}
     <p><b>{{ w.n_new }}</b> play{{ '' if w.n_new == 1 else 's' }} since your last
       digest.</p>

@@ -4,9 +4,9 @@ For contributors picking this up. Read this file, then `docs/profile.md` and
 `docs/object_schema.md`. It records the decisions already made, the items still
 open, and the traps that have bitten.
 
-State: **0.27.0** (tag `v0.27.0` is the last published release); 378 tests green
-(289 run anywhere: 89 need the `[web]` extra, 6 need real replays), CI on Python
-3.10/3.12/3.14 on every push, tag → wheel + GitHub release
+State: **0.29.1** (tag `v0.28.2` is the last published release); 482 tests
+collected (476 run anywhere, 6 need real replays), CI on Python 3.10/3.12/3.14 on
+every push, tag → wheel + GitHub release
 (`.github/workflows/release.yml`).
 
 ## The web UI arc — shipped (0.12.0 → 0.20.0)
@@ -31,6 +31,28 @@ it does not need a schema change.
 
 ## Shipped since 0.12.0
 
+- **0.29.1 — "open in osu!" actually opens it.** The button posted the md5,
+  built `osu://b/<id>` and then handed it to `gio open`, which exits 0 whether
+  or not anything launched: the flatpak desktop entry forwards `%F` (files), so
+  the URI became `/tmp/osu:/b/<id>` and failed silently. The route now reads the
+  scheme handler's `Exec=` line, launches the flatpak app id directly, and
+  checks the launcher's exit instead of assuming. Verified against a running
+  lazer: the log shows `BeatmapSetOverlay` focus at the moment of the POST.
+  See [web.md](web.md#why-the-launch-path-is-not-just-gio-open).
+- **0.29.0 — the visual pass.** The pages stopped being nine identical rounded
+  cards and started being built from the game's own materials: the cover art of
+  the maps and the four judgement colours (a 300 is cyan, a 100 green, a 50
+  amber, a miss red). `dashboard.hero()` opens `/` on the last map you played,
+  sharp on the right with the 30-day figures on ink on the left; recommendation
+  cards and recent plays carry covers; the accuracy line draws itself once and
+  its dots are coloured against your own median; skill bars put the easy and
+  hard halves on one axis with the gap in miss red. Sections are rules and air,
+  not boxes. Two faces with separate jobs (Poppins for prose, JetBrains Mono for
+  every number — vendored, OFL), a six-step type scale, and no ALL-CAPS chrome
+  anywhere. Also fixed: `/api/cover` resolved only through the played-maps
+  table, so 3 of 6 recommendation covers 404'd — the recommendation is usually a
+  map you have never played, which is the point of the `new` bucket. See
+  [web.md](web.md#visual-design).
 - **0.28.0 — the data layer, the map side, the dashboard.** The lazer `.osr`
   trailing score-info block is read (`online_id`, exact mod settings incl. custom
   rate, pauses, per-category `statistics` / `maximum_statistics`);
@@ -311,10 +333,6 @@ shrinks the n behind each rate. Revisit with a question, not a hunch.
 
 ## Known gaps in the critique tab
 
-- The model's answer is rendered in a `<pre>`, markdown and all, because the
-  project has no markdown renderer and adding a dependency for one panel was not
-  worth it in this pass. The deterministic side is text on purpose; the answer is
-  not, and it shows.
 - No "lens" selector (per-run / map / diet / timeframe) — one scope prompt serves
   every selection, which works but blurs the wording for a one-replay critique.
 - The pickers page 40 rows at a time; deeper paging than the current filter has
