@@ -125,6 +125,45 @@ def _rosu():
     return Beatmap, Difficulty, Performance
 
 
+def section_strains(path, clock_rate=1.0, mods=""):
+    """``{"length": ms, "aim": [...], "speed": [...]}`` per strain section, or None.
+
+    rosu-pp's own strains (std: 400 ms sections in the *played* clock, so a row time in
+    real ms divides straight into a section index). ``clock_rate`` is the speed the
+    rows were played at (``1 / scale``); ``mods`` are the non-rate mods (HR/EZ). None
+    when the optional extra is missing or rosu-pp cannot read the map.
+    """
+    try:
+        Beatmap, Difficulty, _ = _rosu()
+    except RuntimeError:
+        return None
+    try:
+        kw = {"clock_rate": float(clock_rate)}
+        if mods:
+            kw["mods"] = mods
+        s = Difficulty(**kw).strains(Beatmap(path=str(path)))
+        return {"length": float(s.section_length), "aim": list(s.aim),
+                "speed": list(s.speed)}
+    except Exception:                                            # noqa: BLE001
+        return None
+
+
+def attach_section_strains(rows, strains):
+    """Write ``sec_aim`` / ``sec_speed`` (the object's section strain) onto each row (play order)."""
+    # the arrays start at the section holding the first object, not at t = 0
+    first = int(rows[0]["t"] // strains["length"]) if rows and strains and strains["length"] > 0 else 0
+    for r in rows:
+        r["sec_aim"] = r["sec_speed"] = None
+        if strains and strains["length"] > 0:
+            i = int(r["t"] // strains["length"]) - first
+            if i == len(strains["aim"]):          # the trailing partial section
+                i -= 1
+            if 0 <= i < len(strains["aim"]) and i < len(strains["speed"]):
+                r["sec_aim"] = float(strains["aim"][i])
+                r["sec_speed"] = float(strains["speed"][i])
+    return rows
+
+
 def build_stars(rows, index, cache=None, player=None, log=print):
     """``{md5: {"NM"|"DT"|"HT"|"HR": stars}}`` for every map in ``rows``.
 

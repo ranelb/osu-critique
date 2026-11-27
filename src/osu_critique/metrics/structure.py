@@ -26,13 +26,17 @@ Fields added to each result row (see ``docs/object_schema.md`` for the units):
     slider_tail_x  cursor position at the slider's final tail
     slider_tail_y  ... (Hard Rock reflected like every other position)
     stack          this head lands on the previous object's end (<0.15r)
+
+Schema v3 adds the pattern classes (``metrics/classes.py``), all map-side:
+shape, walk, curve, leg_dist, leg_flow, leg_tempo; and ``sec_aim`` / ``sec_speed``,
+rosu-pp's strain of the object's 400 ms section (None without the ``[stars]`` extra).
 """
 from __future__ import annotations
 
 import bisect
 import math
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # the record fields written to out/<tag>_objects.json, in order
 OBJECT_FIELDS = ("i", "t", "kind", "end_t", "x", "y", "result", "error_ms",
@@ -40,7 +44,9 @@ OBJECT_FIELDS = ("i", "t", "kind", "end_t", "x", "y", "result", "error_ms",
                  "pattern", "snap", "bpm", "bpm_eff", "angle_deg", "strain_aim",
                  "strain_speed", "slider_tail_off", "slider_missed_ticks",
                  "slider_off_pct", "sv", "kiai", "curve_type", "slider_path_px",
-                 "repeats", "slider_tail_x", "slider_tail_y", "stack")
+                 "repeats", "slider_tail_x", "slider_tail_y", "stack",
+                 "shape", "walk", "curve", "leg_dist", "leg_flow", "leg_tempo",
+                 "sec_aim", "sec_speed")
 STACK_R = 0.15          # no meaningful travel: a stack / 2B-style overlap
 
 
@@ -57,6 +63,16 @@ def _beat_ms_at(times, beats, t_ms):
         return None
     i = bisect.bisect_right(times, t_ms) - 1
     return beats[max(0, i)]
+
+
+def beat_at_fn(bm, scale):
+    """``beat_at(t)``: the uninherited beat length in the rows' own clock (ms)."""
+    times, beats = beat_grid(bm)
+
+    def beat_at(t_ms):
+        b = _beat_ms_at(times, beats, t_ms / scale)
+        return b * scale if b else None
+    return beat_at
 
 
 def _angle(a, b, c):
@@ -167,5 +183,13 @@ def object_records(results, radius):
             "slider_tail_y": (_r(x.get("end_y"), 1)
                               if x.get("kind") == "Slider" else None),
             "stack": bool(x.get("stack")),
+            "shape": x.get("shape"),
+            "walk": x.get("walk"),
+            "curve": x.get("curve"),
+            "leg_dist": x.get("leg_dist"),
+            "leg_flow": x.get("leg_flow"),
+            "leg_tempo": x.get("leg_tempo"),
+            "sec_aim": _r(x.get("sec_aim"), 2),
+            "sec_speed": _r(x.get("sec_speed"), 2),
         })
     return records

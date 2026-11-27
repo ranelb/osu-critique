@@ -226,7 +226,7 @@ The owner's judgement is ground truth; the classifier and I are not.
   beats via the local uninherited timing point), then maximal runs of one class as segments
   ("wide snap jumps at 150 ms"). Deterministic, no I/O, thresholds in one table.
 - Fixtures in `tests/fixtures/` with known buckets; cut-points confirmed by the owner before they are final.
-- Not wired to the recommender or `FEATURE_VERSION` until phase E.
+- Wired to `FEATURE_VERSION` in phase E (the `classes` block).
 
 ## Phase C. Slider tails as nodes
 - Cycle and fit nodes from exit-to-head legs (`end_x`/`end_y`) behind a flag; compare against the phase A
@@ -241,6 +241,9 @@ The owner's judgement is ground truth; the classifier and I are not.
   then the owner's eye on real maps.
 
 ## Phase E. Replay side and intervals
+Status: done (branch `ranelb/pattern-phase-e-classification`): objects.json schema v3, `class_miss`
+block, recommender map side on rosu-pp + classes at `FEATURE_VERSION` 3, improver gap cut-off and
+maintain bucket removed after held-out validation (`scripts/validate_recommend.py`, `docs/recommend.md`).
 - `report.analyze` calls `label_objects` + the descriptors; `out/<tag>_objects.json` stores them.
 - Per-class miss-rate block under the population gate (`min(20, max(8, 3 % of objects))`, n always quoted).
 - Intervals: Wilson per class; bootstrap clustered by map; contrast against the overall rate.

@@ -1,6 +1,6 @@
 {% from "partials/gloss.html" import gloss, learn with context %}
 {% set s = data.skills %}
-{% set term = {'sustained': 'sustained-density', 'stream': 'stream-share', 'jump': 'jump-spacing', 'reversal': 'sharp-reversals', 'slider': 'slider-density'} %}
+{% set term = {'aim_weight': 'aim-weight', 'speed_notes': 'speed-notes', 'slider_factor': 'slider-factor', 'curve': 'curvy-paths', 'polygon': 'polygon-walks', 'wide_snap': 'wide-snaps'} %}
 <section class="panel" id="w-weakspots">
   <h2>Weak spots {{ learn('median-split') }} <span class="count">{{ (s.dimensions or []) | length }}</span></h2>
   {% if not s or not s.dimensions %}

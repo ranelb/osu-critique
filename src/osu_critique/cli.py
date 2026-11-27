@@ -1189,8 +1189,8 @@ def main(argv=None):
     p.add_argument("--stretch", type=float, default=0.5,
                    help="how far above your comfort SR to aim, 0..1 (default 0.5)")
     p.add_argument("--bucket", action="append", default=None,
-                   choices=["new", "improver", "maintain"],
-                   help="only this bucket; repeatable (default: all three)")
+                   choices=["new", "improver"],
+                   help="only this bucket; repeatable (default: both)")
     p.add_argument("--no-blacklist", action="store_true",
                    help="ignore out/blacklist.json (debugging only)")
     p.add_argument("--skills", action="store_true",

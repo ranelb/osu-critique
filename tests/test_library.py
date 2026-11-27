@@ -202,7 +202,7 @@ def test_geometry_block_names_what_a_known_map_contains():
     assert 0.1 < g["coverage"] <= 1.0
     assert g["shapes"]["triangle"]["segments"] >= 1
     assert any(lbl.endswith("triangle stream") for lbl in g["labels"])
-    assert library.FEATURE_VERSION == 2
+    assert library.FEATURE_VERSION == 3
 
 
 def test_geometry_block_is_deterministic():

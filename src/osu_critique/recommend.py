@@ -26,12 +26,14 @@ Buckets, mutually exclusive:
 ``new``
     never played by this player.
 ``improver``
-    played, at least two attempts, and the latest attempt is >=3 pp of accuracy
-    below the median of your runs in the same 0.25-star band (or failed). The
-    card carries the proof: your best here, that band median, the last attempt.
-``maintain``
-    at or above the band median, last played >=30 days ago, inside the comfort
-    band.
+    played, at least two attempts, and the latest attempt is below the median of
+    your runs in the same 0.25-star band (or failed). No gap cut-off: on held-out
+    runs the next attempt's gain rises monotonically with the gap, and no
+    particular gap stands out (docs/recommend.md). The card carries the proof:
+    your best here, that band median, the last attempt.
+
+There is no ``maintain`` bucket: "good here, not played for a while" was meant to
+catch decay, and held-out runs show none (see docs/recommend.md).
 
 Everything is deterministic: no model, no timestamps in the output, ties broken
 by md5. ``recommend --json`` is the testable surface.
@@ -59,10 +61,6 @@ MIN_WINDOW_RUNS = 60
 MIN_SIDE = 20
 #: runs needed in a 0.25-star band before it gets a median
 MIN_BAND_RUNS = 5
-#: improver: accuracy gap below the band median, in accuracy points (0..1)
-IMPROVER_GAP = 0.03
-#: maintain: days since the last attempt
-MAINTAIN_DAYS = 30
 #: where the difficulty fit peaks above the comfort rating, at stretch = 1
 STRETCH_PEAK = 0.6
 #: weakness gate: the worse half's *excess miss rate* (miss rate minus your own
@@ -79,19 +77,52 @@ EXCESS_FLOOR_PP = 0.05
 MISS_BAND = 0.5
 MIN_MISS_BAND_RUNS = 8
 
-#: map-material dimensions. ``jump`` sums jump and bigjump spacing, which is the
-#: same physical skill at two scales.
+#: ``library_beatmaps`` plus the few numbers that live in ``features_json``, pulled
+#: with ``json_extract`` so the scorer never parses 5 000 blobs in Python. The
+#: rosu-pp attributes are another project's difficulty model; the class shares are
+#: ``metrics/classes.py`` (what the objects *are*, geometry + leg descriptors).
+LIBRARY_SQL = (
+    "SELECT *, "
+    "json_extract(features_json, '$.rosu.aim') AS rosu_aim, "
+    "json_extract(features_json, '$.rosu.speed') AS rosu_speed, "
+    "json_extract(features_json, '$.rosu.slider_factor') AS rosu_slider_factor, "
+    "json_extract(features_json, '$.rosu.speed_note_count') AS rosu_speed_notes, "
+    "json_extract(features_json, '$.classes.any_curve') AS cls_curve, "
+    "json_extract(features_json, '$.classes.any_walk') AS cls_walk, "
+    "json_extract(features_json, '$.classes.keys.\"leg:wide/snap\"') AS cls_wide_snap "
+    "FROM library_beatmaps WHERE mode = 0")
+
+
+def _ratio(a, b):
+    a, b = _num(a), _num(b)
+    return a / (a + b) if a is not None and b is not None and a + b > 0 else None
+
+
+def _per_object(count, n):
+    count, n = _num(count), _num(n)
+    return count / n if count is not None and n else None
+
+
+#: map-material dimensions. Aim vs speed and the speed-note share come from
+#: rosu-pp's attributes; curvy paths, polygon/star walks and wide snaps from the
+#: pattern classes. A class missing from a map is a real zero (the class table is
+#: complete), not unknown; only a map with no rosu-pp attributes has no values.
 DIMENSIONS = (
-    ("sustained", "sustained density", lambda f: f["sustained_nps"]),
-    ("stream", "stream share", lambda f: f["stream_share"]),
-    ("jump", "jump spacing", lambda f: _add(f["jump_share"], f["bigjump_share"])),
-    ("reversal", "sharp reversals", lambda f: f["anti_flow_share"]),
-    ("slider", "slider density", lambda f: f["slider_ratio"]),
+    ("aim_weight", "aim weight", lambda f: _ratio(f.get("rosu_aim"), f.get("rosu_speed"))),
+    ("speed_notes", "speed-note share",
+     lambda f: _per_object(f.get("rosu_speed_notes"), f.get("n_objects"))),
+    ("slider_factor", "slider factor", lambda f: _num(f.get("rosu_slider_factor"))),
+    ("curve", "curvy paths", lambda f: _class_share(f, "cls_curve")),
+    ("polygon", "polygon and star walks", lambda f: _class_share(f, "cls_walk")),
+    ("wide_snap", "wide snaps", lambda f: _class_share(f, "cls_wide_snap")),
 )
 
 
-def _add(a, b):
-    return (a or 0.0) + (b or 0.0)
+def _class_share(f, col):
+    """The share, or None when the map has no class block (scanned before v3)."""
+    if f.get("rosu_aim") is None and f.get("cls_curve") is None:
+        return None
+    return _num(f.get(col)) or 0.0
 
 
 def _num(value):
@@ -140,15 +171,8 @@ def default_player(conn) -> str | None:
 # ------------------------------------------------------------- the evidence --
 
 def _dimension_values(feats: dict) -> dict:
-    """The dimension inputs straight off a ``library_beatmaps`` row, as a dict.
-
-    Columns, not ``features_json``: the scorer only needs these numbers, and
-    parsing 5 000 JSON blobs per call would be the difference between a page and
-    a wait.
-    """
-    values = {key: _num(fn(feats)) for key, _label, fn in DIMENSIONS}
-    values["sustained_share"] = _num(feats.get("sustained_share"))
-    return values
+    """The dimension inputs of one :data:`LIBRARY_SQL` row, as a dict."""
+    return {key: _num(fn(feats)) for key, _label, fn in DIMENSIONS}
 
 
 def _play_evidence(conn, player, values_by_md5) -> tuple[list, dict]:
@@ -381,20 +405,20 @@ def _pct_rank(values: list, value: float) -> float:
     return i / len(values)
 
 
-def _material(values: dict) -> str:
-    """The phrase a card uses for what the map mostly is."""
-    if (values.get("sustained") is not None and values["sustained"] >= 8.0
-            and (values.get("sustained_share") or 0.0) >= 0.5):
-        return "sustained stream"
-    if values.get("stream") is not None and values["stream"] >= 0.5:
-        return "mostly streams"
-    if _add(values.get("jump"), 0.0) >= 0.6:
-        return "jump spacing"
-    if values.get("reversal") is not None and values["reversal"] >= 0.35:
-        return "sharp reversals"
-    if values.get("slider") is not None and values["slider"] >= 0.5:
-        return "slider-heavy"
-    return "mixed spacing"
+def _material(row, values) -> str:
+    """The phrase a card uses for what the map is: rosu-pp's aim/speed lean, and the
+    larger of the curvy-path and polygon shares when there is any. No cut-offs; the
+    percentage is printed so the reader judges it."""
+    parts = []
+    aim, speed = _num(row.get("rosu_aim")), _num(row.get("rosu_speed"))
+    if aim is not None and speed is not None:
+        parts.append("aim-heavy" if aim >= speed else "speed-heavy")
+    shares = [(values.get(k) or 0.0, name) for k, name in
+              (("curve", "curvy paths"), ("polygon", "polygon/star walks"))]
+    share, name = max(shares)
+    if share > 0:
+        parts.append(f"{100 * share:.0f}% {name}")
+    return ", ".join(parts) or "mixed"
 
 
 def _clock(ms) -> str:
@@ -420,8 +444,7 @@ def build(outdir, player: str | None = None, limit: int = 6,
 
 def _build(conn, outdir, player, limit, stretch, buckets, use_blacklist) -> dict:
     player = player or default_player(conn)
-    library_rows = [dict(r) for r in conn.execute(
-        "SELECT * FROM library_beatmaps WHERE mode = 0")]
+    library_rows = [dict(r) for r in conn.execute(LIBRARY_SQL)]
     if not library_rows:
         # an empty table is not "no good maps", it is "never scanned" — and
         # `index --rebuild` deletes the DB file, which takes this with it
@@ -460,7 +483,7 @@ def _build(conn, outdir, player, limit, stretch, buckets, use_blacklist) -> dict
         })
 
     blocked = blacklist.load(outdir) if use_blacklist else {"maps": [], "sets": []}
-    wanted = set(buckets or ("new", "improver", "maintain"))
+    wanted = set(buckets or ("new", "improver"))
 
     rankings = {}
     for key, _label, fn in DIMENSIONS:
@@ -472,7 +495,7 @@ def _build(conn, outdir, player, limit, stretch, buckets, use_blacklist) -> dict
     sigma = 0.35 + 0.5 * stretch
 
     scored = []
-    counts = {"new": 0, "improver": 0, "maintain": 0, "blocked": 0,
+    counts = {"new": 0, "improver": 0, "blocked": 0,
               "gated": 0, "played_other": 0, "relax_only": 0}
     for row in library_rows:
         md5 = row["beatmap_md5"]
@@ -527,7 +550,7 @@ def _build(conn, outdir, player, limit, stretch, buckets, use_blacklist) -> dict
             "why": _why(row, values, bucket, detail, weakness),
             # the card builds its own evidence line from these, so a number can
             # carry a colour without parsing the sentence back apart
-            "material": _material(values),
+            "material": _material(row, values),
             "length": _clock(row["length_ms"]),
             **detail,
         })
@@ -537,8 +560,8 @@ def _build(conn, outdir, player, limit, stretch, buckets, use_blacklist) -> dict
     # not a plan. Order inside a bucket stays score order.
     scored.sort(key=lambda c: (-c["score"], c["beatmap_md5"]))
     by_bucket = {name: [c for c in scored if c["bucket"] == name]
-                 for name in ("new", "improver", "maintain")}
-    order = [name for name in ("new", "improver", "maintain")
+                 for name in ("new", "improver")}
+    order = [name for name in ("new", "improver")
              if name in wanted and by_bucket[name]]
     picked, seen_sets, turn = [], set(), 0
     limit = max(1, limit)
@@ -583,12 +606,8 @@ def _classify(attempts, band_median):
     }
     if band_median is None or len(attempts) < 2:
         return None, {}
-    if latest["failed"] or latest["accuracy"] < band_median - IMPROVER_GAP:
+    if latest["failed"] or latest["accuracy"] < band_median:
         return "improver", detail
-    days = _days_since(latest["played_at"])
-    if latest["accuracy"] >= band_median and days is not None and days >= MAINTAIN_DAYS:
-        detail["days_since"] = round(days)
-        return "maintain", detail
     return None, {}
 
 
@@ -598,11 +617,12 @@ def _pp(value):
 
 def _bucket_term(bucket, detail) -> float:
     if bucket == "improver":
-        gap = max(0.0, (detail.get("band_median_accuracy") or 0.0)
-                  - (detail.get("latest_accuracy") or 0.0))
-        return 1.0 + min(1.0, gap / 10.0)
-    if bucket == "maintain":
-        return 0.6 + 0.4 * min(1.0, (detail.get("days_since") or 0) / 90.0)
+        # share of the headroom above the last attempt that the band median
+        # already covers: scale-free, so there is no gap constant to tune
+        median = detail.get("band_median_accuracy") or 0.0
+        latest = detail.get("latest_accuracy") or 0.0
+        room = 100.0 - latest
+        return 1.0 + (max(0.0, median - latest) / room if room > 0 else 0.0)
     return 1.0
 
 
@@ -633,7 +653,7 @@ def _why(row, values, bucket, detail, weakness) -> str:
     if row["bpm"]:
         parts.append(f"{float(row['bpm']):.0f} BPM")
     parts.append(_clock(row["length_ms"]))
-    parts.append(_material(values))
+    parts.append(_material(row, values))
     if weakness is not None:
         parts.append(
             f"trains {weakness['label']} — you miss "
@@ -644,16 +664,12 @@ def _why(row, values, bucket, detail, weakness) -> str:
         parts.append("difficulty-appropriate")
     if bucket == "new":
         parts.append("never played")
-    elif bucket == "improver":
+    else:
         parts.append(
             f"improver: best {detail['best_accuracy']:.1f}% over "
             f"{detail['n_attempts']} run{'s' if detail['n_attempts'] != 1 else ''}, "
             f"this band's median {detail['band_median_accuracy']:.1f}%, "
             f"last attempt {detail['latest_accuracy']:.1f}%")
-    else:
-        parts.append(
-            f"maintain: {detail['latest_accuracy']:.1f}% here, last played "
-            f"{detail['days_since']:.0f}d ago")
     return " \u00b7 ".join(parts)
 
 

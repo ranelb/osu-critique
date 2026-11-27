@@ -15,7 +15,7 @@ all query these rows rather than re-deriving them. Skip it with `--no-objects`.
 
 ```json
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "tag": "example",
   "player": "TestPlayer",
   "map": "Example Song [Extra]",
@@ -62,6 +62,13 @@ all query these rows rather than re-deriving them. Skip it with `--no-objects`.
 | `slider_tail_x` | osu! px | slider only: cursor position at the final tail, Hard Rock reflected |
 | `slider_tail_y` | osu! px | ... |
 | `stack` | bool | this head lands within 0.15r of the previous object's end (a stack / 2B-style overlap) |
+| `shape` | — | v3. `geometry` shape of the segment the object is in (`triangle`, `square`, `star`, `line`, `circle`, ...); null when no repeated figure covers it (the normal case) |
+| `walk` | — | v3. one-lap polygon/star walk (`hexagon`, `pentagon`, `square`, `triangle`, `star`) from `metrics/walks.py`; null otherwise |
+| `curve` | — | v3. curve fit on dense legs (`metrics/curves.py`: `curvy_stream`, `arc`, `circle`, ...); null otherwise |
+| `leg_dist` | — | v3. the leg that arrives at the object (previous exit -> this head): `touching` / `close` / `medium` / `wide` (radii; `metrics/legs.py` table); null for the first object and spinners |
+| `leg_flow` | — | v3. `none` (leg too short for a heading) / `flow` / `angle` / `snap` |
+| `leg_tempo` | — | v3. `fast` / `mid` / `slow` by the real gap (160 / 250 ms, the `rhythm` ceilings) |
+| `sec_aim`, `sec_speed` | rosu-pp strain | v3. rosu-pp's aim / speed strain of the 400 ms section (in the played clock, mod-aware) the object sits in; a difficulty control for `class_miss`, not a per-object strain. Null without the `[stars]` extra, under Relax, or when rosu-pp cannot read the map |
 
 The three `slider_*` fields are **measurements of the body**, not verdicts: the
 game does not degrade a slider whose body was cut on any of the reference plays
@@ -75,7 +82,11 @@ reported and never change the judgement. See `docs/ROADMAP.md` item 3.
   bumped and this file says so. v2 changes one meaning: `spacing_r` is now
   measured from the previous object's **end** (slider tail) instead of its head,
   and fixes the same travel used by `breakdown.required_speeds`. Everything else
-  in v2 is additive.
+  in v2 is additive. v3 is purely additive (the six pattern-class fields and the two section strains above,
+  written by `metrics/classes.py`); the classes describe the **map as played**
+  (mod-adjusted radius, reflected playfield, real-time gaps), never the replay's
+  performance, and they are derived, so a detector change re-labels without
+  touching the measurements.
 - **Null means unknown, never zero.** A missing timing point, first-object
   spacing, a spinner's aim — all `null`; consumers must treat them as "no data",
   and must not silently drop the row.

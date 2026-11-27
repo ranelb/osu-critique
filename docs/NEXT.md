@@ -52,9 +52,9 @@ inventing a map-difficulty description.
 - The "material" dimensions in `recommend.py` should come from those plus the new geometry
   `labels` (for "what kind of patterns does this map have"). Drop `patterns.bucket` consumers
   in `library.py` / `recommend.py` once nothing reads them.
-- The improver / maintain thresholds were never validated against anything. Either validate
-  them (hold out the owner's most recent runs and check the lists predict them) or delete
-  the buckets. Do not keep unvalidated cut-offs.
+- DONE: improver / maintain validated on held-out runs; the improver gap cut-off and the
+  maintain bucket were deleted (see `docs/recommend.md`). Do not reintroduce cut-offs without
+  rerunning `scripts/validate_recommend.py`.
 - Constraint from CLAUDE.md: `recommend --json` must stay byte-equal between calls. Bump
   `FEATURE_VERSION` again if the extracted features change. Update `docs/recommend.md`.
 

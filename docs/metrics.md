@@ -83,6 +83,16 @@ Per-play metrics include:
   signed bias per family ([profile.md](profile.md)). Per-object `sv`, `kiai`,
   `curve_type`, `slider_path_px`, `repeats`, `slider_tail_x/y` and `stack` are
   in the object records
+- **Pattern classes** (`class_miss`): miss rate per pattern class (map shapes, walks,
+  curves and leg descriptors), with n, a Wilson interval and three contrasts against
+  the rest of the same map: raw, same leg distance x tempo, same rosu-pp aim x speed
+  strain cell. Gated at `max(10, min(20, max(8, 3 % of objects)))` objects per class;
+  `null` means no cell could be matched, never zero. The "rest" includes other
+  classes (a hexagon is compared with everything that is not that hexagon, stars
+  included), so a raw contrast is a descriptive number, not a causal one. One run is
+  one map: pooled intervals, bootstrapped over maps, come from
+  `scripts/replay_join.py`. Unavailable under Relax/Autopilot
+  ([class_miss.py](../src/osu_critique/metrics/class_miss.py))
 - **Trust**: per-count deltas against the game's own recorded hits, the scale the
   calibration chose, and whether the judgement can be trusted at all
 - **Flags**: `failed_play`, `map_version_mismatch`, mods

@@ -46,6 +46,11 @@ First-class columns (what the gate and a card need):
 
 Everything else rides in `features_json` (angle counts, strain percentiles, SV
 and BPM ranges, per-bucket counts) so a new feature does not need a migration.
+`FEATURE_VERSION` 3 adds `features_json["rosu"]` (stars, aim, speed, slider_factor,
+speed_note_count, aim/speed difficult strain counts, from rosu-pp) and
+`features_json["classes"]` (`any_shape`, `any_walk`, `any_curve` and `keys`: the share of
+objects per `class_keys` name, from `metrics/classes.py`). The recommender reads these; the
+spacing columns above are kept as context and are no longer scored.
 The spacing buckets and sustained runs come from the analysis library itself —
 `metrics.patterns`, `metrics.structure.annotate`, `metrics.streams.find_runs` —
 so a map is described by the same definitions a play is judged with. There is
@@ -104,4 +109,5 @@ python scripts/make_synthetic_fixtures.py --library
 `metrics/rhythm.py`: share of notes explained by a shape, per-shape segment/note counts, and
 per-label ("spaced circle stream", "triangle jumps") segment/note counts. Not a column: it is
 a long-tail feature, read from the JSON. `patterns.bucket` features are unchanged and still
-what `recommend.py` reads until the map side is replaced (`docs/NEXT.md`).
+what `recommend.py` used to read; since `FEATURE_VERSION` 3 it reads `rosu` and `classes`
+instead (`docs/recommend.md`).
