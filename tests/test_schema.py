@@ -148,3 +148,14 @@ def test_classes_follow_the_played_clock(tmp_path):
     for x, y in zip(a, b):
         if x["leg_tempo"] and y["leg_tempo"]:
             assert order[y["leg_tempo"]] >= order[x["leg_tempo"]]
+
+
+def test_analyze_writes_the_class_miss_block_and_section_strains(tmp_path):
+    pytest.importorskip("rosu_pp_py")
+    metrics, path = _run(tmp_path, tag="cm")
+    block = metrics["class_miss"]
+    assert block["available"] and block["n_population"] > 0
+    for c in block["classes"]:
+        assert c["n"] >= max(10, block["min_n"])   # never a rate from n < 10
+    recs = json.loads(path.read_text())["objects"]
+    assert all(r["sec_aim"] is not None for r in recs[1:])

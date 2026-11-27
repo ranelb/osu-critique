@@ -28,7 +28,8 @@ Fields added to each result row (see ``docs/object_schema.md`` for the units):
     stack          this head lands on the previous object's end (<0.15r)
 
 Schema v3 adds the pattern classes (``metrics/classes.py``), all map-side:
-shape, walk, curve, leg_dist, leg_flow, leg_tempo.
+shape, walk, curve, leg_dist, leg_flow, leg_tempo; and ``sec_aim`` / ``sec_speed``,
+rosu-pp's strain of the object's 400 ms section (None without the ``[stars]`` extra).
 """
 from __future__ import annotations
 
@@ -44,7 +45,8 @@ OBJECT_FIELDS = ("i", "t", "kind", "end_t", "x", "y", "result", "error_ms",
                  "strain_speed", "slider_tail_off", "slider_missed_ticks",
                  "slider_off_pct", "sv", "kiai", "curve_type", "slider_path_px",
                  "repeats", "slider_tail_x", "slider_tail_y", "stack",
-                 "shape", "walk", "curve", "leg_dist", "leg_flow", "leg_tempo")
+                 "shape", "walk", "curve", "leg_dist", "leg_flow", "leg_tempo",
+                 "sec_aim", "sec_speed")
 STACK_R = 0.15          # no meaningful travel: a stack / 2B-style overlap
 
 
@@ -187,5 +189,7 @@ def object_records(results, radius):
             "leg_dist": x.get("leg_dist"),
             "leg_flow": x.get("leg_flow"),
             "leg_tempo": x.get("leg_tempo"),
+            "sec_aim": _r(x.get("sec_aim"), 2),
+            "sec_speed": _r(x.get("sec_speed"), 2),
         })
     return records

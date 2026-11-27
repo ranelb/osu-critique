@@ -393,6 +393,34 @@ def sections(metrics: dict, baseline: dict | None = None) -> list[dict]:
                               "rate at this sample size.", "info"))
         out.append(_section("sequences", "Sequence labels", *items))
 
+    # -- per-class miss rates ------------------------------------------------
+    cm = metrics.get("class_miss")
+    if cm and not cm.get("available", True):
+        out.append(_section("class_miss", "Pattern classes",
+                            note(f"Unavailable: {cm.get('reason', 'not computed')}.", "info")))
+    elif cm and cm.get("classes"):
+        pp = lambda v: "—" if v is None else f"{v * 100:+.1f} pp"
+        ordered = sorted(cm["classes"], key=lambda c: (
+            -(c["adj_strain"] if c.get("adj_strain") is not None
+              else c["vs_rest"] if c.get("vs_rest") is not None else -9), c["class"]))
+        ov = cm["overall"]
+        out.append(_section(
+            "class_miss", "Pattern classes",
+            table(["class", "n", "miss", "rate (95 %)", "vs rest", "same tempo/spacing",
+                   "same strain"],
+                  [[c["class"], c["n"], c["miss"],
+                    f"{c['rate'] * 100:.1f}% ({c['ci'][0] * 100:.0f}-{c['ci'][1] * 100:.0f})",
+                    pp(c.get("vs_rest")), pp(c.get("adj_stratum")), pp(c.get("adj_strain"))]
+                   for c in ordered[:14]],
+                  caption=f"overall {ov['miss']}/{ov['n']} missed"),
+            note(f"Classes with fewer than {cm['min_n']} objects are held back "
+                 f"({cm.get('held_back', 0)} here). Contrasts compare the class with the "
+                 "other objects of this same map, matched on leg distance x tempo or on "
+                 "rosu-pp's section strain; one run is one map, so these describe the "
+                 "play and do not generalise." +
+                 ("" if (cm.get("controls") or {}).get("strain")
+                  else " The strain control needs the [stars] extra."), "info")))
+
     # -- streams -------------------------------------------------------------
     st = metrics.get("streams") or {}
     segs = st.get("segments") or []

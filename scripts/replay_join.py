@@ -1,57 +1,46 @@
 """Per-class miss rates on real replays: does a pattern class cost the player?
 
-Joins every ``out/*_objects.json`` (per-object results) with the map's own geometry
-classes (``metrics.walks``, ``curves``, ``geometry``, ``legs`` descriptors). The class of
-an object comes from the map alone; the result comes from the replay.
+Joins every ``out/*_objects.json`` (per-object results) with the map's own pattern classes
+(``metrics.classes.label``) and rosu-pp section strains, then pools them with
+``metrics.class_miss.pool``. The class of an object comes from the map alone; the result
+comes from the replay. Same code path as the per-run ``class_miss`` block, so there is no
+second labeller here.
 
-    python scripts/replay_join.py [--out DIR] [--index out/index.sqlite] [--min-n 30] [--boot 400]
+    python scripts/replay_join.py [--out DIR] [--index out/index.sqlite] [--min-n 30] [--boot 400] [--json FILE]
 
-Numbers: miss rate with a Wilson interval, and the **within-map contrast** - the class
-rate minus the miss rate of the *other* objects of the same map, averaged over maps with a
-map-clustered bootstrap. Runs with speed/HR/EZ/relax mods are skipped (their geometry or
-clock differs from the .osu). Read-only; writes nothing unless --json is given.
+Contrasts are against the rest of the same map (raw, same leg distance x tempo, same
+aim x speed strain cell); intervals bootstrap over maps. Runs with speed/HR/EZ/relax mods,
+failed or untrusted runs are skipped (their clock or geometry differs from the .osu).
+A map played several times is one cluster. Read-only; writes nothing unless --json is given.
 """
 from __future__ import annotations
 
-import argparse, json, math, random, sqlite3, sys, warnings
+import argparse
+import json
+import sqlite3
+import sys
+import warnings
 from collections import defaultdict
 from pathlib import Path
 
 from osu_critique.io.beatmap import build_objects, circle_radius
-from osu_critique.metrics import curves, legs, walks
+from osu_critique.metrics import class_miss, classes
+from osu_critique.metrics.difficulty import attach_section_strains, section_strains
+from osu_critique.metrics.structure import beat_at_fn
 
 SKIP_MODS = ("DT", "NC", "HT", "DC", "HR", "EZ", "RX", "AP", "TD")
 
 
-def wilson(k, n, z=1.96):
-    if not n:
-        return (0.0, 0.0)
-    p = k / n
-    d = 1 + z * z / n
-    c = p + z * z / (2 * n)
-    h = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
-    return ((c - h) / d, (c + h) / d)
-
-
-def classes(path):
+def map_rows(path):
     import slider
     bm = slider.Beatmap.from_path(path)
     r = circle_radius(bm.cs())
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         objs = build_objects(bm, 1.0)
-    cls = [set() for _ in objs]
-    for mod, src in (("walk", walks.find(objs, r)), ("curve", curves.find(objs, r))):
-        for s in src:
-            for i in range(s["start"], s["end"] + 1):
-                cls[i].add(f"{mod}:{s['shape']}")
-    rows = legs.legs(objs, r)
-    for i, lg in enumerate(rows):
-        if lg:
-            cls[i].add(f"leg:{lg['dist']}/{lg['flow']}")
-            cls[i].add(f"dist:{lg['dist']}")
-    base = [f"{lg['dist']}/{lg['tempo']}" if lg else None for lg in rows]
-    return objs, cls, base
+    classes.label(objs, r, beat_at_fn(bm, 1.0))
+    attach_section_strains(objs, section_strains(path, 1.0, ""))
+    return objs
 
 
 def main(argv=None):
@@ -65,101 +54,51 @@ def main(argv=None):
     out = Path(a.out)
     conn = sqlite3.connect(a.index or out / "index.sqlite")
     paths = dict(conn.execute("select beatmap_md5, map_path from beatmaps where map_path is not null"))
-    cache, per_map = {}, defaultdict(lambda: defaultdict(lambda: [0, 0]))   # md5 -> class -> [miss, n]
-    allmap = defaultdict(lambda: [0, 0])
-    cell = defaultdict(lambda: defaultdict(lambda: [0, 0]))
-    cellc = defaultdict(lambda: defaultdict(lambda: [0, 0]))
+    cache, by_map = {}, defaultdict(list)
     runs = skipped = 0
     for f in sorted(out.glob("*_objects.json")):
         d = json.load(open(f))
         md5 = d.get("beatmap_md5")
         mods = d.get("mod_string") or "NM"
-        if any(m in mods for m in SKIP_MODS) or md5 not in paths or not Path(paths[md5]).exists():
+        meta = {}
+        mf = f.with_name(f.name.replace("_objects.json", "_metrics.json"))
+        if mf.exists():
+            meta = json.load(open(mf))
+        if (any(m in mods for m in SKIP_MODS) or md5 not in paths or not Path(paths[md5]).exists()
+                or meta.get("failed_play") or not (meta.get("trust") or {}).get("trustworthy")):
             skipped += 1
             continue
         if md5 not in cache:
             try:
-                cache[md5] = classes(paths[md5])
+                cache[md5] = map_rows(paths[md5])
             except Exception:
                 cache[md5] = None
-        if cache[md5] is None:
-            skipped += 1
-            continue
-        objs, cls, base = cache[md5]
+        base = cache[md5]
         recs = d["objects"]
-        if len(recs) != len(objs):
+        if base is None or len(recs) != len(base):
             skipped += 1
             continue
         runs += 1
         for rec in recs:
-            miss = 1 if rec.get("result") == "miss" else 0
-            allmap[md5][0] += miss
-            allmap[md5][1] += 1
-            b = base[rec["i"]]
-            if b:
-                cell[md5][b][0] += miss
-                cell[md5][b][1] += 1
-            for c in cls[rec["i"]]:
-                per_map[md5][c][0] += miss
-                per_map[md5][c][1] += 1
-                if b:
-                    cellc[md5][(c, b)][0] += miss
-                    cellc[md5][(c, b)][1] += 1
-    print(f"runs joined {runs}, skipped {skipped}, maps {len(allmap)}", file=sys.stderr)
-    classes_seen = defaultdict(lambda: [0, 0])
-    for m in per_map.values():
-        for c, (k, n) in m.items():
-            classes_seen[c][0] += k
-            classes_seen[c][1] += n
-    tot_k = sum(v[0] for v in allmap.values()); tot_n = sum(v[1] for v in allmap.values())
-    print(f"overall miss rate {tot_k}/{tot_n} = {100*tot_k/tot_n:.2f}%")
-    rng = random.Random(1)
+            row = dict(base[rec["i"]])
+            row["result"] = rec.get("result")
+            by_map[md5].append(row)
+    print(f"runs joined {runs}, skipped {skipped}, maps {len(by_map)}", file=sys.stderr)
+    res = class_miss.pool(by_map, min_objects=a.min_n, boot=a.boot)
+    o = res["overall"]
+    print(f"overall miss rate {o['miss']}/{o['n']} = {100 * o['rate']:.2f}% over {o['maps']} maps")
 
-    def contrast(c, maps):
-        num = den = 0.0
-        for m in maps:
-            k, n = per_map[m].get(c, (0, 0))
-            K, N = allmap[m]
-            if n and N - n:
-                num += n * (k / n - (K - k) / (N - n))
-                den += n
-        return num / den if den else None
+    def cell(v, ci):
+        if v is None:
+            return "n/a"
+        s = f"{100 * v:+.2f}pp"
+        return s + (f" [{100 * ci[0]:+.2f}, {100 * ci[1]:+.2f}]" if ci else "")
 
-    def adjusted(c, maps):
-        """Same map, same leg distance and tempo: class objects vs the other objects there."""
-        num = den = 0.0
-        for m in maps:
-            for (cc, b), (k, n) in cellc[m].items():
-                if cc != c:
-                    continue
-                K, N = cell[m][b]
-                if n and N - n >= 5:
-                    num += n * (k / n - (K - k) / (N - n))
-                    den += n
-        return num / den if den else None
-
-    res = []
-    for c, (k, n) in classes_seen.items():
-        if n < a.min_n:
-            continue
-        maps = [m for m in per_map if c in per_map[m]]
-        pt = contrast(c, maps)
-        bs = sorted(x for x in (contrast(c, [rng.choice(maps) for _ in maps]) for _ in range(a.boot)) if x is not None)
-        lo, hi = (bs[int(.025 * len(bs))], bs[int(.975 * len(bs)) - 1]) if len(bs) > 20 else (None, None)
-        w = wilson(k, n)
-        adj = adjusted(c, maps)
-        ab = sorted(x for x in (adjusted(c, [rng.choice(maps) for _ in maps]) for _ in range(a.boot)) if x is not None)
-        alo, ahi = (ab[int(.025 * len(ab))], ab[int(.975 * len(ab)) - 1]) if len(ab) > 20 else (None, None)
-        res.append({"adj": adj, "adj_ci": (alo, ahi), "class": c, "n": n, "maps": len(maps), "miss": k, "rate": k / n, "wilson": w,
-                    "contrast": pt, "ci": (lo, hi)})
-    res.sort(key=lambda r: -(r["contrast"] or 0))
-    print(f"{'class':28} {'n':>7} {'maps':>5} {'miss%':>6} {'wilson':>13} {'vs rest of map':>16}  95% CI (maps resampled)   same dist+tempo: adj   CI")
-    for r in res:
-        ci = f"[{100*r['ci'][0]:+.2f}, {100*r['ci'][1]:+.2f}]" if r["ci"][0] is not None else "n/a"
-        adjs = ("n/a" if r["adj"] is None or r["adj_ci"][0] is None else
-                f"{100*r['adj']:+.2f}pp [{100*r['adj_ci'][0]:+.2f}, {100*r['adj_ci'][1]:+.2f}]")
-        print(f"{r['class']:28} {r['n']:>7} {r['maps']:>5} {100*r['rate']:>6.2f} "
-              f"{100*r['wilson'][0]:>5.1f}-{100*r['wilson'][1]:<5.1f} {100*(r['contrast'] or 0):>+15.2f}pp  {ci}   {adjs}")
+    print(f"{'class':28} {'n':>7} {'maps':>5} {'miss%':>6}  vs rest | same dist+tempo | same strain cell  (95% CI, maps resampled)")
+    for r in sorted(res["classes"], key=lambda r: -(r["adj_strain"] or r["vs_rest"] or 0)):
+        print(f"{r['class']:28} {r['n']:>7} {r['maps']:>5} {100 * r['rate']:>6.2f}  "
+              f"{cell(r['vs_rest'], r['vs_rest_ci'])} | {cell(r['adj_stratum'], r['adj_stratum_ci'])} | "
+              f"{cell(r['adj_strain'], r['adj_strain_ci'])}")
     if a.json:
         Path(a.json).write_text(json.dumps(res, indent=1))
 

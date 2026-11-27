@@ -29,7 +29,8 @@ from .metrics.patterns import add_pattern_labels, pattern_stats
 from .metrics.profile import build_profile, primary_target
 from .metrics.sequences import build as build_sequences
 from .metrics.sequences import console_lines as sequence_lines
-from .metrics import classes as pattern_classes
+from .metrics import class_miss, classes as pattern_classes
+from .metrics.difficulty import attach_section_strains, section_strains
 from .metrics.sliders import annotate as annotate_sliders
 from .metrics.structure import SCHEMA_VERSION, annotate, beat_at_fn, object_records
 from .metrics.sections import quarter_stats, region_stats
@@ -341,6 +342,14 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     keys = key_usage(results)
 
     is_relax = bool(getattr(r, "relax", False) or getattr(r, "auto_pilot", False))
+    # per-class miss rates, controlled for rosu-pp's section strain when the extra is there
+    if is_relax:
+        class_block = class_miss.build(results, unavailable="Relax/Autopilot: taps (and so "
+                                       "judged misses) are not the player's")
+    else:
+        hr_ez = "HR" if r.hard_rock else ("EZ" if r.easy else "")
+        attach_section_strains(results, section_strains(map_path, 1.0 / scale, hr_ez))
+        class_block = class_miss.build(results, n_map_objects)
     aim_block, aim_rows = (build_aim(objs, frames, times, radius,
                                      is_relax=is_relax)
                            if write_aim else (None, None))
@@ -430,6 +439,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                     **summarise_streams(segs)},
         "breakdown": build_breakdown(records),
         "tapping": tap,
+        "class_miss": class_block,
     }
 
     outdir = os.fspath(outdir)
