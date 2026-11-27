@@ -192,3 +192,20 @@ def test_cli_scan_writes_the_table(tmp_path, capsys):
         assert conn.execute("SELECT COUNT(*) FROM library_beatmaps").fetchone()[0] == 6
     finally:
         conn.close()
+
+
+def test_geometry_block_names_what_a_known_map_contains():
+    # geo_stream is generated with triangles/squares/circles at 1/4 gaps
+    f = library.extract(Path(__file__).parent / "fixtures" / "patterns" / "geo_stream.osu",
+                        want_sr=False)
+    g = f["geometry"]
+    assert 0.1 < g["coverage"] <= 1.0
+    assert g["shapes"]["triangle"]["segments"] >= 1
+    assert any(lbl.endswith("triangle stream") for lbl in g["labels"])
+    assert library.FEATURE_VERSION == 2
+
+
+def test_geometry_block_is_deterministic():
+    p = Path(__file__).parent / "fixtures" / "patterns" / "geo_clean.osu"
+    a = library.extract(p, want_sr=False)["geometry"]
+    assert a == library.extract(p, want_sr=False)["geometry"]

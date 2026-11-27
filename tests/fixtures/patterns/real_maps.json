@@ -1,0 +1,13 @@
+{
+ "note": "beatmap ids only: the .osu files are other people's charts, so they are fetched on demand (scripts/fetch_real_maps.py), never committed",
+ "maps": {
+  "4904540": "FREEDOM DiVE [Arles] 9.7* - streams, jumps",
+  "5892713": "Blue Zenith [Finale] 7.6* - streams, bursts",
+  "5195256": "Sidetracked Day [Uri's Tyranny] 8.0* - rhythm/jump",
+  "5238564": "Galaxy Collapse [Calamity] 9.8* - tech, sliders",
+  "3783132": "triangles [Hard] 3.8* - low star, slider heavy",
+  "1693862": "Hitorigoto [Soliloquium] 5.1* - mid star mix",
+  "3528080": "Yomi yori Kikoyu [Insane] 9.4* - circle-heavy, spaced",
+  "172611": "The Unforgiving [In The Middle Of The Night] 5.6* - old style"
+ }
+}
