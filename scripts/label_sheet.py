@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Build a blind labelling page: one self-contained HTML file, no server.
 
-    python scripts/label_sheet.py OUT.html MAP.osu [MAP.osu ...] [--per-map 14] [--seed 1]
+    python scripts/label_sheet.py OUT.html MAP.osu [MAP.osu ...] [--per-map 5] [--seed 1]
 
-Each map contributes windows of 6-14 consecutive objects, drawn three ways so the
-page cannot be gamed: windows the classifier labelled (clipped to 14 objects),
+Each map contributes windows of 4-10 consecutive objects, at most one measure long (4 beats of the local tempo),, drawn three ways so the
+page cannot be gamed: windows the classifier labelled (clipped to the cap),
 windows it left unlabelled, and windows picked at random. Which is which is stored
 in the data (``src``) for scoring but never shown. The page draws circles at their
 true radius with numbered objects, travel arrows and slider curves; the owner
@@ -30,7 +30,8 @@ sys.path.insert(0, str(ROOT / "src"))
 from osu_critique.io.beatmap import build_objects, circle_radius, load_beatmap  # noqa: E402
 from osu_critique.metrics import geometry  # noqa: E402
 
-MIN_W, MAX_W, CTX = 6, 14, 2
+MIN_W, MAX_W, CTX = 4, 10, 1
+CAP_BEATS = 4.0   # a window never spans more than one measure of the local tempo
 
 
 def slider_paths(bm):
@@ -48,7 +49,17 @@ def slider_paths(bm):
     return out
 
 
-def pick_windows(objs, segs, per_map, rng):
+def beat_lookup(bm):
+    import bisect
+    pts = sorted((p.offset.total_seconds() * 1000.0, float(p.ms_per_beat))
+                 for p in bm.timing_points if p.ms_per_beat and p.ms_per_beat > 0)
+    if not pts:
+        return lambda t: 500.0
+    offs = [o for o, _ in pts]
+    return lambda t: pts[max(0, bisect.bisect_right(offs, t) - 1)][1]
+
+
+def pick_windows(objs, segs, per_map, rng, beat_at):
     n = len(objs)
     ok = [o["kind"] != "Spinner" for o in objs]
     covered = set()
@@ -56,39 +67,40 @@ def pick_windows(objs, segs, per_map, rng):
         covered.update(range(s["start"], s["end"] + 1))
     used = set()
 
-    def free(a, b):
-        return a >= 0 and b < n and all(ok[a:b + 1]) and not any(k in used for k in range(a, b + 1))
-
-    out = []
+    def reach(a):
+        """Last index b >= a within the time cap and MAX_W, stopping at spinners."""
+        cap = CAP_BEATS * beat_at(objs[a]["t"])
+        b = a
+        while (b + 1 < n and ok[b + 1] and b + 1 - a + 1 <= MAX_W
+               and objs[b + 1]["t"] - objs[a]["t"] <= cap):
+            b += 1
+        return b
 
     def take(a, b, src):
-        if free(a, b):
+        if b - a + 1 >= MIN_W and all(ok[a:b + 1]) and not any(k in used for k in range(a, b + 1)):
             used.update(range(a, b + 1))
             out.append({"i0": a, "i1": b, "src": src})
 
+    out = []
     third = max(1, per_map // 3)
     segs = sorted(segs, key=lambda s: s["start"])
     if segs:
         step = max(1, len(segs) / third)
         for k in range(min(third, len(segs))):
-            s = segs[int(k * step)]
-            a, b = s["start"], min(s["end"], s["start"] + MAX_W - 1)
-            if b - a + 1 < MIN_W:
-                b = min(n - 1, a + MIN_W - 1)
-            take(a, b, "classified")
+            a = segs[int(k * step)]["start"]
+            take(a, reach(a), "classified")
     tries = 0
     while sum(w["src"] == "unlabelled" for w in out) < third and tries < 4000:
         tries += 1
-        L = rng.randint(MIN_W, 12)
-        a = rng.randrange(0, max(1, n - L))
-        if not any(k in covered for k in range(a, a + L)):
-            take(a, a + L - 1, "unlabelled")
+        a = rng.randrange(0, max(1, n - MIN_W))
+        b = reach(a)
+        if not any(k in covered for k in range(a, b + 1)):
+            take(a, b, "unlabelled")
     tries = 0
     while len(out) < per_map and tries < 4000:
         tries += 1
-        L = rng.randint(MIN_W, 12)
-        a = rng.randrange(0, max(1, n - L))
-        take(a, a + L - 1, "random")
+        a = rng.randrange(0, max(1, n - MIN_W))
+        take(a, reach(a), "random")
     return out
 
 
@@ -102,7 +114,7 @@ def build(maps, per_map, seed):
         segs = geometry.classify(objs, r, None)
         paths = slider_paths(bm)
         name = Path(path).stem
-        for w in pick_windows(objs, segs, per_map, rng):
+        for w in pick_windows(objs, segs, per_map, rng, beat_lookup(bm)):
             lo, hi = max(0, w["i0"] - CTX), min(len(objs) - 1, w["i1"] + CTX)
             rows = []
             for i in range(lo, hi + 1):
@@ -157,7 +169,7 @@ const W=__DATA__;
 const SHAPES=["triangle","square","rectangle","pentagon","hexagon","star","back_and_forth","zigzag","circle","arc","line","stack",
  "wide_jumps","curvy_stream","drifting_polygon","other","none","unsure"];
 const KEYS="1234567890qwertyuiop";
-const KEY="pattern-labels-v1";
+const KEY="pattern-labels-v2";
 let S=JSON.parse(localStorage.getItem(KEY)||"{}");
 let cur=0;
 const cv=document.getElementById("c"),g=cv.getContext("2d");
@@ -243,13 +255,61 @@ ui();
 """
 
 
+REVIEW_JS = r"""
+const G=__GUESS__;
+ui=function(){
+ const w=W[cur],e=ent(),g=G[w.id],n=inside(w).length;
+ document.getElementById("h").textContent=`window ${cur+1} / ${W.length}`;
+ const t=inside(w)[0].t/1000;
+ document.getElementById("meta").innerHTML=`<small>${Math.floor(t/60)}:${(t%60).toFixed(1).padStart(4,"0")} &middot; ${n} objects &middot; radius ${w.r}</small>`;
+ document.getElementById("from").parentElement.style.display="none";
+ document.querySelector("#side > p").innerHTML="<small>Numbered objects are the window, grey ones are context. Arrows show the order.</small>";
+ const o=document.getElementById("opts");
+ o.innerHTML=`<p style="font-size:18px;margin:6px 0">Claude says: <b>${g.shape.replace("_"," ")}</b><br><small>${g.why}</small></p>`;
+ [["right","Right [y]"],["wrong","Not right [n]"]].forEach(([v,t])=>{const b=document.createElement("button");b.textContent=t;
+  if(e.verdict===v)b.classList.add("on");b.onclick=()=>{e.verdict=v;save();ui();if(v==="wrong")document.getElementById("note").focus();else go(1)};o.appendChild(b)});
+ const nt=document.getElementById("note");nt.placeholder="if not right: what is it? (any words)";nt.value=e.note||"";
+ const done=W.filter(x=>S[x.id]&&S[x.id].verdict).length;
+ document.getElementById("stat").textContent=`${done} / ${W.length} reviewed`;
+ document.querySelector("#bar i").style.width=(100*done/W.length)+"%";
+ draw();
+};
+out=function(){return W.filter(w=>S[w.id]&&S[w.id].verdict).map(w=>{const e=S[w.id],g=G[w.id],ins=inside(w);
+ return{map:w.map,i0:w.i0,i1:w.i1,t0:ins[0].t,t1:ins[ins.length-1].t,claude:g.shape,verdict:e.verdict,
+  shape:e.verdict==="right"?g.shape:(e.note||"not right"),note:e.verdict==="right"?"":e.note||"",src:w.src,id:w.id}})};
+document.addEventListener("keydown",ev=>{if(ev.target.tagName==="INPUT"){if(ev.key==="Enter"){ev.stopPropagation();go(1)}return}
+ ev.stopPropagation();const e=ent();
+ if(ev.key==="y"){e.verdict="right";save();ui();go(1)}else if(ev.key==="n"){e.verdict="wrong";save();ui();document.getElementById("note").focus()}
+ else if(ev.key==="ArrowRight"||ev.key==="Enter")go(1);else if(ev.key==="ArrowLeft")go(-1)},true);
+"""
+
+
+def review(a):
+    wins = json.loads(Path(a.windows).read_text())
+    guess = {g["id"]: {"shape": g["shape"], "why": g.get("why", "")}
+             for g in json.loads(Path(a.review).read_text())}
+    for w in wins:
+        w["src"] = "review"
+    page = PAGE.replace("pattern-labels-v2", "pattern-review-v1").replace(
+        "Download labels.json", "Download review.json").replace('a.download="labels.json"', 'a.download="review.json"')
+    page = page.replace("ui();\n</script>", REVIEW_JS.replace("__GUESS__", json.dumps(guess)) + "ui();\n</script>")
+    page = page.replace("__DATA__", json.dumps(wins, separators=(",", ":")))
+    Path(a.out).write_text(page, encoding="utf-8")
+    print(f"{a.out}: {len(wins)} windows to review")
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument("out")
-    ap.add_argument("maps", nargs="+")
-    ap.add_argument("--per-map", type=int, default=14)
+    ap.add_argument("maps", nargs="*")
+    ap.add_argument("--per-map", type=int, default=5)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--review", metavar="GUESS.json",
+                    help="review mode: show someone else's labels (with --windows) as right / not right")
+    ap.add_argument("--windows", metavar="WINDOWS.json")
     a = ap.parse_args(argv)
+    if a.review:
+        return review(a)
     wins = build(a.maps, a.per_map, a.seed)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(PAGE.replace("__DATA__", json.dumps(wins, separators=(",", ":"))),
