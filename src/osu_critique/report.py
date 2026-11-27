@@ -29,8 +29,9 @@ from .metrics.patterns import add_pattern_labels, pattern_stats
 from .metrics.profile import build_profile, primary_target
 from .metrics.sequences import build as build_sequences
 from .metrics.sequences import console_lines as sequence_lines
+from .metrics import classes as pattern_classes
 from .metrics.sliders import annotate as annotate_sliders
-from .metrics.structure import SCHEMA_VERSION, annotate, object_records
+from .metrics.structure import SCHEMA_VERSION, annotate, beat_at_fn, object_records
 from .metrics.sections import quarter_stats, region_stats
 from .metrics.streams import stream_stats, summarise as summarise_streams
 from .metrics.tapping import key_usage, tapping_stats
@@ -316,6 +317,9 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                           "half_time": (not custom_rate
                                         and player_scale == 4.0 / 3.0)},
              bpm_scale=player_scale)
+    # what each object is (shape / walk / curve / leg descriptors): map-side, in the
+    # clock and radius the player actually had
+    pattern_classes.label(results, radius, beat_at_fn(bm, scale))
     patterns = pattern_stats(results)
     # rows are in calibrated time; the player's time base is the mod scale, so
     # when calibration overrides a mod flag every ms in the profile is converted

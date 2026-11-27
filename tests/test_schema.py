@@ -104,3 +104,47 @@ def test_the_metrics_carry_the_lazer_ground_truth(tmp_path):
     assert truth["tail_missed"] is not None
     assert "sequences" in metrics and "runs" in metrics["sequences"]
     assert metrics["trust"]["rate_source"] in ("lazer score info", "legacy mod flag")
+
+
+def test_pattern_class_fields_are_present_and_in_vocabulary(tmp_path):
+    from osu_critique.metrics import legs
+    _metrics, path = _run(tmp_path)
+    doc = json.loads(path.read_text())
+    assert doc["schema_version"] == SCHEMA_VERSION == 3
+    objects = doc["objects"]
+    assert objects[0]["leg_dist"] is None and objects[0]["leg_flow"] is None
+    for rec in objects:
+        assert rec["leg_dist"] in (None, *legs.DIST)
+        assert rec["leg_flow"] in (None, *legs.FLOW)
+        assert rec["leg_tempo"] in (None, *legs.TEMPO)
+        assert (rec["leg_dist"] is None) == (rec["leg_tempo"] is None)
+    # every leg between two non-spinner objects has a descriptor: nothing is skipped
+    for prev, rec in zip(objects, objects[1:]):
+        if "Spinner" not in (prev["kind"], rec["kind"]):
+            assert rec["leg_dist"] is not None
+
+
+def test_pattern_classes_are_deterministic(tmp_path):
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    _m, a = _run(tmp_path / "a")
+    _m, b = _run(tmp_path / "b")
+    fields = ("shape", "walk", "curve", "leg_dist", "leg_flow", "leg_tempo")
+    pick = lambda p: [[r[f] for f in fields] for r in json.loads(p.read_text())["objects"]]
+    assert pick(a) == pick(b)
+
+
+def test_classes_follow_the_played_clock(tmp_path):
+    """DT squeezes the gaps: the same map reads faster, never slower, than at NM."""
+    order = {"slow": 0, "mid": 1, "fast": 2}
+    nm = analyze("tests/fixtures/synth_clean.osr", "tests/fixtures/synth_clean.osu", tag="nm",
+                 outdir=str(tmp_path), console=False)
+    dt = analyze("tests/fixtures/synth_dt.osr", "tests/fixtures/synth_clean.osu", tag="dt",
+                 outdir=str(tmp_path), console=False)
+    a = json.loads((tmp_path / "nm_objects.json").read_text())["objects"]
+    b = json.loads((tmp_path / "dt_objects.json").read_text())["objects"]
+    assert nm["n_objects"] == dt["n_objects"]
+    assert any(r["leg_tempo"] for r in b)
+    for x, y in zip(a, b):
+        if x["leg_tempo"] and y["leg_tempo"]:
+            assert order[y["leg_tempo"]] >= order[x["leg_tempo"]]
