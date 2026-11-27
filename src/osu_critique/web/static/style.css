@@ -829,10 +829,9 @@ p.question { margin: .5rem 0 0; font-size: 1.02rem; color: #e9c7d8;
   align-items: center; flex-wrap: wrap; font-size: var(--t-label);
   margin-top: .35rem; }
 .rec-act form { display: flex; gap: .55rem; }
-/* the bucket is a judgement: new = 300, improver = 50, maintain = 100 */
+/* the bucket is a judgement: new = 300, improver = 50 */
 .pill.b-new { color: var(--cyan); border-color: #66ccff4d; }
 .pill.b-improver { color: var(--gold); border-color: #ffcc224d; }
-.pill.b-maintain { color: var(--green); border-color: #88b3004d; }
 
 /* ---------------------------------------------------------- skill bars --- */
 /* Two rates on one axis, normalised to the worst weakness on the page: the gap

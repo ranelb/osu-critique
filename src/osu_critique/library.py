@@ -37,13 +37,14 @@ from .config import (cache_dir, lazer_files, maps_dir,
                      outdir as _default_outdir, stable_songs)
 from .io import pairing
 from .io.beatmap import build_objects, circle_radius
-from .metrics import geometry, rhythm
+from .metrics import classes, geometry, rhythm
+from .metrics.classes import class_keys
 from .metrics.patterns import add_pattern_labels
-from .metrics.structure import annotate
+from .metrics.structure import annotate, beat_at_fn
 from .metrics.streams import find_runs
 
 #: bump when a feature's definition changes: rows are re-extracted on next scan
-FEATURE_VERSION = 2   # 2: geometry + tempo block (metrics/geometry.py, rhythm.py)
+FEATURE_VERSION = 3   # 2: geometry + tempo block; 3: rosu-pp attributes + pattern-class shares
 
 #: angle boundaries for the flow/anti-flow split, in degrees
 FLOW_DEG = 45.0
@@ -98,17 +99,54 @@ def discover(extra=None, log=None) -> dict[str, str]:
 
 # ------------------------------------------------------------ feature block --
 
-def _stars(path) -> float | None:
-    """NM star rating through rosu-pp, or None when the extra is not installed."""
+def _rosu_attrs(path) -> dict | None:
+    """NM rosu-pp difficulty attributes, or None when the extra is not installed.
+
+    ``stars`` plus the pieces the recommender describes a map with: the aim and speed
+    skill ratings, the slider factor (1 = aim without sliders is as hard as with them),
+    and the strain-weighted note counts. Other people's algorithm, not ours.
+    """
     from .metrics import difficulty as D
     try:
         Beatmap, Difficulty, _ = D._rosu()
     except RuntimeError:
         return None
     try:
-        return round(float(Difficulty().calculate(Beatmap(path=str(path))).stars), 3)
+        a = Difficulty().calculate(Beatmap(path=str(path)))
     except Exception:                                # unparsable by rosu, not by us
         return None
+
+    def num(v, d=4):
+        return None if v is None else round(float(v), d)
+    return {"stars": num(a.stars, 3), "aim": num(a.aim), "speed": num(a.speed),
+            "slider_factor": num(a.slider_factor),
+            "speed_note_count": num(a.speed_note_count, 2),
+            "aim_difficult_strain_count": num(a.aim_difficult_strain_count, 2),
+            "speed_difficult_strain_count": num(a.speed_difficult_strain_count, 2)}
+
+
+def _stars(path) -> float | None:
+    attrs = _rosu_attrs(path)
+    return attrs["stars"] if attrs else None
+
+
+def class_shares(objs) -> dict:
+    """Share of the map's objects in each pattern class (``metrics/classes.py``).
+
+    ``any_*`` are "covered by at least one class of that kind"; ``keys`` has every
+    named class. Shares are of all objects, so a class cannot look bigger than the map.
+    """
+    n = len(objs)
+    keys = Counter()
+    anyk = Counter()
+    for o in objs:
+        for k in class_keys(o):
+            keys[k] += 1
+        for kind in ("shape", "walk", "curve"):
+            if o.get(kind):
+                anyk[kind] += 1
+    return {"any_" + k: _share(anyk[k], n) for k in ("shape", "walk", "curve")} | {
+        "keys": {k: _share(v, n) for k, v in sorted(keys.items())}}
 
 
 def _median(values):
@@ -149,6 +187,7 @@ def extract(path, md5: str | None = None, want_sr: bool = True) -> dict:
     n = len(objs)
     if n == 0:
         raise ValueError("map has no hit objects")
+    rosu = _rosu_attrs(path) if want_sr else None
 
     kinds = Counter(o["kind"] for o in objs)
     length_ms = float(objs[-1]["end"] - objs[0]["t"]) if n > 1 else 0.0
@@ -167,6 +206,8 @@ def extract(path, md5: str | None = None, want_sr: bool = True) -> dict:
         if span > 0:
             run_nps.append(1000.0 * (len(run) - 1) / span)
 
+    classes.label(objs, radius, beat_at_fn(bm, 1.0))
+    shares = class_shares(objs)
     segs = rhythm.tag(objs, geometry.classify(objs, radius))
     shape_sum = geometry.summarize(segs, n)
     by_label = {}
@@ -186,7 +227,9 @@ def extract(path, md5: str | None = None, want_sr: bool = True) -> dict:
         "artist": meta.get("Artist"),
         "creator": meta.get("Creator"),
         "version": meta.get("Version"),
-        "sr": _stars(path) if want_sr else None,
+        "sr": rosu["stars"] if rosu else None,
+        "rosu": rosu,
+        "classes": shares,
         "bpm": _median([float(b) for b in bpms]),
         "length_ms": length_ms,
         "ar": float(bm.ar()),

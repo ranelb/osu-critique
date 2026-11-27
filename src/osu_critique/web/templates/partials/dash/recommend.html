@@ -1,7 +1,7 @@
 {% from "partials/gloss.html" import gloss, learn with context %}
 {% from "partials/osu.html" import open_in_osu with context %}
 {% set r = data.recommend %}
-{% set bucket_term = {'new': 'new-bucket', 'improver': 'improver', 'maintain': 'maintain'} %}
+{% set bucket_term = {'new': 'new-bucket', 'improver': 'improver'} %}
 <section class="panel" id="w-recommend">
   <h2>Maps that train the thing you are worst at
     {{ learn('candidate-gates') }}
@@ -55,9 +55,6 @@
             {{ c.n_attempts }} run{{ '' if c.n_attempts == 1 else 's' }}, this
             band's median <b>{{ c.band_median_accuracy | num(1) }}%</b>, last
             attempt <b>{{ c.latest_accuracy | num(1) }}%</b>.
-            {% elif c.bucket == 'maintain' %}
-            You hold <b>{{ c.latest_accuracy | num(1) }}%</b> here and last
-            touched it {{ c.days_since }} days ago.
             {% endif %}
           </p>
           <div class="rec-specs">
@@ -90,7 +87,6 @@
     <p class="fineprint">
       pool: {{ r.counts.new }} {{ gloss('new-bucket', 'new') }},
       {{ r.counts.improver }} {{ gloss('improver') }},
-      {{ r.counts.maintain }} {{ gloss('maintain') }},
       {{ r.counts.gated }} outside the {{ gloss('candidate-gates', 'gates') }}
       {%- if r.counts.blocked %}, {{ r.counts.blocked }} {{ gloss('blacklist', 'blacklisted') }}{% endif %}
       {%- if r.counts.relax_only %}, {{ r.counts.relax_only }} played only in relax{% endif %}.

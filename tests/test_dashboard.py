@@ -51,7 +51,7 @@ def metrics_doc(tag, beatmap, accuracy, played_at, player="ran27"):
 
 def map_feats(md5, title, *, sr=5.0, mode=0, length_ms=90_000, set_id=None):
     return {
-        "beatmap_md5": md5, "map_path": f"/maps/{md5}.osu", "feature_version": 1,
+        "beatmap_md5": md5, "map_path": f"/maps/{md5}.osu", "feature_version": library.FEATURE_VERSION,
         "set_id": set_id, "beatmap_id": None, "mode": mode, "title": title,
         "artist": "Artist", "creator": "Mapper", "version": "Insane",
         "sr": sr, "bpm": 180.0, "length_ms": length_ms, "ar": 9.0, "od": 8.0,
@@ -61,6 +61,11 @@ def map_feats(md5, title, *, sr=5.0, mode=0, length_ms=90_000, set_id=None):
         "bigjump_share": 0.2, "anti_flow_share": 0.2, "flow_share": 0.2,
         "kiai_share": 0.0, "strain_aim_max": 10.0, "strain_speed_max": 10.0,
         "sustained_share": 0.3, "sustained_max": 20, "sustained_nps": 6.0,
+        "rosu": {"stars": sr, "aim": 2.0, "speed": 2.0, "slider_factor": 0.95,
+                 "speed_note_count": 90.0, "aim_difficult_strain_count": 40.0,
+                 "speed_difficult_strain_count": 40.0},
+        "classes": {"any_shape": 0.0, "any_walk": 0.05, "any_curve": 0.05,
+                    "keys": {"leg:wide/snap": 0.1}},
     }
 
 
@@ -189,7 +194,7 @@ def test_unscanned_library_hint_when_runs_exist_but_maps_do_not(tmp_path, settin
 def test_a_disabled_widget_disappears_from_the_page(client):
     r = client.post("/settings", data={"w:form": "on", "player": "",
                                        "stretch": "0.5", "cards": "6",
-                                       "bucket": ["new", "improver", "maintain"]},
+                                       "bucket": ["new", "improver"]},
                     follow_redirects=False)
     assert r.status_code in (302, 303)
     html = client.get("/").text
@@ -211,7 +216,7 @@ def test_moving_a_widget_up_keeps_the_other_controls(client, settings_file):
     settings_file.parent.mkdir(parents=True, exist_ok=True)
     settings_file.write_text(json.dumps(doc))
     data = {"player": "", "stretch": "0.5", "cards": "6",
-            "bucket": ["new", "improver", "maintain"]}
+            "bucket": ["new", "improver"]}
     for w in doc["widgets"]:
         data[f"w:{w['id']}"] = "on"
     data["move:recent"] = "up"
@@ -263,7 +268,7 @@ def test_out_of_range_controls_are_clamped():
                                "buckets": ["nonsense"], "player": "  x  "})
     assert doc["stretch"] == 1.0
     assert doc["cards"] == 6
-    assert doc["buckets"] == ["new", "improver", "maintain"]
+    assert doc["buckets"] == ["new", "improver"]
     assert doc["player"] == "x"
 
 

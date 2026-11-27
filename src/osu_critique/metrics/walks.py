@@ -113,7 +113,7 @@ def find(objs, radius, beat_at=None):
             legs = [ln[x] for x in range(a + 1, b + 1)]
             gaps = [objs[x]["t"] - objs[x - 1]["t"] for x in range(a + 1, b + 1)]
             ml, mg = st.median(legs), st.median(gaps)
-            ok = all(1 / t["leg_ratio"] <= x / ml <= t["leg_ratio"] for x in legs) and \
+            ok = mg > 0 and ml > 0 and all(1 / t["leg_ratio"] <= x / ml <= t["leg_ratio"] for x in legs) and \
                 all(1 / t["gap_ratio"] <= g / mg <= t["gap_ratio"] for g in gaps)
             if ok and not _distinct(objs, a, b, ideal, radius):
                 ok = False

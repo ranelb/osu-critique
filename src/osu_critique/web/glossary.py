@@ -104,66 +104,58 @@ TERMS = (
         "doc": "../recommend.md",
     },
     {
-        "id": "sustained-density",
+        "id": "aim-weight",
         "group": "profile",
-        "term": "sustained density",
-        "short": "how many notes per second the map's longest unbroken runs carry",
-        "long": "A map is not hard because it has notes; it is hard where the notes "
-                "do not stop. The analysis finds runs of consecutive objects with a "
-                "steady gap and a steady required cursor speed, and this dimension "
-                "is the median notes-per-second of those runs. High means real "
-                "sustained pressure, low means the map is made of single spikes.",
-        "how": ["same detector the play analysis uses (metrics/streams.find_runs)",
-                "duration is notes/second inside the detected runs"],
-        "doc": "../library.md",
+        "term": "aim weight",
+        "short": "how much of the map's difficulty is aim rather than speed",
+        "long": "rosu-pp rates a map's aim and speed difficulty separately. This is aim / (aim + speed): high means a map that is about cursor movement, low means one that is about tapping rate.",
+        "how": ["rosu-pp aim and speed attributes, the same engine that gives the star rating"],
+        "doc": "../recommend.md",
     },
     {
-        "id": "stream-share",
+        "id": "speed-notes",
         "group": "profile",
-        "term": "stream share",
-        "short": "share of the map whose spacing is 2-4 circle radii",
-        "long": "The spacing between consecutive objects, measured from the "
-                "previous object's end (a slider's tail), bucketed in circle radii. "
-                "2-4 r is the classic stream spacing: dense enough to feel "
-                "continuous, wide enough to need reading.",
-        "how": ["buckets: dense <= 2 r, stream 2-4 r, jump 4-7 r, bigjump > 7 r"],
-        "doc": "../library.md",
+        "term": "speed-note share",
+        "short": "share of the map's objects that rosu-pp counts as speed-relevant",
+        "long": "rosu-pp's speed_note_count is the weighted number of notes that carry the speed difficulty. Divided by the object count it says how much of the map is sustained tapping.",
+        "how": ["speed_note_count / objects"],
+        "doc": "../recommend.md",
     },
     {
-        "id": "jump-spacing",
+        "id": "slider-factor",
         "group": "profile",
-        "term": "jump spacing",
-        "short": "share of the map that is 4+ circle radii between objects",
-        "long": "Wide spacing: the cursor has to travel, and the taps are far "
-                "apart. Jump and bigjump spacing are summed because it is the same "
-                "skill at two scales — reading a wide pattern and arriving on time.",
-        "how": ["jump (4-7 r) plus bigjump (> 7 r) share of objects"],
-        "doc": "../library.md",
+        "term": "slider factor",
+        "short": "how much sliders lower the map's aim difficulty",
+        "long": "rosu-pp's slider factor is aim difficulty with sliders over aim difficulty without them. Near 1 means sliders add little; lower means they are easy to hold through or dominate the map.",
+        "how": ["rosu-pp slider_factor"],
+        "doc": "../recommend.md",
     },
     {
-        "id": "sharp-reversals",
+        "id": "curvy-paths",
         "group": "profile",
-        "term": "sharp reversals",
-        "short": "share of objects where the movement turns back on itself (>= 135 deg)",
-        "long": "The turn angle between the incoming and outgoing cursor leg. A "
-                "reversal means the cursor must stop and go back — a different "
-                "motion from a flow pattern that keeps turning the same way. Maps "
-                "full of them fail differently from maps full of smooth curves.",
-        "how": ["angle measured at each object, using slider tails as ends",
-                ">= 135 degrees counts as a reversal"],
-        "doc": "../library.md",
+        "term": "curvy paths",
+        "short": "share of objects on a curved path (arc, circle, curvy stream)",
+        "long": "The geometry labels fit runs of objects to arcs and circles; this is the share of the map that sits on one. Unlabelled is a valid answer, so most maps are low.",
+        "how": ["metrics/classes.py curve class, share of all objects"],
+        "doc": "../recommend.md",
     },
     {
-        "id": "slider-density",
+        "id": "polygon-walks",
         "group": "profile",
-        "term": "slider density",
-        "short": "share of objects that are sliders",
-        "long": "Sliders ask for a path, not a point: the cursor must be at the "
-                "tail when the body ends. A map built of them trains flow aim and "
-                "reading; a map of circles trains pure jumps. Both are swimming, "
-                "just different strokes.",
-        "how": ["sliders / objects, straight from the .osu"],
-        "doc": "../library.md",
+        "term": "polygon and star walks",
+        "short": "share of objects on a one-lap polygon or star walk",
+        "long": "Triangles, squares, pentagons, hexagons and stars walked once around: the cursor returns to where it started. Detected from turn angles and equal legs, not from a corner count.",
+        "how": ["metrics/classes.py walk class, share of all objects"],
+        "doc": "../recommend.md",
+    },
+    {
+        "id": "wide-snaps",
+        "group": "profile",
+        "term": "wide snaps",
+        "short": "share of legs that are wide and tempo-snapped",
+        "long": "A leg of the wide-distance class at a snapped fast tempo: the classic hard jump. Counted per leg, so it is share of objects.",
+        "how": ["metrics/legs.py wide / snap descriptor"],
+        "doc": "../recommend.md",
     },
     {
         "id": "comfort-sr",
@@ -224,25 +216,12 @@ TERMS = (
         "group": "recommend",
         "term": "improver",
         "short": "a map you played, did worse on than your level, and can beat",
-        "long": "At least two attempts, and the latest one is 3 accuracy points "
-                "below the median of your runs in the same star band (or the play "
-                "failed). The card carries the proof: your best on this map, that "
+        "long": "At least two attempts, and the latest one is below the median "
+                "of your runs in the same star band (or the play failed). The card carries the proof: your best on this map, that "
                 "band median, and the last attempt. The point is that you have "
                 "already shown you can do better here.",
         "how": ["band median needs 5 runs, on 0.25-star bands",
-                "the gap also scales the map's score"],
-        "doc": "../recommend.md",
-    },
-    {
-        "id": "maintain",
-        "group": "recommend",
-        "term": "maintain",
-        "short": "a map you are good at and have not touched in 30+ days",
-        "long": "At or above your band median, last played at least thirty days "
-                "ago. Not new material and not a weakness: a check that the skill "
-                "is still there. The thirty days is the same number the dashboard "
-                "window uses, so 'stale' and 'this month' cannot disagree.",
-        "how": ["staler maps score slightly higher, capped at 90 days"],
+                "a bigger share of the headroom missed scores higher; no cut-off"],
         "doc": "../recommend.md",
     },
     {

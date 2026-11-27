@@ -42,7 +42,7 @@ _BY_ID = {w["id"]: w for w in WIDGETS}
 
 STRETCH_CHOICES = (0.0, 0.25, 0.5, 0.75, 1.0)
 CARD_CHOICES = (3, 6, 9)
-BUCKETS = ("new", "improver", "maintain")
+BUCKETS = ("new", "improver")
 
 FORM_WINDOWS = (30, 90)
 

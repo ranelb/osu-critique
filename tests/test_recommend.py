@@ -21,10 +21,10 @@ def ago(days: float) -> str:
 
 
 def map_row(md5, *, sr=5.0, mode=0, length_ms=90_000, n_objects=300,
-            set_id=None, title=None, **feats):
+            set_id=None, title=None, speed=0.3, **feats):
     """A feature dict for ``library.upsert``: only the fields the scorer reads."""
     doc = {
-        "beatmap_md5": md5, "map_path": f"/maps/{md5}.osu", "feature_version": 1,
+        "beatmap_md5": md5, "map_path": f"/maps/{md5}.osu", "feature_version": library.FEATURE_VERSION,
         "set_id": set_id, "beatmap_id": None, "mode": mode,
         "title": title or md5, "artist": "artist", "creator": "mapper",
         "version": "Insane", "sr": sr, "bpm": 180.0, "length_ms": length_ms,
@@ -35,6 +35,13 @@ def map_row(md5, *, sr=5.0, mode=0, length_ms=90_000, n_objects=300,
         "bigjump_share": 0.2, "anti_flow_share": 0.2, "flow_share": 0.2,
         "kiai_share": 0.0, "strain_aim_max": 10.0, "strain_speed_max": 10.0,
         "sustained_share": 0.3, "sustained_max": 20, "sustained_nps": 6.0,
+        # the features the scorer reads: rosu-pp attributes and the class shares
+        "rosu": {"stars": sr, "aim": 2.0, "speed": 2.0, "slider_factor": 0.95,
+                 "speed_note_count": speed * n_objects,
+                 "aim_difficult_strain_count": 40.0,
+                 "speed_difficult_strain_count": 40.0},
+        "classes": {"any_shape": 0.0, "any_walk": 0.05, "any_curve": 0.05,
+                    "keys": {"leg:wide/snap": 0.1}},
     }
     doc.update(feats)
     return doc
@@ -94,7 +101,7 @@ def test_default_player_is_the_most_run_one(tmp_path):
 def test_weakness_comes_from_the_worse_half_of_a_material(tmp_path):
     for i, nps in enumerate((12.0, 12.0, 12.0, 3.0, 3.0, 3.0)):
         md5 = f"{i:032x}"
-        add_map(tmp_path, md5, sr=5.0, sustained_nps=nps, sustained_share=0.7)
+        add_map(tmp_path, md5, sr=5.0, speed=nps / 15)
         miss = 24 if nps > 6 else 6          # 8% vs 2% of 300 objects
         for j in range(10):
             add_run(tmp_path, md5, accuracy=0.90, miss=miss,
@@ -104,7 +111,7 @@ def test_weakness_comes_from_the_worse_half_of_a_material(tmp_path):
     skills = result["skills"]
     assert result["basis"] == "weakness"
     weakness = skills["weaknesses"][0]
-    assert weakness["key"] == "sustained"
+    assert weakness["key"] == "speed_notes"
     assert weakness["bad_side"] == "high"
     assert weakness["gap_pp"] > 0.5
     assert weakness["n_bad"] >= recommend.MIN_SIDE
@@ -116,7 +123,7 @@ def test_weakness_comes_from_the_worse_half_of_a_material(tmp_path):
 def test_no_weakness_when_the_halves_behave_identically(tmp_path):
     for i, nps in enumerate((12.0, 12.0, 12.0, 3.0, 3.0, 3.0)):
         md5 = f"{i:032x}"
-        add_map(tmp_path, md5, sr=5.0, sustained_nps=nps, sustained_share=0.7)
+        add_map(tmp_path, md5, sr=5.0, speed=nps / 15)
         for j in range(10):
             add_run(tmp_path, md5, accuracy=0.90, miss=15,
                     played_at=ago(10 + j), tag=f"{i}-{j}")
@@ -130,7 +137,7 @@ def test_a_thin_side_is_not_a_weakness(tmp_path):
     """14 runs on one side is below MIN_SIDE and must not become a verdict."""
     for i, nps in enumerate((12.0, 3.0)):
         md5 = f"{i:032x}"
-        add_map(tmp_path, md5, sr=5.0, sustained_nps=nps, sustained_share=0.7)
+        add_map(tmp_path, md5, sr=5.0, speed=nps / 15)
         for j in range(14):
             add_run(tmp_path, md5, accuracy=0.90, miss=24 if nps > 6 else 2,
                     played_at=ago(10 + j), tag=f"{i}-{j}")
@@ -141,7 +148,7 @@ def test_a_thin_side_is_not_a_weakness(tmp_path):
 def test_relax_runs_are_counted_and_excluded(tmp_path):
     for i in range(4):
         md5 = f"{i:032x}"
-        add_map(tmp_path, md5, sr=5.0, sustained_nps=10.0, sustained_share=0.7)
+        add_map(tmp_path, md5, sr=5.0, speed=0.7)
         for j in range(6):
             add_run(tmp_path, md5, accuracy=0.9, miss=20, relax=True,
                     played_at=ago(10 + j), tag=f"rx{i}-{j}")
@@ -160,8 +167,7 @@ def test_miss_rate_is_band_corrected(tmp_path):
     """
     for i in range(4):
         md5 = f"{i:032x}"
-        add_map(tmp_path, md5, sr=5.0, sustained_nps=10.0 if i < 2 else 3.0,
-                sustained_share=0.7)
+        add_map(tmp_path, md5, sr=5.0, speed=0.7 if i < 2 else 0.2)
         for j in range(10):
             add_run(tmp_path, md5, accuracy=0.90, miss=20,
                     played_at=ago(10 + j), tag=f"{i}-{j}")
@@ -173,8 +179,8 @@ def test_miss_rate_is_band_corrected(tmp_path):
 
 def bucket_corpus(tmp_path):
     """Five eligible maps covering every bucket and every gate."""
-    # maintain: good runs, last one 40 days ago
-    add_map(tmp_path, "1" * 32, sr=5.0, set_id=101, title="maintain")
+    # good runs, last one 40 days ago: not an improver, and nothing else claims it
+    add_map(tmp_path, "1" * 32, sr=5.0, set_id=101, title="stale-good")
     for j, days in enumerate((50, 45, 40)):
         add_run(tmp_path, "1" * 32, accuracy=0.96, played_at=ago(days), tag=f"m{j}")
     # improver: recent good runs, then a collapse
@@ -199,7 +205,7 @@ def test_buckets_are_classified_by_evidence(tmp_path):
     bucket_corpus(tmp_path)
     result = recommend.build(tmp_path, player="you", limit=10)
     buckets = {c["title"]: c["bucket"] for c in result["recommendations"]}
-    assert buckets["maintain"] == "maintain"
+    assert "stale-good" not in buckets
     assert buckets["improver"] == "improver"
     assert buckets["new"] == "new"
     assert "neutral" not in buckets
@@ -219,12 +225,28 @@ def test_improver_card_carries_the_proof(tmp_path):
     assert "last attempt 80.0%" in card["why"]
 
 
-def test_maintain_needs_thirty_days(tmp_path):
-    add_map(tmp_path, "a" * 32, sr=5.0, title="fresh")
-    for j, days in enumerate((10, 8, 6, 5, 4, 3)):
+def test_there_is_no_maintain_bucket(tmp_path):
+    """Held-out runs show no decay with time away, so age alone recommends nothing."""
+    add_map(tmp_path, "a" * 32, sr=5.0, title="old-good")
+    for j, days in enumerate((300, 250, 200, 190, 180, 170)):
         add_run(tmp_path, "a" * 32, accuracy=0.96, played_at=ago(days), tag=f"f{j}")
     result = recommend.build(tmp_path, player="you", limit=5)
     assert all(c["bucket"] != "maintain" for c in result["recommendations"])
+    assert "maintain" not in result["counts"]
+
+
+def test_improver_has_no_gap_cutoff(tmp_path):
+    """Any latest attempt below the band median counts; a bigger gap only ranks higher."""
+    add_map(tmp_path, "d" * 32, sr=5.0, set_id=201, title="barely")
+    add_map(tmp_path, "e" * 32, sr=5.0, set_id=202, title="far")
+    for j, acc in enumerate((0.96, 0.96, 0.96, 0.955)):
+        add_run(tmp_path, "d" * 32, accuracy=acc, played_at=ago(20 - j), tag=f"d{j}")
+    for j, acc in enumerate((0.96, 0.96, 0.96, 0.85)):
+        add_run(tmp_path, "e" * 32, accuracy=acc, played_at=ago(20 - j), tag=f"e{j}")
+    cards = {c["title"]: c for c in recommend.build(
+        tmp_path, player="you", limit=10)["recommendations"]}
+    assert cards["barely"]["bucket"] == cards["far"]["bucket"] == "improver"
+    assert cards["far"]["score"] > cards["barely"]["score"]
 
 
 def test_bucket_filter_is_honoured(tmp_path):
@@ -246,7 +268,7 @@ def test_selection_interleaves_buckets(tmp_path):
     bucket_corpus(tmp_path)
     result = recommend.build(tmp_path, player="you", limit=3)
     assert [c["bucket"] for c in result["recommendations"]] == [
-        "new", "improver", "maintain"]
+        "new", "improver"]
 
 
 def test_build_is_deterministic(tmp_path):
