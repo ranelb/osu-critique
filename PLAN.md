@@ -197,3 +197,61 @@ the recommender can honestly claim:
   compares attempts of one map but does not model progress over time.
 - **Unvalidated against outcomes.** Nothing checks that playing a recommended
   map improves the weakness it was recommended for.
+
+---
+
+# Pattern classification: descriptors, measurement, replay join
+
+Context: `metrics/geometry.py` (from branch `claude/abandoned-project-review-34zxan`, merged) names
+shapes conservatively and leaves most objects unlabelled by design (Obsession 10 %, TWO DIMENSIONS 22 %,
+soft rain 18 % coverage). Measured on those maps, the unlabelled legs are mostly wide snap jumps
+(Obsession: 98 % of legs >= 3 r, 60 % > 6 r) or tight curvy stream (TWO DIMENSIONS: 412 legs of 1-3 r,
+363 returning near the object two steps back). A shape name cannot describe either. `docs/NEXT.md` step 3
+(replay-side join) needs a category for every object, not only the shaped ones.
+
+Rule for all phases: no threshold change lands unless the labelled-set score (phase A) holds or improves.
+The owner's judgement is ground truth; the classifier and I are not.
+
+## Phase A. Measurement (first, because everything else tunes against it)
+- Blind labelling tool (`scripts/label_sheet.py` -> `out/labeling/labeler.html`): ~60 windows from Obsession,
+  TWO DIMENSIONS, soft rain, Thunder [Thunder]; the classifier's label is hidden; the owner picks a shape or
+  "none" and optionally clicks the first/last object (the pattern length is itself a complaint: too many
+  objects per pattern).
+- Labels exported as JSON, converted to the `{shape, dir, t0, t1}` format `scripts/eval_patterns.py` already scores.
+- Report per-shape precision/recall, "labelled when it should not be", "unlabelled when it should be".
+
+## Phase B. Leg descriptors (covers every object)
+- New `metrics/legs.py`: per leg (slider tail -> next head) jump distance bucket in radii (stack < 1,
+  close 1-3, medium 3-6, wide > 6), snap vs flow (turn angle against the previous leg), tempo (ms gap and
+  beats via the local uninherited timing point), then maximal runs of one class as segments
+  ("wide snap jumps at 150 ms"). Deterministic, no I/O, thresholds in one table.
+- Fixtures in `tests/fixtures/` with known buckets; cut-points confirmed by the owner before they are final.
+- Not wired to the recommender or `FEATURE_VERSION` until phase E.
+
+## Phase C. Slider tails as nodes
+- Cycle and fit nodes from exit-to-head legs (`end_x`/`end_y`) behind a flag; compare against the phase A
+  score before enabling.
+
+## Phase D. Drifting polygons and curvy stream
+- Turn-walk polygons (one lap of same-sign turns near 360 m / n, closure reported as a number, not a gate),
+  per-polygon tolerance `min(22, 0.2 * ideal)` so a 45 deg ring is not a hexagon; wide-jump walks are their own
+  family, not triangle/star (owner: 130-150 deg triples are stars).
+- Curvy stream: a smooth-curve fit with a wobble residual instead of exact arcs.
+- Each needs a generator block with ground truth in `make_pattern_fixtures.py` first, then the detector,
+  then the owner's eye on real maps.
+
+## Phase E. Replay side and intervals
+- `report.analyze` calls `label_objects` + the descriptors; `out/<tag>_objects.json` stores them.
+- Per-class miss-rate block under the population gate (`min(20, max(8, 3 % of objects))`, n always quoted).
+- Intervals: Wilson per class; bootstrap clustered by map; contrast against the overall rate.
+- rosu-pp strains (aim/speed per 400 ms) as difficulty controls (`pip install -e ".[stars]"`).
+- Bump `FEATURE_VERSION`; re-baseline the `recommend --json` byte-equality tests.
+
+## Needed from the owner
+1. Labels (phase A tool).
+2. Vocabulary: are wide-jump walks their own family; a triangle/star angle cut-off; is an 8-object 45 deg ring a
+   circle, a hexagon or both.
+3. Descriptor cut-points for phase B (starting point above).
+4. Where the real replays live (this worktree has no `replays/` or `out/`); needed for phase E and `judge_drift.py`.
+5. OK to `pip install -e ".[stars]"` (network).
+6. Scope: map-side + replay report only, or also the recommender's map side (`docs/NEXT.md` step 2).
