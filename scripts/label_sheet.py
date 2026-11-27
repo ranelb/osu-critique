@@ -12,6 +12,12 @@ clicks a shape (or "none"), optionally marks where the pattern starts and ends,
 and exports JSON. Progress is kept in localStorage, so closing the tab loses
 nothing.
 
+``--tail-diff N`` swaps the sampling: slider-heavy windows, a third each where
+slider-tail nodes change the classifier's label (``src=changed``), leave it
+(``kept``) or leave it unlabelled (``unlabelled``). The off/on labels are stored
+as ``tails_off``/``tails_on``, never shown. Pass many maps; selection spreads
+across them.
+
 The export is ``[{map, i0, i1, from, to, t0, t1, shape, note, src}]`` -- global
 object indices, so ``scripts/labels_to_eval.py`` can turn it into the
 ``{shape, dir, t0, t1}`` blocks ``eval_patterns.py`` scores.
@@ -102,6 +108,114 @@ def pick_windows(objs, segs, per_map, rng, beat_at):
         a = rng.randrange(0, max(1, n - MIN_W))
         take(a, reach(a), "random")
     return out
+
+
+def window_label(segs, a, b):
+    """Shape of the segment that covers most of window [a, b], or None.
+
+    A segment counts only if it covers at least half the window, so a one-note
+    graze at the edge does not make a window "labelled".
+    """
+    best, hit = None, 0
+    for s in segs:
+        ov = min(b, s["end"]) - max(a, s["start"]) + 1
+        if ov > hit:
+            best, hit = s, ov
+    return best["shape"] if best and hit * 2 >= b - a + 1 else None
+
+
+def tail_category(off, on):
+    """changed (the flag moves the label), kept (same shape both ways), unlabelled."""
+    if off != on:
+        return "changed"
+    return "kept" if off else "unlabelled"
+
+
+def tail_candidates(objs, segs_off, segs_on, beat_at, min_slider_share, stride=2):
+    """Slider-heavy windows on one map, each with its off/on label and category."""
+    n = len(objs)
+    out = []
+    for a in range(0, max(0, n - MIN_W), stride):
+        if objs[a]["kind"] == "Spinner":
+            continue
+        cap = CAP_BEATS * beat_at(objs[a]["t"])
+        b = a
+        while (b + 1 < n and objs[b + 1]["kind"] != "Spinner" and b + 1 - a + 1 <= MAX_W
+               and objs[b + 1]["t"] - objs[a]["t"] <= cap):
+            b += 1
+        if b - a + 1 < MIN_W:
+            continue
+        share = sum(o["kind"] == "Slider" for o in objs[a:b + 1]) / (b - a + 1)
+        if share < min_slider_share:
+            continue
+        off, on = window_label(segs_off, a, b), window_label(segs_on, a, b)
+        out.append({"i0": a, "i1": b, "off": off, "on": on,
+                    "src": tail_category(off, on)})
+    return out
+
+
+def pick_tail(pool, total, rng):
+    """About total/3 windows per category, spread over maps (round-robin), none overlapping."""
+    want = {"changed": total - 2 * (total // 3), "kept": total // 3, "unlabelled": total // 3}
+    chosen = []
+    for cat, k in want.items():
+        by_map = {}
+        for m, w in pool:
+            if w["src"] == cat:
+                by_map.setdefault(m, []).append(w)
+        for ws in by_map.values():
+            rng.shuffle(ws)
+        names = sorted(by_map)
+        rng.shuffle(names)
+        used = {m: set() for m in names}
+        got = 0
+        while got < k and any(by_map.values()):
+            for m in names:
+                while by_map[m]:
+                    w = by_map[m].pop()
+                    span = set(range(w["i0"], w["i1"] + 1))
+                    if not span & used[m]:
+                        used[m] |= span
+                        chosen.append((m, w))
+                        got += 1
+                        break
+                if got >= k:
+                    break
+    return chosen
+
+
+def window_rows(objs, paths, w):
+    lo, hi = max(0, w["i0"] - CTX), min(len(objs) - 1, w["i1"] + CTX)
+    return [{"i": i, "x": round(objs[i]["x"], 1), "y": round(objs[i]["y"], 1),
+             "ex": round(objs[i].get("end_x", objs[i]["x"]), 1),
+             "ey": round(objs[i].get("end_y", objs[i]["y"]), 1),
+             "t": round(objs[i]["t"]), "k": objs[i]["kind"][0], "p": paths[i]}
+            for i in range(lo, hi + 1)]
+
+
+def build_tail(maps, total, seed, min_slider_share):
+    """Windows where slider-tail nodes on vs off may change the label (see ``classify``)."""
+    rng = random.Random(seed)
+    pool, meta = [], {}
+    for path in maps:
+        bm = load_beatmap(path)
+        objs = build_objects(bm, 1.0)
+        r = circle_radius(bm.cs())
+        off = geometry.classify(objs, r, None, slider_tails=False)
+        on = geometry.classify(objs, r, None, slider_tails=True)
+        name = Path(path).stem
+        meta[name] = (objs, r, slider_paths(bm))
+        pool += [(name, w) for w in tail_candidates(objs, off, on, beat_lookup(bm), min_slider_share)]
+    wins = []
+    for name, w in pick_tail(pool, total, rng):
+        objs, r, paths = meta[name]
+        wins.append({"map": name, "i0": w["i0"], "i1": w["i1"], "r": round(r, 2),
+                     "src": w["src"], "tails_off": w["off"], "tails_on": w["on"],
+                     "rows": window_rows(objs, paths, w)})
+    rng.shuffle(wins)
+    for k, w in enumerate(wins):
+        w["id"] = k
+    return wins
 
 
 def build(maps, per_map, seed):
@@ -304,13 +418,22 @@ def main(argv=None):
     ap.add_argument("maps", nargs="*")
     ap.add_argument("--per-map", type=int, default=5)
     ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--tail-diff", type=int, metavar="N",
+                    help="pick ~N slider-heavy windows, a third each where slider-tail nodes "
+                         "change the label, keep it, or leave it unlabelled (src = changed / "
+                         "kept / unlabelled; the off/on labels are stored, never shown)")
+    ap.add_argument("--min-slider-share", type=float, default=0.5,
+                    help="with --tail-diff: least slider fraction of a window (default 0.5)")
     ap.add_argument("--review", metavar="GUESS.json",
                     help="review mode: show someone else's labels (with --windows) as right / not right")
     ap.add_argument("--windows", metavar="WINDOWS.json")
     a = ap.parse_args(argv)
     if a.review:
         return review(a)
-    wins = build(a.maps, a.per_map, a.seed)
+    if a.tail_diff:
+        wins = build_tail(a.maps, a.tail_diff, a.seed, a.min_slider_share)
+    else:
+        wins = build(a.maps, a.per_map, a.seed)
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(PAGE.replace("__DATA__", json.dumps(wins, separators=(",", ":"))),
                            encoding="utf-8")
