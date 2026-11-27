@@ -2,7 +2,8 @@
 """Score the geometric classifier against ``*.labels.json`` files.
 
 Usage:
-    python scripts/eval_patterns.py [DIR_OR_MAP.osu ...]   # default: tests/fixtures/patterns
+    python scripts/eval_patterns.py [--slider-tails|--no-slider-tails] [DIR_OR_MAP.osu ...]
+    # default dir: tests/fixtures/patterns; the flag overrides geometry.SLIDER_TAILS_DEFAULT
 
 A label file lists blocks ``{"shape", "dir", "t0", "t1"}`` in map ms. A block is
 **found** when a predicted segment of the same shape overlaps it by at least
@@ -65,13 +66,14 @@ def score(segs, labels):
     return result
 
 
-def run(map_path, verbose=True):
+def run(map_path, verbose=True, slider_tails=None):
     map_path = Path(map_path)
     labels = json.loads(map_path.with_suffix(".labels.json").read_text())
     bm = load_beatmap(str(map_path))
     objs = build_objects(bm, 1.0)
     radius = circle_radius(bm.cs())
-    segs = geometry.classify(objs, radius, labels.get("beat_ms"))
+    kw = {} if slider_tails is None else {"slider_tails": slider_tails}
+    segs = geometry.classify(objs, radius, labels.get("beat_ms"), **kw)
     res = score(segs, labels)
     n = len(labels["blocks"])
     summary = geometry.summarize(segs, len(objs))
@@ -93,13 +95,19 @@ def run(map_path, verbose=True):
 
 
 def main(argv):
+    flag = None
+    if "--slider-tails" in argv:
+        flag = True
+    if "--no-slider-tails" in argv:
+        flag = False
+    argv = [a for a in argv if not a.startswith("--") ]
     targets = [Path(a) for a in argv] or [ROOT / "tests" / "fixtures" / "patterns"]
     maps = []
     for t in targets:
         maps += sorted(t.glob("*.osu")) if t.is_dir() else [t]
     for m in maps:
         if m.with_suffix(".labels.json").exists():
-            run(m)
+            run(m, slider_tails=flag)
 
 
 if __name__ == "__main__":

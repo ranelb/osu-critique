@@ -199,12 +199,12 @@ def test_empty_and_tiny_maps_do_not_crash():
 
 # ----------------------------------------------------------- the fixtures --
 
-def _load(name):
+def _load(name, slider_tails=None):
     spec = importlib.util.spec_from_file_location(
         "eval_patterns", ROOT / "scripts" / "eval_patterns.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    return mod.run(FIX / f"{name}.osu", verbose=False)
+    return mod.run(FIX / f"{name}.osu", verbose=False, slider_tails=slider_tails)
 
 
 @pytest.mark.parametrize("name", ["geo_clean", "geo_stream", "geo_wide"])
@@ -225,6 +225,35 @@ def test_irregular_filler_is_left_unlabelled():
     res, segs, _labels = _load("geo_junk")
     assert len(res["false_positive"]) <= 1
     assert sum(s["n"] for s in segs) / 400 < 0.03
+
+
+# ------------------------------------------------- slider tails (phase C) --
+
+def test_slider_tails_default_is_off_and_off_is_the_old_behaviour():
+    assert G.SLIDER_TAILS_DEFAULT is False
+    res, _s, labels = _load("geo_tail")
+    assert len(res["found"]) == 0 and len(labels["blocks"]) == 17
+
+
+@pytest.mark.parametrize("name", ["geo_tail", "geo_head", "geo_tail_sloppy"])
+def test_flag_reads_shapes_drawn_through_slider_ends(name):
+    res, _segs, labels = _load(name, slider_tails=True)
+    assert len(res["found"]) == len(labels["blocks"])
+    assert not res["mislabelled"] and not res["wrong_dir"] and not res["false_positive"]
+
+
+def test_flag_does_not_invent_shapes_in_slider_junk():
+    _res, segs, _labels = _load("geo_tail_junk", slider_tails=True)
+    assert sum(s["n"] for s in segs) / 400 < 0.03
+
+
+@pytest.mark.parametrize("name", ["geo_clean", "geo_sloppy", "geo_stream", "geo_wide", "geo_junk"])
+def test_flag_changes_nothing_on_circle_only_maps(name):
+    off = _load(name, slider_tails=False)[1]
+    on = _load(name, slider_tails=True)[1]
+    assert [(s["shape"], s["start"], s["end"]) for s in off] == \
+           [(s["shape"], s["start"], s["end"]) for s in on]
+    assert all("nodes" not in s for s in on)
 
 
 def test_fixtures_regenerate_byte_for_byte(tmp_path, monkeypatch):
