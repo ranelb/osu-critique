@@ -4,7 +4,9 @@ Goal: the web frontend stops being a viewer and starts teaching. A configurable
 home dashboard says what you are weak at, and recommends specific maps — from
 the maps you already own — that train exactly that weakness.
 
-Status: design settled (see "Decisions"). Nothing implemented yet.
+Status: steps 1–4 shipped (see "Steps"). This file is now the record of the
+design and of what is still wrong with it ("Open questions"); it is no longer a
+to-do list.
 
 ## Decisions
 
@@ -32,7 +34,8 @@ sibling of `index`, writing rebuildable `library_beatmaps` rows into
 `out/index.sqlite`. Features come from parsing the `.osu` (measured: ~11 ms/map,
 ~1 min for the ~5.7k maps in the lazer store) plus rosu-pp for SR — `[stars]`
 becomes required for the scan. Incremental by mtime; a stale scan is refreshed
-at `serve` boot (same rule as the index). `--status` optionally enriches rank
+explicitly with `library scan` (decided later: *not* at `serve` boot, a cold scan
+is ~150 s). `--status` optionally enriches rank
 status through the osu! API when credentials exist; without it, candidates
 carry `status: unknown` and stay eligible.
 
@@ -163,8 +166,34 @@ Not done, deliberately: commit-able screenshots from the synthetic corpus
 (`docs/web.md`'s "0.20.0 polish" wish). `docs/img/*.webp` still come from the
 owner's real corpus, and re-rendering them is its own job, not a code change.
 
+### 5. Open in osu! (after the plan)
+Not in the original plan. A recommendation or a map opens in osu!lazer:
+`POST /open` takes the md5, the **server** builds `osu://b/<id>` from the index
+and runs `gio open`. A client-side `osu://` link was tried and dropped
+(Firefox-based browsers refuse unknown schemes, phones have no handler); raw
+links stay on the map page only. Shipped in 0.28.x.
+
 ## Open questions
 
-None blocking. Two known edges, accepted: orphaned `.osu` blobs count as
-installed (blacklist covers it), and `scripts/mobile_audit.mjs` needs Playwright
-installed locally to run.
+Accepted edges: orphaned `.osu` blobs count as installed (blacklist covers it),
+and `scripts/mobile_audit.mjs` needs Playwright installed locally to run.
+
+Known limits of the method, not yet addressed. None is a bug; each caps what
+the recommender can honestly claim:
+
+- **Per-object evidence is discarded.** `recommend.py` joins one scalar per run
+  (miss rate) to whole-map aggregate shares (stream, jump, anti-flow, slider,
+  sustained). The per-object rows, `autopsy` and `attempts` data say *where*
+  in a map the misses happened; the recommender never sees that, so a miss on a
+  single reversal in a stream map is booked against "stream share".
+- **No uncertainty.** Weaknesses come from a median split with a fixed gap
+  (≥0.5 pp) and ratio (≥1.5×) gate. There is no interval, permutation test or
+  bootstrap, and repeated attempts on one map are treated as independent runs.
+- **Selection bias.** Only maps the player chose to play and exported are in
+  the evidence, and a failed play is truncated, so its miss rate is not
+  comparable to a full clear.
+- **Nothing about how the player works.** No session structure, retry
+  behaviour, time between attempts, fatigue or learning curve. `attempts.py`
+  compares attempts of one map but does not model progress over time.
+- **Unvalidated against outcomes.** Nothing checks that playing a recommended
+  map improves the weakness it was recommended for.
