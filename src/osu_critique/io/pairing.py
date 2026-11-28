@@ -17,6 +17,7 @@ import sys
 import zipfile
 from pathlib import Path
 
+from .replay import read_header_md5
 from ..config import (cache_dir, lazer_exports, lazer_files,
                       replays_dir as _replays_dir, maps_dir as _maps_dir,
                       stable_replays, stable_songs)
@@ -102,11 +103,21 @@ def _pair_by_md5(replays, index, label):
     import slider as _slider
     pairs = []
     for rp in sorted(replays):
-        r = _slider.Replay.from_path(rp, retrieve_beatmap=False)
-        blob = index.get(r.beatmap_md5)
+        try:
+            md5 = _slider.Replay.from_path(rp, retrieve_beatmap=False).beatmap_md5
+        except Exception:
+            # slider 0.8.4 raises on lazer life-bar offsets like '8129.88'; the
+            # md5 is in the header, so the pair survives and the caller decides
+            # what to do with a replay whose frames it cannot read
+            md5 = read_header_md5(rp)
+            if not md5:
+                print(f"!! unreadable replay {os.path.basename(rp)[:55]}",
+                      file=sys.stderr)
+                continue
+        blob = index.get(md5)
         if not blob:
             print(f"!! no map for {os.path.basename(rp)[:55]} "
-                  f"(md5 {r.beatmap_md5[:12]}...)", file=sys.stderr)
+                  f"(md5 {md5[:12]}...)", file=sys.stderr)
             continue
         pairs.append((rp, blob))
     return pairs

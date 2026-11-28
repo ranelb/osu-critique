@@ -159,6 +159,23 @@ def _normalise_score_info(raw):
     }
 
 
+def read_header_md5(replay_path):
+    """The beatmap md5 from the legacy ``.osr`` header, or None.
+
+    ``slider`` parses the whole file (life bar included) and raises on lazer
+    exports whose life-bar offsets are floats (``'8129.88'``). The md5 sits in
+    the first bytes, so pairing can still find the map for such a replay even
+    though the frame stream cannot be read.
+    """
+    try:
+        with open(os.fspath(replay_path), "rb") as fh:
+            data = fh.read(4096)
+        value, _i = _read_string(data, 5)
+        return value
+    except (OSError, IndexError, ValueError):
+        return None
+
+
 def read_score_meta(replay_path):
     """Read the trailing lazer score-info block from a ``.osr`` file.
 
