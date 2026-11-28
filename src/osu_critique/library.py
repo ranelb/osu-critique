@@ -157,6 +157,14 @@ def _share(n, total):
     return round(float(n) / total, 4) if total else None
 
 
+class UnsupportedMap(Exception):
+    """A map this tool cannot read and does not need (counted, not a failure)."""
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
 def extract(path, md5: str | None = None, want_sr: bool = True) -> dict:
     """All features of one ``.osu`` file, as a JSON-serialisable dict.
 
@@ -169,7 +177,14 @@ def extract(path, md5: str | None = None, want_sr: bool = True) -> dict:
     meta = mapmeta.parse_text(text)
 
     import slider
-    bm = slider.Beatmap.from_path(path)
+    try:
+        bm = slider.Beatmap.from_path(path)
+    except ValueError as exc:
+        if meta.get("mode") == 3 and "end_time" in str(exc):
+            # a mania hold note is "x,y,t,128,hs,endTime:hitSample"; slider reads
+            # it as a spinner and chokes on the colon. Mania is no candidate.
+            raise UnsupportedMap("mania hold notes") from exc
+        raise
     mode = meta.get("mode")
     if mode is None:
         mode = int(bm.mode) if bm.mode is not None else 0
@@ -319,7 +334,8 @@ def scan(outdir=None, extra_sources=None, rebuild: bool = False,
     started = time.time()
     conn = index.connect(index.db_path(out))
     stats = {"maps": 0, "added": 0, "updated": 0, "unchanged": 0,
-             "removed": 0, "failed": 0, "no_sr": 0, "seconds": 0.0}
+             "removed": 0, "failed": 0, "skipped": 0, "skipped_reasons": {},
+             "no_sr": 0, "seconds": 0.0}
     say = log or (lambda msg: None if quiet else print(msg, file=sys.stderr))
     try:
         if rebuild:
@@ -345,6 +361,11 @@ def scan(outdir=None, extra_sources=None, rebuild: bool = False,
                 continue
             try:
                 feats = extract(path, md5=md5, want_sr=want_sr)
+            except UnsupportedMap as exc:
+                stats["skipped"] += 1
+                reasons = stats["skipped_reasons"]
+                reasons[exc.reason] = reasons.get(exc.reason, 0) + 1
+                continue
             except Exception as exc:                  # noqa: BLE001 - per file
                 stats["failed"] += 1
                 say(f"  ! {Path(path).name[:40]}: {type(exc).__name__}: {exc}")
