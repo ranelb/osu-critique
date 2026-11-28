@@ -307,6 +307,9 @@ def cmd_library(args):
         print(f"  added {stats['added']}, updated {stats['updated']}, "
               f"unchanged {stats['unchanged']}, removed {stats['removed']}, "
               f"failed {stats['failed']} ({stats['seconds']}s)")
+        if stats.get("skipped"):
+            why = ", ".join(f"{n} {r}" for r, n in stats["skipped_reasons"].items())
+            print(f"  skipped {stats['skipped']} ({why})")
         if stats["no_sr"]:
             print(f"  {stats['no_sr']} maps have no star rating — install the "
                   "[stars] extra: pip install 'osu-critique[stars]'")

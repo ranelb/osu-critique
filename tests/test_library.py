@@ -209,3 +209,37 @@ def test_geometry_block_is_deterministic():
     p = Path(__file__).parent / "fixtures" / "patterns" / "geo_clean.osu"
     a = library.extract(p, want_sr=False)["geometry"]
     assert a == library.extract(p, want_sr=False)["geometry"]
+
+
+# ------------------------------------------------- parse failures (library scan) --
+
+PARSE = Path(__file__).parent / "fixtures" / "parse"
+
+
+def test_mania_hold_notes_are_skipped_with_a_reason_not_failed(tmp_path):
+    # slider 0.8.4 reads a hold note ("...,128,hs,endTime:hitSample") as a spinner
+    # and raises "end_time should be an int"
+    with pytest.raises(library.UnsupportedMap, match="mania hold notes"):
+        library.extract(PARSE / "parse_mania_holds.osu")
+    stats = library.scan(tmp_path, extra_sources=[str(PARSE)], quiet=True)
+    assert stats["skipped"] == 1
+    assert stats["skipped_reasons"] == {"mania hold notes": 1}
+    assert stats["failed"] == 0
+    assert stats["maps"] == 1
+
+
+def test_catmull_slider_parses_under_this_numpy():
+    # slider 0.8.4 calls float() on a 1x1 array in Catmull.__call__; NumPy 2.5
+    # raises TypeError for that
+    f = library.extract(PARSE / "parse_catmull.osu", want_sr=False)
+    assert f["mode"] == 0
+    assert f["n_sliders"] == 1
+
+
+def test_catmull_patch_matches_the_curve_endpoints():
+    import slider
+    bm = slider.Beatmap.from_path(PARSE / "parse_catmull.osu")
+    sl = [o for o in bm.hit_objects() if type(o).__name__ == "Slider"][0]
+    p0, p1 = sl.curve(0.001), sl.curve(1.0)      # t=0 wraps to the last segment in slider
+    assert (p0.x, p0.y) == pytest.approx((200, 150), abs=1.0)
+    assert (p1.x, p1.y) == pytest.approx((400, 150), abs=1.0)

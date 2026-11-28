@@ -9,10 +9,46 @@ HR arrives at the reflected position, so aim error must be measured against it.
 from __future__ import annotations
 
 import bisect
+import math
 
+import numpy as np
 import slider
+from slider.position import Position
 
 PLAYFIELD_HEIGHT = 384.0
+
+
+def _catmull_call(self, t):
+    """``slider.curve.Catmull.__call__`` with the scalar conversion NumPy 2.5 accepts.
+
+    slider 0.8.4 does ``float(S @ h @ C)`` on a 1x1 array. NumPy deprecated that
+    in 1.25 and made it a TypeError ("only 0-dimensional arrays can be converted
+    to Python scalars") in 2.5, so every map with a Catmull slider failed to
+    parse. Same maths as the library, ``.item()`` instead of ``float()``.
+    """
+    if len(self.points) == 1:
+        return self.points[0]
+    S = np.array([t**3, t**2, t, 1])
+    curve_index = math.ceil(t * len(self.Cxs)) - 1
+    Cx = self.Cxs[curve_index]
+    Cy = self.Cys[curve_index]
+    px = (S @ self.h) @ Cx
+    py = (S @ self.h) @ Cy
+    return Position(float(np.asarray(px).item()), float(np.asarray(py).item()))
+
+
+def _patch_slider() -> None:
+    """Install :func:`_catmull_call` when the library's own breaks (idempotent)."""
+    import slider.curve as sc
+    try:
+        float(np.ones((1, 1)))
+        return                                   # old NumPy: the library works
+    except TypeError:
+        pass
+    sc.Catmull.__call__ = _catmull_call
+
+
+_patch_slider()
 
 
 def load_beatmap(map_path):

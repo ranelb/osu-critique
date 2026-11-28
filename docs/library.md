@@ -78,6 +78,14 @@ no second pattern detector to drift.
   `out/beatmap_status.json`, so a play and a candidate never disagree about
   whether a map is ranked.
 
+- **Skipped is not failed.** A mania map with hold notes (`x,y,t,128,hs,endTime:hitSample`)
+  is read by `slider` as a spinner and raises "end_time should be an int". The
+  scan counts it under `skipped` / `skipped_reasons` (`mania hold notes`) and the
+  exit code stays 0. Catmull sliders (`C|…`) used to fail with a `TypeError` on
+  NumPy >= 2.5 (slider 0.8.4 calls `float()` on a 1x1 array); `io/beatmap.py`
+  swaps in an equivalent `Catmull.__call__` when the library's own breaks.
+  `tests/fixtures/parse/` holds one map for each.
+
 ## Why not read lazer's Realm database
 
 `client.realm` would save the file walk and carry a cached star rating, but:
