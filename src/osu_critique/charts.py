@@ -17,7 +17,7 @@ def render_charts(results, errs, aims, w300, w100, w50, ur, radius,
     import matplotlib.pyplot as plt
 
     os.makedirs(outdir, exist_ok=True)
-    hits = [x for x in results if x["result"] != "miss"]
+    hits = [x for x in results if x["result"] != "miss" and x["error"] is not None]
 
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     # 1 hit error histogram

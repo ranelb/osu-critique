@@ -83,7 +83,8 @@ def measure(rp, mp):
         w = od_windows(od, scale)
         res, det, _ = judge(objs, frames, times, presses, press_times,
                             w[0], w[1], w[2], radius,
-                            max(250.0, ((200 - 10 * od) + 120) * scale))
+                            max(250.0, ((200 - 10 * od) + 120) * scale),
+                            spinner_od=od, scale=scale)
         d = count_distance(det, rec)
         if best is None or d < best["l1"]:
             best = {"l1": d, "scale": scale, "w": w, "res": res, "det": det,
@@ -95,7 +96,8 @@ def measure(rp, mp):
     return {"rec": rec, "det": best["det"], "l1": best["l1"], "w": best["w"],
             "res": best["res"], "scale": best["scale"], "n_spin": n_spin,
             "n_obj": len(best["objs"]), "overridden": best["scale"] != player_scale,
-            "trusted": trust["trustworthy"], "within": trust["within_tolerance"]}
+            "trusted": trust["trustworthy"], "within": trust["within_tolerance"],
+            "title": bm.title}
 
 
 def _slice(name, rows):
@@ -122,7 +124,7 @@ def run(guard_sweep=False, per_run=False):
             continue
         rows.append(out)
         if per_run:
-            print(f"{os.path.basename(mp)[:12]:12s} spin={out['n_spin']:2d} {str(out['rec']):>22} "
+            print(f"{out['title'][:34]:34s} {'ok' if out['trusted'] else 'UNTRUSTED':9s} spin={out['n_spin']:2d} {str(out['rec']):>22} "
                   f"{str(out['det']):>22} L1 {out['l1']:6.1f} "
                   f"{'ok' if out['within'] else 'DRIFT'}")
         if guard_sweep:
