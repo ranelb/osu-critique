@@ -38,7 +38,7 @@ from osu_critique.io.beatmap import (build_objects, circle_radius, cs_for,  # no
                                      load_beatmap, mod_scale, od_for, od_windows)
 from osu_critique.io.replay import (build_frames, find_presses, load_replay,  # noqa: E402
                                     read_score_meta)
-from osu_critique.metrics.assignment import EDGE_GUARD_MS, classify, judge  # noqa: E402
+from osu_critique.metrics.assignment import EDGE_GUARD_MS, MISS_WINDOW_MS, classify, judge  # noqa: E402
 from osu_critique.report import build_trust, count_distance  # noqa: E402
 
 GUARDS = (0.0, 0.5, 1.0, 1.5)
@@ -83,7 +83,7 @@ def measure(rp, mp):
         w = od_windows(od, scale)
         res, det, _ = judge(objs, frames, times, presses, press_times,
                             w[0], w[1], w[2], radius,
-                            max(250.0, ((200 - 10 * od) + 120) * scale),
+                            MISS_WINDOW_MS * scale,
                             spinner_od=od, scale=scale)
         d = count_distance(det, rec)
         if best is None or d < best["l1"]:
