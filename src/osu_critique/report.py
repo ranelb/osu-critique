@@ -252,6 +252,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
         results, detected, whiffed = judge(objs, frames, times, presses,
                                            press_times, w300, w100, w50,
                                            radius, search, hit_tol,
+                                           spinner_od=od, scale=scale,
                                            **({"guard": guard} if guard is not None else {}))
         badness = count_distance(detected, recorded)
         cand = {"scale": scale, "objs": objs, "results": results,
@@ -298,7 +299,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
                                 else "legacy mod flag")
 
     # --- metrics ---
-    hits = [x for x in results if x["result"] != "miss"]
+    hits = [x for x in results if x["result"] != "miss" and x["error"] is not None]
     errs = np.array([x["error"] for x in hits])
     aims = np.array([x["aim"] for x in hits if x["aim"] is not None])
     aim_speed = aim_velocity([(x["cursor_speed"], x["aim"] / radius) for x in hits

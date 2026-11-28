@@ -18,6 +18,7 @@ import bisect
 import math
 
 from ..io.replay import cursor_at
+from .spinner import judge_spinner
 
 # whiff causes: a press no object consumed, and why nothing took it
 MASH = "mash"                  # no object within its 50-window at all
@@ -72,14 +73,21 @@ def _row(o, result, error=None, aim=None, key=None, speed=None, press_t=None):
 
 
 def judge(objs, frames, times, presses, press_times, w300, w100, w50,
-          radius, search, hit_tol=1.0, guard=EDGE_GUARD_MS):
+          radius, search, hit_tol=1.0, guard=EDGE_GUARD_MS, spinner_od=None,
+          scale=1.0):
     """Resolve presses against objects in the game's order (osu! semantics).
 
     Objects are walked in time order; each takes the **first** press inside its
-    window whose cursor is on the circle (spinners: any press inside the spin).
-    A press is consumed at most once and never out of order, so a correctly
-    timed earlier press can no longer be stolen by a later object, and a press
-    cannot be handed backwards to an earlier one.
+    window whose cursor is on the circle. A press is consumed at most once and
+    never out of order, so a correctly timed earlier press can no longer be
+    stolen by a later object, and a press cannot be handed backwards to an
+    earlier one.
+
+    Spinners take no press and are not timed: they are rated by how far the
+    cursor turned (``metrics/spinner.py``), which needs the mod-adjusted
+    ``spinner_od`` and the time ``scale`` of the frames' clock. Without
+    ``spinner_od`` a spinner is rated "300" (completion unknown), never timed
+    through the circle windows.
 
     Returns (results, detected, whiffs).
     """
@@ -87,6 +95,17 @@ def judge(objs, frames, times, presses, press_times, w300, w100, w50,
     results = []
     ptr = 0
     for o in objs:
+        if o["kind"] == "Spinner":
+            if spinner_od is None:
+                verdict, progress, required = "300", None, None
+            else:
+                verdict, progress, required = judge_spinner(frames, times, o,
+                                                            spinner_od, scale)
+            row = _row(o, verdict)
+            row["spin_progress"] = progress
+            row["spin_required"] = required
+            results.append(row)
+            continue
         ptr = max(ptr, bisect.bisect_left(press_times, o["t"] - search))
         hi = bisect.bisect_right(press_times, o["t"] + search)
         taken = -1
@@ -94,15 +113,10 @@ def judge(objs, frames, times, presses, press_times, w300, w100, w50,
             if used[j]:
                 continue
             pt, _key = presses[j]
-            if o["kind"] == "Spinner":
-                if o["t"] <= pt <= o["end"]:
-                    taken = j
-                    break
-            else:
-                cx, cy = cursor_at(frames, times, pt)
-                if math.hypot(cx - o["x"], cy - o["y"]) <= radius * hit_tol:
-                    taken = j
-                    break
+            cx, cy = cursor_at(frames, times, pt)
+            if math.hypot(cx - o["x"], cy - o["y"]) <= radius * hit_tol:
+                taken = j
+                break
         if taken < 0:
             results.append(_row(o, "miss"))
             continue
@@ -110,8 +124,7 @@ def judge(objs, frames, times, presses, press_times, w300, w100, w50,
         ptr = taken + 1
         pt, key = presses[taken]
         error = pt - o["t"]
-        aim = (None if o["kind"] == "Spinner"
-               else math.hypot(*_delta(cursor_at(frames, times, pt), o)))
+        aim = math.hypot(*_delta(cursor_at(frames, times, pt), o))
         results.append(_row(o, classify(error, w300, w100, w50, guard), error,
                             aim, key, cursor_speed_at(frames, times, pt), pt))
 
@@ -129,9 +142,12 @@ def classify_whiffs(objs, frames, times, presses, used, radius, w50,
     off_r = []
     obj_t = [o["t"] for o in objs]
     last_t = objs[-1]["t"] if objs else 0.0
+    spin = [o for o in objs if o["kind"] == "Spinner"]
     for j, (pt, _key) in enumerate(presses):
         if used[j]:
             continue
+        if any(o["kind"] == "Spinner" and o["t"] <= pt <= o["end"] for o in spin):
+            continue                      # spinning is not tapping
         if not objs or pt > last_t + w50 + guard:
             counts[AFTER_END] += 1
             continue
@@ -142,16 +158,12 @@ def classify_whiffs(objs, frames, times, presses, used, radius, w50,
                 continue
             o = objs[k]
             if o["kind"] == "Spinner":
-                inside = o["t"] <= pt <= o["end"]
-            else:
-                inside = abs(pt - o["t"]) + guard <= w50
+                continue
+            inside = abs(pt - o["t"]) + guard <= w50
             if inside and (near is None or abs(pt - o["t"]) < abs(pt - near["t"])):
                 near = o
         if near is None:
             counts[MASH] += 1
-            continue
-        if near["kind"] == "Spinner":
-            counts[LOST] += 1
             continue
         d = math.hypot(*_delta(cursor_at(frames, times, pt), near))
         if d > radius:

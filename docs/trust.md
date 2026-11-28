@@ -2,10 +2,26 @@
 
 ## Validation and trust
 
-`counts_detected` is judged to match the game's own recorded counts. Across the
-55-replay reference corpus the judgement reproduces **14 plays exactly** and
-drifts by a handful of objects on most of the rest (weighted L1 1470 over 55
-plays).
+`counts_detected` is judged to match the game's own recorded counts. The
+original 55-replay reference corpus reproduced 14 plays exactly (weighted L1
+1470); it has since grown to 3462 non-relax plays over 474 maps, and
+`scripts/judge_drift.py` on that corpus (2026-11-28) reproduces **2363 plays
+exactly (68.3 %), mean weighted L1 2.83**. Split by what the map contains:
+
+| slice | plays | exact | mean L1 |
+|---|---|---|---|
+| no spinner | 1976 | 74.1 % | 1.77 |
+| has spinner | 1486 | 60.4 % | 4.22 |
+
+**Spinners** are rated by spin completion (`metrics/spinner.py`), not through the
+circle OD windows; before that the spinner slice sat at 2.8 % exact (mean L1
+7.24) and the whole corpus at 43.5 % (4.12). The rotation model is approximate
+(no rate cap, no key check, no per-spinner ground truth); it rates nearly every
+spinner 300, which is what the game does. The remaining drift on non-spinner
+plays is one-directional (the judge over-detects misses) and grows with length
+and miss count; it is not yet explained. Pauses and slider heads/tails are the
+suspects, not isolated. 88 of the corpus' replays are lazer exports slider
+0.8.4 cannot parse (float life-bar offsets) and are not measured.
 
 The single biggest correction to the judgement was the **edge guard**
 (`assignment.EDGE_GUARD_MS`, 1 ms): a replay's frame clock is floored to the

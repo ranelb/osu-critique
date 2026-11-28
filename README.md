@@ -227,8 +227,9 @@ block. Full pipeline: [docs/internals.md](docs/internals.md).
 ## Validation and trust
 
 `counts_detected` is judged against the game's own recorded counts: across a
-55-replay reference corpus the judgement reproduces **14 plays exactly** and
-drifts by a handful of objects on the rest. A 1 ms **edge guard** on the hit
+3462-play local corpus the judgement reproduces **68 % of plays exactly**
+(no-spinner plays 74 %, spinner plays 60 %; spinners are rated by spin
+completion) and drifts by a handful of objects on the rest. A 1 ms **edge guard** on the hit
 windows — the frame clock is floored to the millisecond — is what makes the
 slider-heavy plays agree. Where it cannot be sure, the `trust` block says so
 rather than smoothing it over. Full detail: [docs/trust.md](docs/trust.md).

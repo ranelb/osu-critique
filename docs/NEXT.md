@@ -90,9 +90,10 @@ and open `/feed`):
 
 ## 5. Open questions and smaller items
 
-- **Judge fidelity:** 14 of 55 exact against the game's recorded counts. Run
-  `scripts/judge_drift.py` on real replays; this is the invariant everything else stands on
-  and it was never fixed. It needs the real replays (6 tests skip without them).
+- **Judge fidelity:** 2363 of 3462 exact (68.3 %) against the game's recorded counts after
+  spinner rating (no-spinner 74.1 %, spinner 60.4 %). Open: the one-directional miss
+  over-detection on long/miss-heavy plays, pauses (29 % exact), slider head/tail. Run
+  `scripts/judge_drift.py` on real replays; this is the invariant everything else stands on. It needs the real replays (6 tests skip without them).
 - **Slider-tail nodes:** built behind `classify(slider_tails=True)`, default off (PLAN phase C,
   `docs/geometry.md`). Open: label slider-heavy real windows, then decide the default
   (flipping it needs a `FEATURE_VERSION` bump).
