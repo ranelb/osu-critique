@@ -8,7 +8,7 @@ from osu_critique.metrics.assignment import (AFTER_END, LOST, MASH, OFF_TARGET,
 
 W = (25.0, 45.0, 65.0)          # 300/100/50 half-windows (ms), OD ~9
 RADIUS = 39.0
-SEARCH = 250.0
+SEARCH = 400.0
 
 
 def _frames(samples):
@@ -108,3 +108,40 @@ def test_duplicate_press_on_a_circle_is_lost():
     _results, detected, whiffs = _run(objs, frames, judge)
     assert detected == {"300": 1, "100": 0, "50": 0, "miss": 0}
     assert whiffs[LOST] == 1 and whiffs["n"] == 1
+
+
+def test_note_lock_blocks_a_later_object_before_the_earlier_one_is_over():
+    """B (on the cursor) cannot take a press earlier than A's start while A is
+    unjudged; the same press after A's start time is B's (lazer note lock)."""
+    objs = _objs([(1000.0, 100.0, 100.0), (1040.0, 300.0, 300.0)])
+    # press at 980 is on B only (cursor at B), A is unjudged and starts later
+    locked = _frames([(0.0, 300.0, 300.0, False, False),
+                      (980.0, 300.0, 300.0, True, False),
+                      (990.0, 300.0, 300.0, False, False),
+                      (1200.0, 300.0, 300.0, False, False)])
+    results, detected, whiffs = _run(objs, locked, judge)
+    assert [r["result"] for r in results] == ["miss", "miss"]
+    assert whiffs["n"] == 1
+
+    # the same spot after A's start: A is still open but B may be hit now
+    open_ = _frames([(0.0, 300.0, 300.0, False, False),
+                     (1010.0, 300.0, 300.0, True, False),
+                     (1020.0, 300.0, 300.0, False, False),
+                     (1200.0, 300.0, 300.0, False, False)])
+    results, detected, _ = _run(objs, open_, judge)
+    assert results[0]["result"] == "miss" and results[1]["result"] != "miss"
+
+
+def test_early_press_inside_miss_window_is_a_consumed_miss():
+    """A press 150 ms early on a circle (outside the 50-window, inside the miss
+    window) misses that circle and cannot be reused by a later object."""
+    objs = _objs([(1000.0, 100.0, 100.0), (1100.0, 100.0, 100.0)])
+    frames = _frames([(0.0, 100.0, 100.0, False, False),
+                      (850.0, 100.0, 100.0, True, False),
+                      (860.0, 100.0, 100.0, False, False),
+                      (1100.0, 100.0, 100.0, True, False),
+                      (1110.0, 100.0, 100.0, False, False),
+                      (1300.0, 100.0, 100.0, False, False)])
+    results, detected, _ = _run(objs, frames, judge)
+    assert results[0]["result"] == "miss" and results[0]["error"] == -150.0
+    assert results[1]["result"] == "300"

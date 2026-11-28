@@ -427,6 +427,52 @@ the score block is never an input to `judge()`.
 300 objects, 46 % with >= 20 misses), pauses (29 % exact, n = 172), window-edge
 quantization (4 % of presses sit within 1.5 ms of an edge).
 
+### Note lock and press-driven walk (2026-11-28, second pass)
+
+The residual non-spinner miss over-detection was the judge's walk order, not
+geometry, counting or pauses. `judge()` walked objects and let each take its
+first on-circle press; the game walks **presses**, applies lazer's note lock
+(an object cannot be hit while the previous one is unjudged and the press is
+before that object's start) and treats a press inside the 400 ms miss window
+but outside the 50-window as a miss that consumes the press. Same corpus, same
+`judge_drift.py`:
+
+| | exact | mean L1 | total L1 |
+|---|---|---|---|
+| before (spinner fix only), all | 2363 / 3462 = 68.3 % | 2.83 | 9784 |
+| **after, all** | **2974 / 3462 = 85.9 %** | **1.34** | **4636** |
+| &nbsp;&nbsp;no spinner | 1465 -> 1752 / 1976 = 88.7 % | 1.77 -> 0.87 | 3506 -> 1724 |
+| &nbsp;&nbsp;has spinner | 898 -> 1222 / 1486 = 82.2 % | 4.22 -> 1.96 | 6278 -> 2911 |
+| untrustworthy by build_trust | 35 -> 13 | | |
+
+Hypotheses, one at a time (exact on all 3462 plays, base 2363):
+
+| variant | exact | verdict |
+|---|---|---|
+| circle radius x1.05 / x1.1 / x0.95 | 474 / 196 / 269 | rejected: the radius is exact |
+| presses reusable out of order (`unordered`) | 2308 (L1 9508) | rejected: mixed |
+| press-driven walk, no lock | 2467 | small gain |
+| press-driven + note lock (previous object) | **2974** | **confirmed** (checking any earlier object gives the same) |
+| strict lock (all earlier judged) | 1704 | rejected |
+| lock + early press ignored instead of miss | 2812 | rejected |
+| lock, miss window 200 / 250 / 400 / 600 ms | 2923 / 2947 / **2974** / 2932 | 400 (the game's) |
+| lock, guard 0 / 0.5 / 1.0 / 1.5 ms | 206 / 2417 / **2974** / 764 | 1 ms stays |
+
+Slider head vs tail counting is not a cause: the header counts equal the lazer
+`statistics` great+ok+meh+miss on every play, and they total one per object
+(sliders count once, by head), which is the head-only model.
+
+**Pauses are not a separate bug.** Frame time is continuous through a pause
+(the frame gap at `pauses_ms` is a normal 3-18 ms) and, after the fix, paused
+plays reproduce as well as unpaused ones of the same length (<300 objects 86 %
+vs 93 %, 300-600 82.7 % vs 82.8 %, 600-1000 61.5 % vs 76.8 %, n = 29-75). The
+29 % was the walk order, which hurts long plays most. No pause shifting added.
+
+Still unexplained: 488 plays (14 %) off, net +1498 misses over-detected
+(1000+ object plays 50-57 % exact; the 600-1000 paused gap above is n = 52 and
+not conclusive). Not isolated: slider heads vs circles cannot be separated
+because the lazer statistics give no per-object grade.
+
 ## Traps and environment quirks (learned the hard way)
 
 - **`snap` is in quarter-beats**, so the osu! divisor is `4 / snap`. Labelling

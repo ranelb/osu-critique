@@ -28,6 +28,7 @@ LOST = "lost"                  # object in window, cursor on it, press left over
 AFTER_END = "after_end"        # press after the last object's window
 
 EDGE_GUARD_MS = 1.0            # see classify(): the stored frame clock is floored
+MISS_WINDOW_MS = 400.0         # lazer's miss window: an earlier press is a consumed miss
 
 
 def classify(error, w300, w100, w50, guard=EDGE_GUARD_MS):
@@ -75,13 +76,25 @@ def _row(o, result, error=None, aim=None, key=None, speed=None, press_t=None):
 def judge(objs, frames, times, presses, press_times, w300, w100, w50,
           radius, search, hit_tol=1.0, guard=EDGE_GUARD_MS, spinner_od=None,
           scale=1.0):
-    """Resolve presses against objects in the game's order (osu! semantics).
+    """Resolve presses against objects the way the game does (lazer semantics).
 
-    Objects are walked in time order; each takes the **first** press inside its
-    window whose cursor is on the circle. A press is consumed at most once and
-    never out of order, so a correctly timed earlier press can no longer be
-    stolen by a later object, and a press cannot be handed backwards to an
-    earlier one.
+    The walk is **press-driven**, in time order: objects whose 50-window has
+    closed are missed first, then the press goes to the earliest unjudged
+    object whose circle the cursor is on and that the **note lock** lets it
+    hit. A press is consumed at most once.
+
+    * Note lock: an object cannot be hit while the object before it is still
+      unjudged and the press is earlier than that object's start time
+      (lazer's ``StartTimeOrderedHitPolicy``). A locked press falls through to
+      the next object under the cursor, and is whiffed if there is none.
+    * Early presses: a press on an object inside its miss window (``search``,
+      ``MISS_WINDOW_MS`` times the clock ``scale``) but outside the 50-window
+      is a **miss that consumes the press**, not a no-op.
+
+    The first implementation walked objects instead of presses, so the lock did
+    not exist and a later object could not take a press the earlier object's
+    own (later) press had "passed": exact count matches on the 3462-play
+    reference corpus went 68.3 % -> 85.9 % (docs/ROADMAP.md, judge fidelity).
 
     Spinners take no press and are not timed: they are rated by how far the
     cursor turned (``metrics/spinner.py``), which needs the mod-adjusted
@@ -92,9 +105,9 @@ def judge(objs, frames, times, presses, press_times, w300, w100, w50,
     Returns (results, detected, whiffs).
     """
     used = [False] * len(presses)
-    results = []
-    ptr = 0
-    for o in objs:
+    results = [None] * len(objs)
+    tapped = []                       # indices into objs, time order
+    for i, o in enumerate(objs):
         if o["kind"] == "Spinner":
             if spinner_od is None:
                 verdict, progress, required = "300", None, None
@@ -104,29 +117,52 @@ def judge(objs, frames, times, presses, press_times, w300, w100, w50,
             row = _row(o, verdict)
             row["spin_progress"] = progress
             row["spin_required"] = required
-            results.append(row)
-            continue
-        ptr = max(ptr, bisect.bisect_left(press_times, o["t"] - search))
-        hi = bisect.bisect_right(press_times, o["t"] + search)
-        taken = -1
-        for j in range(ptr, hi):
-            if used[j]:
+            results[i] = row
+        else:
+            tapped.append(i)
+
+    n = len(tapped)
+    judged = [False] * n
+    first = 0
+
+    def settle(k, result, press=None):
+        judged[k] = True
+        o = objs[tapped[k]]
+        if press is None:
+            results[tapped[k]] = _row(o, "miss")
+            return
+        pt, key = presses[press]
+        used[press] = True
+        cx, cy = cursor_at(frames, times, pt)
+        results[tapped[k]] = _row(o, result, pt - o["t"],
+                                  math.hypot(cx - o["x"], cy - o["y"]), key,
+                                  cursor_speed_at(frames, times, pt), pt)
+
+    for j, (pt, _key) in enumerate(presses):
+        k = first
+        while k < n and pt - objs[tapped[k]]["t"] + guard > w50:
+            if not judged[k]:
+                settle(k, "miss")     # window closed with nothing taking it
+            k += 1
+        first = k
+        while first < n and judged[first]:
+            first += 1
+        cx, cy = cursor_at(frames, times, pt)
+        k = first
+        while k < n and objs[tapped[k]]["t"] - search <= pt:
+            o = objs[tapped[k]]
+            if judged[k] or math.hypot(cx - o["x"], cy - o["y"]) > radius * hit_tol:
+                k += 1
                 continue
-            pt, _key = presses[j]
-            cx, cy = cursor_at(frames, times, pt)
-            if math.hypot(cx - o["x"], cy - o["y"]) <= radius * hit_tol:
-                taken = j
-                break
-        if taken < 0:
-            results.append(_row(o, "miss"))
-            continue
-        used[taken] = True
-        ptr = taken + 1
-        pt, key = presses[taken]
-        error = pt - o["t"]
-        aim = math.hypot(*_delta(cursor_at(frames, times, pt), o))
-        results.append(_row(o, classify(error, w300, w100, w50, guard), error,
-                            aim, key, cursor_speed_at(frames, times, pt), pt))
+            if k > 0 and not judged[k - 1] and pt < objs[tapped[k - 1]]["t"]:
+                k += 1                # note lock: the previous object is not over
+                continue
+            settle(k, classify(pt - o["t"], w300, w100, w50, guard), j)
+            break
+
+    for k in range(n):
+        if not judged[k]:
+            settle(k, "miss")
 
     detected = {"300": 0, "100": 0, "50": 0, "miss": 0}
     for x in results:

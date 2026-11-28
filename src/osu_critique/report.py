@@ -21,7 +21,7 @@ from .io.beatmap import (build_objects, circle_radius, cs_for, load_beatmap,
                          mod_scale, mod_string, od_for, od_windows, rate_label)
 from .io.replay import (build_frames, cursor_at, find_presses, load_replay,
                         read_score_meta)
-from .metrics.assignment import judge
+from .metrics.assignment import MISS_WINDOW_MS, judge
 from .metrics.aim import build_aim
 from .metrics.autopsy import build as build_autopsy
 from .metrics.breakdown import build as build_breakdown
@@ -229,7 +229,6 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     player_scale = mod_scale(r, score_meta)
     od = od_for(bm, r)
     radius = circle_radius(cs_for(bm, r))
-    search_od = (200 - 10 * od) + 120  # 50-window + slack
 
     recorded = {"300": r.count_300, "100": r.count_100,
                 "50": r.count_50, "miss": r.count_miss}
@@ -248,7 +247,7 @@ def analyze(replay_path, map_path, tag="run", do_charts=False,
     for scale in dict.fromkeys(candidates):  # dedupe, keep order
         objs = build_objects(bm, scale, hard_rock=r.hard_rock)
         w300, w100, w50 = od_windows(od, scale)
-        search = max(250.0, search_od * scale)
+        search = MISS_WINDOW_MS * scale
         results, detected, whiffed = judge(objs, frames, times, presses,
                                            press_times, w300, w100, w50,
                                            radius, search, hit_tol,
