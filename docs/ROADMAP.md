@@ -381,6 +381,52 @@ beatmap MD5 (lazer exports + its content-addressed store, stable on Windows, or
 (`scripts/make_synthetic_fixtures.py --anonymize` exists), and keep personal
 coaching numbers out of the repo.
 
+## Judge fidelity on the full corpus (2026-11-28)
+
+`scripts/judge_drift.py` now mirrors `report.analyze` and survives replays slider
+cannot parse. Corpus: 3462 judged non-relax plays over 474 maps (88 unparseable
+lazer exports with float life-bar offsets and 112 relax/AP plays skipped).
+
+| | exact | mean L1 |
+|---|---|---|
+| before spinner fix, all | 1506 / 3462 = 43.5 % | 4.12 |
+| &nbsp;&nbsp;has spinner | 41 / 1486 = 2.8 % | 7.24 |
+| &nbsp;&nbsp;no spinner | 1465 / 1976 = 74.1 % | 1.77 |
+| **after, all** | **2363 / 3462 = 68.3 %** | **2.83** |
+| &nbsp;&nbsp;has spinner | 898 / 1486 = 60.4 % | 4.22 |
+| &nbsp;&nbsp;no spinner | 1465 / 1976 = 74.1 % | 1.77 |
+
+Untrustworthy by the trust block (drift only): 53 -> 35. 19 plays flipped to
+trustworthy (all spinner plays, L1 down), 1 flipped the other way (a 16-spinner
+map where the game rated spinners below what the cursor rotation says); the
+failed-play and 176-object-drift runs stay `trustworthy: false`.
+
+**Spinner rating.** The game rates a spinner by rotation / required spins
+(`required = int(map_seconds * DifficultyRange(OD, 1.5, 2.5, 3.75))`; 1 -> 300,
+> .9 -> 100, > .75 -> 50, else miss). The old judge pushed the first press in the
+spin through the circle windows. Variants measured on the 1486 spinner plays
+against the recorded counts, signed vs absolute rotation, per-frame rate cap
+(0.03 / 0.05 rad/ms) and key-held requirement: 889-903 exact with no cap or the
+0.05 cap, 623-754 with the 0.03 cap or signed + 0.05, and all-300 gets 895, so the plain `abs` rule is used. Lazer
+`statistics.small_bonus` (spin ticks) vs `maximum_statistics` confirmed the
+required-spin formula (max = required + 2 per spinner) but cannot give a
+per-spinner grade, and 73 % of spinner plays hit every tick. Not at judge time:
+the score block is never an input to `judge()`.
+
+**Edge-guard sweep, same corpus, after the spinner fix** (guard left at 1 ms):
+
+| guard | total L1 | exact | no-spinner exact / mean L1 | spinner exact / mean L1 |
+|---|---|---|---|---|
+| 0.0 ms | 32522 | 178 | 127 / 7.88 | 51 / 11.40 |
+| 0.5 ms | 14319 | 1887 | 1166 / 3.03 | 721 / 5.60 |
+| **1.0 ms** | **9784** | **2363** | 1465 / 1.77 | 898 / 4.22 |
+| 1.5 ms | 28726 | 653 | 415 / 6.83 | 238 / 10.25 |
+
+1.0 ms stays the minimum by a wide margin with 60x the data. Still open (eval
+2026-11-28): residual miss over-detection on non-spinner plays (84 % exact under
+300 objects, 46 % with >= 20 misses), pauses (29 % exact, n = 172), window-edge
+quantization (4 % of presses sit within 1.5 ms of an edge).
+
 ## Traps and environment quirks (learned the hard way)
 
 - **`snap` is in quarter-beats**, so the osu! divisor is `4 / snap`. Labelling
@@ -399,7 +445,8 @@ coaching numbers out of the repo.
   the drift against the game's recorded counts over every replay it can pair and
   can sweep alternative rules. Change `classify()` or the calibration only with
   that number in hand — the guard sweep is how the 1 ms edge guard was chosen
-  (1470 L1 / 14 exact, vs 1943 / 1 with no guard).
+  (1470 L1 / 14 exact, vs 1943 / 1 with no guard; re-run 2026-11-28 on the
+  3462-play corpus, see "Judge fidelity on the full corpus" below).
 - **Population gates** must scale down on short maps: `min(20, max(8, 3 % of
   objects))`. A fixed 20 hid the real target on a short map.
 - **Never conclude from n<10**, and quote n with every rate.

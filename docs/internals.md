@@ -12,7 +12,9 @@
    does: presses are consumed in order and never reused. The hit windows and the
    circle radius behind that gate come from the **mod-adjusted** difficulty
    (Hard Rock raises OD/AR/CS and reflects the playfield vertically, Easy halves
-   them).
+   them). Spinners take no press: they are rated by how far the recorded cursor
+   turned around the centre against the spins the game requires
+   (`metrics/spinner.py`), and presses inside one are not whiffs.
 4. **Calibration** — the time scale is auto-selected (`player_scale` first, then
    unscaled) by the whole recorded count vector, not by the miss count alone.
    `player_scale` is `1 / speed_change` when the score block has a custom rate,
